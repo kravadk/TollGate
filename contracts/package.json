@@ -1,0 +1,29 @@
+{
+  "name": "tollgate-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-chain pieces for TollGate — 0G AgentReceiptRegistry + Mantle ERC-8004 AgentIdentityRegistry + AgentVault + Arbitrum AgentEscrow. Self-contained: install/build/deploy here without touching the frontend.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:0g": "hardhat run scripts/deploy.cjs --network og",
+    "deploy:0g-testnet": "hardhat run scripts/deploy.cjs --network ogTestnet",
+    "deploy:mantle": "hardhat run scripts/deploy-mantle.cjs --network mantle",
+    "deploy:mantle-sepolia": "hardhat run scripts/deploy-mantle.cjs --network mantleSepolia",
+    "deploy:arb": "hardhat run scripts/deploy-arbitrum.cjs --network arbitrumSepolia",
+    "deploy:arb-one": "hardhat run scripts/deploy-arbitrum.cjs --network arbitrumOne",
+    "deploy:orbit": "hardhat run scripts/deploy-arbitrum.cjs --network orbit",
+    "upload:0g": "node scripts/og-upload.cjs",
+    "deploy:qie": "hardhat run scripts/deploy-qie.cjs --network qieTestnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@openzeppelin/contracts": "5.0.2",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0",
+    "hardhat": "^2.22.10"
+  },
+  "optionalDependencies": {
+    "@0glabs/0g-ts-sdk": "^0.2.1"
+  }
+}

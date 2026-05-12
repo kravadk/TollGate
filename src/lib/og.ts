@@ -1,0 +1,204 @@
+/* 0G on-chain glue for the frontend.
+ *
+ * Two real-but-optional capabilities, wired the same way the server's `dev-bypass`
+ * works — present only when configured, otherwise the app degrades gracefully:
+ *
+ *   1. Anchor an x402 receipt on 0G by calling AgentReceiptRegistry.record(...)
+ *      from the connected wallet. Needs VITE_0G_REGISTRY_ADDRESS (deploy it with
+ *      `cd contracts && npm run deploy:0g`).
+ *   2. Store a blob on 0G Storage via the indexer's HTTP gateway. Needs
+ *      VITE_0G_STORAGE_INDEXER; otherwise it returns a deterministic root so the
+ *      Pin widget still has something to show.
+ *
+ * Nothing here breaks the build or the demo when the env is unset.
+ */
+import { BrowserProvider, Contract } from "ethers";
+import { sha256Hex } from "./util-hash";
+
+function env(key: string): string | undefined {
+  const v = (import.meta.env as Record<string, string | undefined>)[key];
+  return v && v.trim() ? v.trim() : undefined;
+}
+
+/** 0G mainnet chain id, as the hex MetaMask uses. Override with VITE_0G_CHAIN_ID. */
+export const OG_DEFAULT_CHAIN_HEX = "0x4115"; // 16661 — 0G mainnet
+/** Params to pass MetaMask if it doesn't yet know the 0G chain (used as a fallback when switching fails). */
+const OG_ADD_CHAIN = {
+  "0x4115": {
+    chainId: "0x4115",
+    chainName: "0G Mainnet",
+    nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
+    rpcUrls: ["https://evmrpc.0g.ai"],
+    blockExplorerUrls: ["https://chainscan.0g.ai"],
+  },
+} as const;
+
+export type OgConfig = {
+  registryAddress: string | null;
+  explorerBase: string;       // no trailing slash
+  chainHex: string;           // lowercase 0x…
+  storageIndexer: string | null;
+};
+
+export function getOgConfig(): OgConfig {
+  const explorer = (env("VITE_0G_EXPLORER") ?? "https://chainscan.0g.ai").replace(/\/+$/, "");
+  const chainRaw = env("VITE_0G_CHAIN_ID");
+  let chainHex = OG_DEFAULT_CHAIN_HEX;
+  if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
+  return {
+    registryAddress: env("VITE_0G_REGISTRY_ADDRESS") ?? null,
+    explorerBase: explorer,
+    chainHex,
+    storageIndexer: env("VITE_0G_STORAGE_INDEXER") ?? null,
+  };
+}
+
+/** True when an AgentReceiptRegistry address is configured — gates the "Anchor on 0G" UI. */
+export function isOgRegistryConfigured(): boolean {
+  return getOgConfig().registryAddress !== null;
+}
+
+export function ogExplorerTxUrl(txHash: string): string {
+  return `${getOgConfig().explorerBase}/tx/${txHash}`;
+}
+export function ogExplorerAddrUrl(addr: string): string {
+  return `${getOgConfig().explorerBase}/address/${addr}`;
+}
+
+const REGISTRY_ABI = [
+  "function record(bytes32 receiptHash, bytes32 payloadHash) returns (uint256 index)",
+  "function total() view returns (uint256)",
+  "function isRecorded(bytes32 receiptHash) view returns (bool)",
+  "function recordedBy(address) view returns (uint256)",
+  "event ReceiptRecorded(address indexed payer, bytes32 indexed receiptHash, bytes32 payloadHash, uint256 index, uint64 timestamp)",
+];
+
+function to0xBytes32(hex: string): string {
+  const clean = hex.replace(/^0x/, "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(clean)) throw new Error("Expected a 32-byte (64 hex char) value");
+  return "0x" + clean;
+}
+
+export type AnchorResult = {
+  txHash: string;
+  explorerUrl: string;
+  index: number | null;
+  chainHex: string;
+  registryAddress: string;
+};
+
+type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
+
+/**
+ * Send a real AgentReceiptRegistry.record(receiptHash, payloadHash) tx from the
+ * connected wallet. The wallet must already be on the 0G chain. Throws a clear
+ * error otherwise — callers surface it inline.
+ */
+export async function anchorReceiptOnChain(params: {
+  receiptHashHex: string;     // SHA-256 hex (with or without 0x)
+  payloadHashHex?: string;    // SHA-256 hex; defaults to zero
+}): Promise<AnchorResult> {
+  const cfg = getOgConfig();
+  if (!cfg.registryAddress) throw new Error("0G registry not configured (set VITE_0G_REGISTRY_ADDRESS).");
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
+
+  const currentChain = (await eth.request({ method: "eth_chainId" })) as string;
+  if (currentChain.toLowerCase() !== cfg.chainHex) {
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.chainHex }] });
+    } catch (err) {
+      // 4902 = chain unknown to the wallet → offer to add it (only for chains we have params for)
+      const code = (err as { code?: number }).code;
+      const addParams = (OG_ADD_CHAIN as Record<string, unknown>)[cfg.chainHex];
+      if (code === 4902 && addParams) {
+        try {
+          await eth.request({ method: "wallet_addEthereumChain", params: [addParams] });
+        } catch {
+          throw new Error(`Add the 0G chain (${cfg.chainHex}) to your wallet and retry.`);
+        }
+      } else {
+        throw new Error(`Wallet is on ${currentChain}; switch it to the 0G chain (${cfg.chainHex}) and retry.`);
+      }
+    }
+  }
+
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const registry = new Contract(cfg.registryAddress, REGISTRY_ABI, signer);
+
+  const receiptHash = to0xBytes32(params.receiptHashHex);
+  const payloadHash = params.payloadHashHex ? to0xBytes32(params.payloadHashHex) : "0x" + "0".repeat(64);
+
+  const tx = await registry.record(receiptHash, payloadHash);
+  const receipt = await tx.wait();
+
+  let index: number | null = null;
+  try {
+    for (const log of receipt?.logs ?? []) {
+      const parsed = registry.interface.parseLog(log);
+      if (parsed?.name === "ReceiptRecorded") { index = Number(parsed.args.index); break; }
+    }
+  } catch { /* index stays null */ }
+
+  return {
+    txHash: tx.hash as string,
+    explorerUrl: ogExplorerTxUrl(tx.hash as string),
+    index,
+    chainHex: cfg.chainHex,
+    registryAddress: cfg.registryAddress,
+  };
+}
+
+export type StorageResult = {
+  root: string;            // 0x… Merkle root (real 0G or sha256 fallback)
+  simulated: boolean;      // true = sha256 only (SDK unavailable); false = real 0G root
+  merkleComputed?: boolean; // true = real 0G Merkle root via SDK
+  onChain?: boolean;       // true = committed to FixedPriceFlow on-chain
+  txHash?: string;         // set when onChain = true
+  explorerUrl?: string;
+  nodeUrl?: string;
+  error?: string;
+};
+
+const API_BASE = (import.meta.env as Record<string, string | undefined>)["VITE_API_BASE"]?.replace(/\/+$/, "") ?? "";
+
+/**
+ * Upload a text blob to 0G Storage via the server-side endpoint
+ * (POST /api/og/upload), which uses the configured private key and
+ * @0glabs/0g-ts-sdk. Falls back to sha256 when the server is unreachable.
+ */
+export async function uploadToOgStorage(content: string): Promise<StorageResult> {
+  const sha = await sha256Hex(content);
+  const fallback: StorageResult = { root: "0x" + sha, simulated: true };
+
+  if (!API_BASE) return fallback;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/og/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+      signal: AbortSignal.timeout(30000), // 0G tx can take ~10s
+    });
+    if (!res.ok) return fallback;
+    const j = (await res.json()) as {
+      ok?: boolean; root?: string; txHash?: string; explorerUrl?: string;
+      simulated?: boolean; onChain?: boolean; merkleComputed?: boolean;
+      nodeUrl?: string; error?: string;
+    };
+    if (!j.ok || !j.root) return fallback;
+    return {
+      root: j.root,
+      simulated: j.simulated ?? false,
+      merkleComputed: j.merkleComputed,
+      onChain: j.onChain,
+      txHash: j.txHash || undefined,
+      explorerUrl: j.explorerUrl || undefined,
+      nodeUrl: j.nodeUrl || undefined,
+      error: j.error || undefined,
+    };
+  } catch {
+    return fallback;
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "network": "mantle",
+  "identityRegistry": "0xdA549367192a41c6e1a7eAa161e766d87d15606b",
+  "agentVault": "0xCbBcFc657787Fef2702ae6E35CA5a809a68480da",
+  "yieldToken": "0xcDA86A272531e8640cD7F1a92c01839911B90bb0",
+  "identityTxHash": "0x2e94b240327c744fee8fa26b40c2555e3a91a44240eac45bdd33b87a3c659bb7",
+  "vaultTxHash": "0xf4fc694a3be287efaa8c854ffb6c0d8c1bd5f8ed225b1d2acd4169c06952efb7",
+  "chainId": 5000,
+  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "explorer": "https://explorer.mantle.xyz",
+  "deployedAt": "2026-05-12T14:13:16.725Z"
+}
