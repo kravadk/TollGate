@@ -2,6 +2,8 @@
 
 > **HTTP 402 payment gateway letting AI agents autonomously pay for compute, storage, and inference on 0G using stablecoins with on-chain receipt anchoring.**
 
+**[Live demo](https://toll-gatee.vercel.app/)** · **[API server](https://tollgate-1.onrender.com)** · **[0G mainnet contract](https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70)** · **[GitHub](https://github.com/kravadk/TollGate)**
+
 Turn any API, data feed, inference job, storage write, or analytics endpoint into a **paid AI-agent service** using HTTP `402`, stablecoin settlement, agent budgets, and verifiable receipts. One core gateway, eight hackathon workspaces.
 
 **Stripe / API gateway for AI agents** — agents call an endpoint, get `402 Payment Required`, pay with a stablecoin / x402 proof, retry, and the data unlocks. No accounts, no API keys, no manual checkout.
@@ -134,12 +136,12 @@ Every workspace is the **same core** with a different reskin, demo data, network
 
 ## Demo
 
-- **Live frontend:** _[deploy to Vercel and add link here]_
-- **Live server:** _[deploy to Render/Fly and add link here]_ (optional — frontend runs standalone)
-- **Demo video:** _[record 3-min walkthrough and add YouTube/Loom link here]_
-- **GitHub:** _[add public repo link here]_
-- **0G mainnet contract:** [`0xF4BFd93061B160Fa376c7F66De207a00225B4e70`](https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70)
-- **X post:** _[add post link with #0GHackathon #BuildOn0G]_
+- **Live frontend:** https://toll-gatee.vercel.app/
+- **Live server:** https://tollgate-1.onrender.com (x402 gateway + MCP; first request may take ~30s — free-tier cold start)
+- **Demo video:** _[3-min walkthrough — YouTube/Loom link]_
+- **GitHub:** https://github.com/kravadk/TollGate
+- **0G mainnet contract:** [`0xF4BFd93061B160Fa376c7F66De207a00225B4e70`](https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70) ([deploy tx](https://chainscan.0g.ai/tx/0xe9ae97bb7304d5a162e6d361a066f0492b7628076eb1b19bf35abf872bc3b167))
+- **X post:** _[link with #0GHackathon #BuildOn0G]_
 
 **3-minute judge path (0G track):**
 1. Open `/app/0g` → **"0G Agent Payment Router"**.
