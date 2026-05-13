@@ -7,6 +7,7 @@ import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId, sha256Hex } from "../../../lib/util-hash";
 import { vaultRecordDecision, isMantleVaultConfigured, getCreditRecord, isMantleCreditConfigured, recordAgentPayment, mantleExplorerTxUrl, type CreditRecord } from "../../../lib/mantle";
+import { fetchPrices } from "../../../lib/prices";
 
 const hid = (s: string) => hashId("mnt", s);
 const now = () => new Date().toLocaleTimeString();
@@ -261,9 +262,25 @@ export function YieldProjectionCalc({ workspace }: { workspace: Workspace }) {
   const [windowIdx, setWindowIdx] = useState(1);
   const [amount, setAmount] = useState(1000);
   const [busy, setBusy] = useState(false);
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+
+  // Fetch live prices for context (mETH ≈ ETH, USDY ≈ 1, MNT = MNT)
+  useEffect(() => {
+    let cancelled = false;
+    fetchPrices().then((p) => { if (!cancelled) setLivePrices(p); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const asset = YIELD_ASSETS[assetIdx];
   const days = WINDOWS[windowIdx];
+
+  // Map asset label to CoinGecko symbol for live price display
+  const assetPrice: Record<string, number> = {
+    mETH: livePrices["ETH"] ?? 0,
+    USDY: livePrices["USDC"] ?? 1,
+    "T-BILL RWA": 1,
+    "RWA Basket": 1,
+  };
 
   const points = Array.from({ length: 7 }, (_, i) => {
     const d = (days / 6) * i;
@@ -310,17 +327,20 @@ export function YieldProjectionCalc({ workspace }: { workspace: Workspace }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-        {YIELD_ASSETS.map((a, i) => (
-          <button
-            key={a.label}
-            className={"pill click" + (assetIdx === i ? " on" : "")}
-            type="button"
-            onClick={() => setAssetIdx(i)}
-            style={assetIdx === i ? { background: a.color + "33", color: a.color } : {}}
-          >
-            {a.label} {a.apy}%
-          </button>
-        ))}
+        {YIELD_ASSETS.map((a, i) => {
+          const lp = assetPrice[a.label];
+          return (
+            <button
+              key={a.label}
+              className={"pill click" + (assetIdx === i ? " on" : "")}
+              type="button"
+              onClick={() => setAssetIdx(i)}
+              style={assetIdx === i ? { background: a.color + "33", color: a.color } : {}}
+            >
+              {a.label} {a.apy}%{lp && lp > 1 ? ` · $${lp.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}
+            </button>
+          );
+        })}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
@@ -415,7 +435,7 @@ async function mantleRpc(method: string, params: unknown[]): Promise<unknown> {
   return j.result;
 }
 
-async function fetchWhaleTransfers(fromBlock: string, toBlock: string, minUsd: number): Promise<WhaleAlert[]> {
+async function fetchWhaleTransfers(fromBlock: string, toBlock: string, minUsd: number, mEthPrice: number): Promise<WhaleAlert[]> {
   // eth_getLogs for mETH ERC-20 Transfer events
   const logs = (await mantleRpc("eth_getLogs", [{
     address: METH_ADDRESS,
@@ -429,13 +449,13 @@ async function fetchWhaleTransfers(fromBlock: string, toBlock: string, minUsd: n
     data: string;
   }>;
 
+  const priceUsd = mEthPrice > 0 ? mEthPrice : 3500; // fallback if price not yet loaded
   const alerts: WhaleAlert[] = [];
   for (const log of logs) {
     if (!log.data || log.data === "0x") continue;
-    // mETH has 18 decimals; 1 mETH ≈ $3500 rough estimate for threshold
     const rawAmount = BigInt(log.data);
     const amountEth = Number(rawAmount) / 1e18;
-    const usdValue = Math.round(amountEth * 3500);
+    const usdValue = Math.round(amountEth * priceUsd);
     if (usdValue < minUsd) continue;
 
     const from = "0x" + (log.topics[1] ?? "").slice(26);
@@ -463,10 +483,27 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
   const [running, setRunning] = useState(false);
   const [minUsd, setMinUsd] = useState(100000);
   const [fetchErr, setFetchErr] = useState<string | null>(null);
+  const [mEthPrice, setMEthPrice] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const minUsdRef = useRef(minUsd);
+  const mEthPriceRef = useRef(mEthPrice);
   const latestBlockRef = useRef<number | null>(null);
   useEffect(() => { minUsdRef.current = minUsd; }, [minUsd]);
+  useEffect(() => { mEthPriceRef.current = mEthPrice; }, [mEthPrice]);
+
+  // Fetch live mETH price (mETH ≈ ETH) on mount and every 60s
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const p = await fetchPrices();
+        if (!cancelled) setMEthPrice(p["ETH"] ?? 0);
+      } catch { /* keep 0, fallback to 3500 in fetchWhaleTransfers */ }
+    };
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
 
   async function pollOnce() {
     setFetchErr(null);
@@ -480,7 +517,7 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
       if (from > tip) return; // no new blocks yet
       const fromHex = "0x" + from.toString(16);
       const toHex = "0x" + tip.toString(16);
-      const newAlerts = await fetchWhaleTransfers(fromHex, toHex, minUsdRef.current);
+      const newAlerts = await fetchWhaleTransfers(fromHex, toHex, minUsdRef.current, mEthPriceRef.current);
       latestBlockRef.current = tip;
       if (newAlerts.length > 0) {
         setAlerts((prev) => [...newAlerts, ...prev].slice(0, 50));

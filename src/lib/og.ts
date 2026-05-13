@@ -164,43 +164,73 @@ export type StorageResult = {
 const API_BASE = (import.meta.env as Record<string, string | undefined>)["VITE_API_BASE"]?.replace(/\/+$/, "") ?? "";
 
 /**
- * Upload a text blob to 0G Storage via the server-side endpoint
- * (POST /api/og/upload), which uses the configured private key and
- * @0glabs/0g-ts-sdk. Falls back to sha256 when the server is unreachable.
+ * Upload a text blob to 0G Storage. Attempts, in order:
+ *   1. Direct 0G Storage Indexer (VITE_0G_STORAGE_INDEXER) — real, no server needed.
+ *   2. Server-side endpoint (VITE_API_BASE/api/og/upload) — real, uses @0glabs/0g-ts-sdk.
+ *   3. sha256 fallback — deterministic root, nothing stored on-chain.
  */
 export async function uploadToOgStorage(content: string): Promise<StorageResult> {
   const sha = await sha256Hex(content);
   const fallback: StorageResult = { root: "0x" + sha, simulated: true };
+  const cfg = getOgConfig();
 
-  if (!API_BASE) return fallback;
-
-  try {
-    const res = await fetch(`${API_BASE}/api/og/upload`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-      signal: AbortSignal.timeout(30000), // 0G tx can take ~10s
-    });
-    if (!res.ok) return fallback;
-    const j = (await res.json()) as {
-      ok?: boolean; root?: string; txHash?: string; explorerUrl?: string;
-      simulated?: boolean; onChain?: boolean; merkleComputed?: boolean;
-      nodeUrl?: string; error?: string;
-    };
-    if (!j.ok || !j.root) return fallback;
-    return {
-      root: j.root,
-      simulated: j.simulated ?? false,
-      merkleComputed: j.merkleComputed,
-      onChain: j.onChain,
-      txHash: j.txHash || undefined,
-      explorerUrl: j.explorerUrl || undefined,
-      nodeUrl: j.nodeUrl || undefined,
-      error: j.error || undefined,
-    };
-  } catch {
-    return fallback;
+  // Path 1: direct indexer upload (no private key needed on client side)
+  if (cfg.storageIndexer) {
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(content)));
+      const res = await fetch(`${cfg.storageIndexer}/api/v1/files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: b64, tags: ["agentpay"] }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        const j = (await res.json()) as { root?: string; hash?: string; fileHash?: string };
+        const root = j.root ?? j.hash ?? j.fileHash;
+        if (root) {
+          return {
+            root: root.startsWith("0x") ? root : "0x" + root,
+            simulated: false,
+            merkleComputed: true,
+            nodeUrl: cfg.storageIndexer,
+          };
+        }
+      }
+    } catch { /* fall through */ }
   }
+
+  // Path 2: server-side (VITE_API_BASE)
+  if (API_BASE) {
+    try {
+      const res = await fetch(`${API_BASE}/api/og/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) {
+        const j = (await res.json()) as {
+          ok?: boolean; root?: string; txHash?: string; explorerUrl?: string;
+          simulated?: boolean; onChain?: boolean; merkleComputed?: boolean;
+          nodeUrl?: string; error?: string;
+        };
+        if (j.ok && j.root) {
+          return {
+            root: j.root,
+            simulated: j.simulated ?? false,
+            merkleComputed: j.merkleComputed,
+            onChain: j.onChain,
+            txHash: j.txHash || undefined,
+            explorerUrl: j.explorerUrl || undefined,
+            nodeUrl: j.nodeUrl || undefined,
+            error: j.error || undefined,
+          };
+        }
+      }
+    } catch { /* fall through */ }
+  }
+
+  return fallback;
 }
 
 export type OgInferenceResult =

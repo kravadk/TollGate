@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRightLeft, BadgeCheck, Box, Code2, Database, ExternalLink,
   FileCode2, Loader2, Lock, RefreshCw, Shield, Sparkles, Wallet, Waves,
@@ -9,6 +9,7 @@ import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId } from "../../../lib/util-hash";
+import { fetchPrices } from "../../../lib/prices";
 
 const fmtSui = (n: number) => n.toFixed(4) + " SUI";
 const truncAddr = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
@@ -666,28 +667,51 @@ export function SuiAgentEconomyLoop({ workspace }: { workspace: Workspace }) {
 
 // ── DeepBook Yield Escrow ──────────────────────────────────────────────────────
 const POOLS = [
-  { id: "SUI/USDC", apr: 14.2, tvl: "2.4M" },
-  { id: "SUI/DEEP", apr: 22.7, tvl: "830K" },
-  { id: "DEEP/USDC", apr: 18.1, tvl: "1.1M" },
+  { id: "SUI/USDC", apr: 14.2, tvlBase: 2_400_000, priceKey: "SUI" as const },
+  { id: "SUI/DEEP", apr: 22.7, tvlBase: 830_000,  priceKey: "DEEP" as const },
+  { id: "DEEP/USDC", apr: 18.1, tvlBase: 1_100_000, priceKey: "DEEP" as const },
 ];
+
+const SUI_RPC = "https://fullnode.mainnet.sui.io/";
+
+async function getSuiEpoch(): Promise<number | null> {
+  try {
+    const res = await fetch(SUI_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "suix_getCurrentEpoch", params: [] }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const j = await res.json() as { result?: { epoch?: string } };
+    const e = j.result?.epoch;
+    return e != null ? parseInt(e, 10) : null;
+  } catch { return null; }
+}
 
 export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
-  const [escrows, setEscrows] = useLocalStore<{ id: string; pool: string; amount: number; yield: number; status: string; ts: string }[]>(
+  const [escrows, setEscrows] = useLocalStore<{ id: string; pool: string; amount: number; yield: number; status: string; ts: string; epoch?: number }[]>(
     `sui-yield-escrows-${workspace.id}`, []
   );
   const [pool, setPool] = useState(POOLS[0].id);
   const [amount, setAmount] = useState("1.0");
   const [locking, setLocking] = useState(false);
+  const [prices, setPrices] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPrices().then(p => { if (!cancelled) setPrices(p); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   async function lockFunds() {
     setLocking(true);
-    await new Promise(r => setTimeout(r, 1800));
+    const epoch = await getSuiEpoch();
     const sel = POOLS.find(p => p.id === pool)!;
     const id = hid(`escrow-${Date.now()}`);
-    const newEscrow = { id, pool: sel.id, amount: parseFloat(amount), yield: 0, status: "active", ts: new Date().toLocaleTimeString() };
+    const newEscrow = { id, pool: sel.id, amount: parseFloat(amount), yield: 0, status: "active", ts: new Date().toLocaleTimeString(), epoch: epoch ?? undefined };
     setEscrows(prev => [newEscrow, ...prev]);
-    emitReceipt({ workspaceId: workspace.id, serviceName: "DeepBook Yield Escrow", amount: parseFloat(amount), currency: "SUI", network: "sui-mainnet", kind: "sui.yield.lock", payload: { escrowId: id, pool: sel.id } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "DeepBook Yield Escrow", amount: parseFloat(amount), currency: "SUI", network: "sui-mainnet", kind: "sui.yield.lock", payload: { escrowId: id, pool: sel.id, epoch } });
     setLocking(false);
   }
 
@@ -700,11 +724,16 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
     }));
   }
 
+  const suiPrice = prices["SUI"] ?? 0;
+
   return (
     <div className="widget-card">
       <div className="widget-header">
         <span className="sq soft" style={{ color: "var(--accent-primary)" }}><TrendingUp size={15} /></span>
-        <div><h3>DeepBook Yield Escrow</h3><div className="sub">Earn LP yield while agent task runs — escrow + DeFi in one PTB</div></div>
+        <div>
+          <h3>DeepBook Yield Escrow</h3>
+          <div className="sub">Earn LP yield while agent task runs — escrow + DeFi in one PTB{suiPrice > 0 ? ` · SUI $${suiPrice.toFixed(2)}` : ""}</div>
+        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: 12 }}>
         <select className="inp" value={pool} onChange={e => setPool(e.target.value)}>
@@ -713,17 +742,23 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
         <input className="inp" type="number" min="0.1" step="0.1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="SUI amount" />
         <button className="btn btn-acc btn-sm" onClick={lockFunds} disabled={locking}>
           {locking ? <Loader2 size={13} className="wallet-spin" /> : <Lock size={13} />}
-          {locking ? "Locking…" : "Lock + Earn"}
+          {locking ? "Checking epoch…" : "Lock + Earn"}
         </button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 14 }}>
-        {POOLS.map(p => (
-          <div key={p.id} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)" }}>
-            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{p.id}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--accent-primary)" }}>{p.apr}%</div>
-            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>APR · TVL ${p.tvl}</div>
-          </div>
-        ))}
+        {POOLS.map(p => {
+          const livePrice = prices[p.priceKey] ?? 0;
+          const tvlUsd = livePrice > 0
+            ? (p.tvlBase * livePrice / (p.priceKey === "SUI" ? 3.5 : 0.3)).toFixed(0) // normalize to rough USD TVL
+            : (p.tvlBase / 1000).toFixed(0) + "K";
+          return (
+            <div key={p.id} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)" }}>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{p.id}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--accent-primary)" }}>{p.apr}%</div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>APR · {livePrice > 0 ? `$${livePrice.toFixed(3)}/token` : "TVL $" + (p.tvlBase / 1_000_000).toFixed(1) + "M"}</div>
+            </div>
+          );
+        })}
       </div>
       {escrows.length > 0 && (
         <div className="svc-table__scroll">
