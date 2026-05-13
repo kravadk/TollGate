@@ -86,6 +86,8 @@ import { DiscoveryWidget } from "./widgets/DiscoveryWidget";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { AgentScoreCard } from "./widgets/AgentScoreBadge";
 import { AgoraTradingWidget } from "./widgets/agora/AgoraTradingWidget";
+import { AgoraPortfolioWidget, AgoraCircleToolsWidget, AgoraX402Widget, AgoraLeaderboardWidget, AgoraCctpWidget } from "./widgets/agora/AgoraExtraWidgets";
+import { PolygonTradeFinanceWidget, PolygonUsdcPaymentsWidget, PolygonAgentMarketplaceWidget, PolygonStatsWidget, PolygonMerchantOnboardingWidget } from "./widgets/polygon/PolygonWidgets";
 import * as api from "../lib/api";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage } from "../lib/og";
@@ -5195,8 +5197,8 @@ export function ServiceTabPage({
     (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("widget") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
-    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant"))) ||
-    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("usdc") || t.includes("remittance")));
+    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt"))) ||
+    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("agent") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview")));
 
   return (
     <section className="svc-tab">
@@ -5321,15 +5323,16 @@ export function ServiceTabPage({
       {workspace.id === "sui" && t.includes("receipt") && <AgentNftReputation workspace={workspace} />}
 
       {workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb")) && <AgoraTradingWidget />}
-      {workspace.id === "agora" && (t.includes("portfolio") || t.includes("x402") || t.includes("circle")) && <A2AMarketplaceWidget />}
-      {workspace.id === "agora" && t.includes("merchant") && <MerchantWidget />}
-      {workspace.id === "agora" && (t.includes("agent") || t.includes("marketplace")) && <DiscoveryWidget />}
-      {workspace.id === "agora" && (t.includes("agent") || t.includes("arb") || t.includes("arbitrage")) && <BudgetWidget />}
+      {workspace.id === "agora" && t.includes("portfolio") && <AgoraPortfolioWidget workspace={workspace} />}
+      {workspace.id === "agora" && (t.includes("x402") && !t.includes("portfolio")) && <AgoraX402Widget workspace={workspace} />}
+      {workspace.id === "agora" && t.includes("circle") && <><AgoraCircleToolsWidget workspace={workspace} /><AgoraCctpWidget workspace={workspace} /></>}
+      {workspace.id === "agora" && t.includes("receipt") && <AgoraLeaderboardWidget workspace={workspace} />}
 
-      {workspace.id === "polygon" && t.includes("merchant") && <MerchantWidget />}
-      {workspace.id === "polygon" && (t.includes("trade") || t.includes("finance")) && <A2AMarketplaceWidget />}
-      {workspace.id === "polygon" && (t.includes("marketplace") || t.includes("agent")) && <DiscoveryWidget />}
-      {workspace.id === "polygon" && (t.includes("usdc") || t.includes("remittance")) && <><DiscoveryWidget /><MerchantWidget /></>}
+      {workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode")) && <PolygonMerchantOnboardingWidget workspace={workspace} />}
+      {workspace.id === "polygon" && (t.includes("trade") || t.includes("finance")) && <PolygonTradeFinanceWidget workspace={workspace} />}
+      {workspace.id === "polygon" && (t.includes("marketplace") || t.includes("agent")) && <PolygonAgentMarketplaceWidget workspace={workspace} />}
+      {workspace.id === "polygon" && (t.includes("usdc") || t.includes("payment") || t.includes("remittance")) && <PolygonUsdcPaymentsWidget workspace={workspace} />}
+      {workspace.id === "polygon" && t.includes("overview") && <PolygonStatsWidget workspace={workspace} />}
 
       {!hasFlavor && <QuickCallPanel workspace={workspace} services={base} primary={base.find((s) => s.status === "active") ?? primary} onOpenPayment={onOpenPayment} receipts={receipts} />}
 
