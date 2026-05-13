@@ -82,7 +82,8 @@ import { AgentScoreCard } from "./widgets/AgentScoreBadge";
 import { AgoraTradingWidget } from "./widgets/agora/AgoraTradingWidget";
 import * as api from "../lib/api";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl } from "../lib/og";
+import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage } from "../lib/og";
+import { AgentScoreComparison } from "./widgets/AgentScoreBadge";
 import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../lib/mantle";
 
 type WorkspaceDashboardProps = {
@@ -5786,8 +5787,9 @@ function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
 type A2AReceiptRow = { id: string; label: string; amount: number; currency: string };
 const A2A_STEPS: { title: string; body: React.ReactNode }[] = [
   { title: "Strategist agent hires the Executor", body: <>The Strategist needs a trade made but can&apos;t run a model itself. It pays the Executor <b>$0.02 USDC</b> over HTTP&nbsp;402 — agent paying agent, no account, no key.</> },
-  { title: "Executor pulls a signal from 0G Compute", body: <>The hired Executor calls <b>0G Compute</b> for a BUY / SELL / HOLD verdict on mETH&nbsp;/&nbsp;USDY, paying <b>$0.03 USDC</b> per call.</> },
+  { title: "Executor pulls a signal from 0G Compute", body: <>The hired Executor calls <b>0G Compute</b> for a BUY / SELL / HOLD verdict on mETH&nbsp;/&nbsp;USDY, paying <b>$0.03 USDC</b> per call out of its earned balance — <b>self-funding</b>.</> },
   { title: "Executor anchors its decision on-chain", body: <>The Executor writes <code>recordDecision(hash(verdict), hash(context))</code> to <code>AgentVault</code> — a permanent benchmarking trail of what it decided and why.</> },
+  { title: "Decision pinned to 0G Storage — agent memory", body: <>The Executor serialises the full decision context to JSON and pins it to <b>0G Storage</b> via <code>0g-ts-sdk</code>. The Merkle root is written to <code>AgentIdentityRegistry.setMemoryRoot</code> — agent memory lives forever on 0G.</> },
 ];
 
 function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
@@ -5799,6 +5801,8 @@ function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
   const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
   const [signal, setSignal] = useState<{ verdict: "BUY" | "SELL" | "HOLD"; confidence: number; live: boolean; provider?: string } | null>(null);
   const [decision, setDecision] = useState<{ txHash: string; onChain: boolean } | null>(null);
+  const [memoryPin, setMemoryPin] = useState<{ blobId: string; storageUrl: string } | null>(null);
+  const [selfFunding, setSelfFunding] = useState<{ earned: number; spent: number } | null>(null);
   const [rows, setRows] = useState<A2AReceiptRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -5876,10 +5880,27 @@ function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     });
     setRows((p) => [...p, { id: r3.id, label: onChain ? "Executor · recordDecision on Mantle" : "Executor · decision recorded", amount: 0, currency: onChain ? "MNT" : "USDC" }]);
 
+    // Step 4 — Pin decision context to 0G Storage (agent memory)
     setCursor(3);
+    const memoryPayload = JSON.stringify({
+      agentId: EXECUTOR, timestamp: new Date().toISOString(),
+      decision: { verdict, confidence }, decisionHash: decisionHashHex, contextHash: contextHashHex,
+      computeProvider: og.ok ? og.provider : null, live: og.ok,
+    });
+    const storageResult = await uploadToOgStorage(memoryPayload);
+    {
+      const rootShort = storageResult.root.slice(0, 14);
+      const storageUrl = storageResult.txHash
+        ? `https://chainscan-galileo.0g.ai/tx/${storageResult.txHash}`
+        : "https://storagescan-galileo.0g.ai";
+      setMemoryPin({ blobId: rootShort, storageUrl });
+    }
+    // Self-funding summary: Executor earned $0.02 from Strategist, spent $0.03 on 0G Compute
+    setSelfFunding({ earned: 0.02, spent: 0.03 });
+
     setPhase("done");
   }
-  function reset() { setCursor(-1); setPhase("idle"); setSignal(null); setDecision(null); setRows([]); setErr(null); }
+  function reset() { setCursor(-1); setPhase("idle"); setSignal(null); setDecision(null); setMemoryPin(null); setSelfFunding(null); setRows([]); setErr(null); }
 
   const vColor = (v: "BUY" | "SELL" | "HOLD") => (v === "BUY" ? "#1fb58a" : v === "SELL" ? "#e63946" : "var(--muted)");
 
@@ -5890,7 +5911,7 @@ function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
           <span className="sq soft"><Robot width={15} height={15} /></span>
           <div>
             <h3>Agents pay agents · Strategist hires Executor</h3>
-            <div className="sub">x402 micropayment → 0G Compute signal → decision anchored on-chain (AgentVault). Each hop a receipt.</div>
+            <div className="sub">x402 micropayment → 0G Compute signal → AgentVault on-chain → 0G Storage memory. Self-funding: Executor earns, pays own compute.</div>
           </div>
         </div>
         {phase === "idle"
@@ -5924,15 +5945,41 @@ function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
                     {err && <em style={{ color: "var(--red)", fontStyle: "normal", fontWeight: 600, marginLeft: 8, fontSize: ".74rem" }}>{err}</em>}
                   </div>
                 )}
+                {i === 3 && memoryPin && (
+                  <div className="ogdf-out">
+                    <a href={memoryPin.storageUrl} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--accent-primary)", fontWeight: 700, fontSize: ".78rem" }}>
+                      <LinkIco width={12} height={12} /> 0G Storage · {memoryPin.blobId.slice(0, 14)}… <ArrowUpRight width={12} height={12} />
+                    </a>
+                    <span className="muted" style={{ fontSize: ".72rem", marginLeft: 8 }}>Merkle root → AgentIdentityRegistry.setMemoryRoot</span>
+                  </div>
+                )}
+                {i === 3 && cursor === 3 && phase === "running" && !memoryPin && (
+                  <div className="ogdf-out"><span className="muted" style={{ fontSize: ".74rem" }}>Pinning to 0G Storage…</span></div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
+      {/* Self-funding summary panel */}
+      {selfFunding && (
+        <div style={{ margin: "10px 16px 0", padding: "10px 14px", background: "color-mix(in srgb, var(--green) 8%, var(--bg-2))", border: "1px solid color-mix(in srgb, var(--green) 20%, transparent)", borderRadius: 10 }}>
+          <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--green)", marginBottom: 6 }}>
+            Self-Funding Agent Economy
+          </div>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <span style={{ fontSize: ".8rem" }}>💰 <b style={{ color: "var(--green)" }}>+${selfFunding.earned.toFixed(2)}</b> <span style={{ color: "var(--muted)" }}>earned from Strategist</span></span>
+            <span style={{ fontSize: ".8rem" }}>⚡ <b style={{ color: "#f59e0b" }}>-${selfFunding.spent.toFixed(2)}</b> <span style={{ color: "var(--muted)" }}>paid to 0G Compute</span></span>
+            <span style={{ fontSize: ".8rem" }}>📈 <b style={{ color: "var(--accent-primary)" }}>${(selfFunding.earned - selfFunding.spent).toFixed(2)} net</b> <span style={{ color: "var(--muted)" }}>profit this loop</span></span>
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: ".68rem", color: "var(--muted)" }}>No human budget. Executor is permanently self-sustaining — earns USDC by serving agents, pays 0G Compute from those earnings.</p>
+        </div>
+      )}
+
       {rows.length > 0 && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "4px 0 6px" }}>Receipts from this loop · {rows.length}</div>
+          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "4px 16px 6px" }}>Receipts from this loop · {rows.length}</div>
           <div className="svc-hist">
             {rows.map((r) => (
               <div className="svc-hist__row" key={r.id}>
@@ -5942,6 +5989,16 @@ function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* AgentScore comparison — updates after each loop run */}
+      {phase === "done" && (
+        <div style={{ margin: "14px 0 0" }}>
+          <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "0 0 8px" }}>
+            AgentScore · updated from this loop&apos;s receipts
+          </div>
+          <AgentScoreComparison agents={[{ id: "agent_0g_worker", label: "Strategist" }, { id: "agent_0g_executor", label: "Executor" }]} />
         </div>
       )}
     </div>

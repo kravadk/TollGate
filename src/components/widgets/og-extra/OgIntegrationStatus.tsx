@@ -237,6 +237,16 @@ export function OgIntegrationStatus() {
               addr: import.meta.env.VITE_0G_SERVICE_REGISTRY_ADDRESS as string | undefined,
               explorer: "https://chainscan-galileo.0g.ai/address/",
             },
+            {
+              label: "AgentCreditRegistry",
+              addr: import.meta.env.VITE_0G_CREDIT_REGISTRY_ADDRESS as string | undefined,
+              explorer: "https://chainscan-galileo.0g.ai/address/",
+            },
+            {
+              label: "AgentIdentityRegistry",
+              addr: import.meta.env.VITE_MANTLE_IDENTITY_ADDRESS as string | undefined,
+              explorer: "https://explorer.testnet.mantle.xyz/address/",
+            },
           ] as const).map((c) =>
             c.addr ? (
               <a key={c.label} href={c.explorer + c.addr} target="_blank" rel="noreferrer"
