@@ -84,13 +84,6 @@ export const services: Service[] = [
     description: "Agent pays per backtest run; returns return / drawdown / Sharpe + a receipt.",
     sampleResponse: { pair: "mETH/USDY", retPct: 12.4, maxDdPct: 6.1, sharpe: 1.3, trades: 42 } }),
 
-  // Berkeley
-  svc({ id: "svc_bk_tx_explainer", workspaceIds: ["berkeley"], name: "Berkeley · Tx Explainer", category: "inference", priceUsd: 0.03,
-    description: "Decode a pending wallet action: what it does, what it touches, safe/caution/danger.",
-    sampleResponse: { action: "approve", token: "USDC", risk: "danger", reason: "infinite approval to new contract" } }),
-  svc({ id: "svc_bk_debug", workspaceIds: ["berkeley"], name: "Berkeley · Debug Tool", category: "inference", priceUsd: 0.02,
-    description: "Replay an agent's last run step by step: request → 402 → proof → settled receipt.",
-    sampleResponse: { steps: ["request", "402", "pay", "verified"], receiptId: "rcpt_…" } }),
 ];
 
 export const agents: AgentPolicy[] = [

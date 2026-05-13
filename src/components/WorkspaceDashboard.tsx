@@ -691,14 +691,6 @@ export function OverviewPage({
       { ico: Zap, title: "mETH / USDY yield signals", sub: "rotation suggestion · rebalance band", onClick: () => onGoTab("meth") || onGoTab("yield") },
       { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} paid strategy runs`, onClick: () => onGoReceipts() },
     ],
-    berkeley: [
-      { light: true, ico: Play, title: "Run the 402 playground", sub: "watch request → 402 → pay → unlock live", onClick: () => onGoTab("playground") },
-      { ico: Bolt, title: "Try a paid tool", sub: `${services.length} tools available · pay per call`, onClick: () => onGoTab("paid tool") || onGoTab("catalog") },
-      { ico: Shield, title: "Decode a pending wallet action", sub: "safe / caution / danger verdict", onClick: () => onGoTab("explainer") },
-      { ico: Robot, title: "Replay an agent debug run", sub: "step-by-step · policy check timeline", onClick: () => onGoTab("debugger") },
-      { ico: Code, title: "Transaction explainer tool", sub: "plain-English decode + risk notes", onClick: () => onGoTab("explainer") },
-      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} paid tool calls`, onClick: () => onGoReceipts() },
-    ],
     sui: [
       { light: true, ico: Bolt, title: "Pin a blob to Walrus storage", sub: "decentralised · epoch-based · verifiable", onClick: () => onGoTab("walrus") || onGoTab("storage") },
       { ico: Code, title: "Execute a Move PTB", sub: "dry-run or live · programmable tx blocks", onClick: () => onGoTab("move") || onGoTab("contracts") },
@@ -1059,7 +1051,7 @@ function CopyLine({ text, className }: { text: string; className?: string }) {
   );
 }
 
-// Berkeley · 402 Playground — fire a paid tool call and watch the handshake.
+// 402 Playground — fire a paid tool call and watch the handshake.
 const PLAYGROUND_TOOLS = [
   { id: "wallet-risk", name: "Wallet Risk API", method: "GET", path: "/api/wallet-risk?address=0x9f…ba1", price: 0.05, out: '{\n  "riskScore": 82,\n  "labels": ["mixer-adjacent", "high-velocity"],\n  "lastSeen": "2026-05-10T22:14:03Z"\n}' },
   { id: "yield-signal", name: "Yield Signal API", method: "GET", path: "/api/yield-signal?asset=mETH", price: 0.02, out: '{\n  "apyForecast7d": 4.7,\n  "confidence": 0.81,\n  "trend": "up"\n}' },
@@ -1131,180 +1123,6 @@ function PlaygroundInspector() {
         <div className="pg-out">
           <div className="pg-out__head"><Check width={13} height={13} /> Response unlocked · receipt <code>rcpt_{tool.id.replace(/-/g, "")}_{(step * 137).toString(36)}</code></div>
           <pre className="code-block">{tool.out}</pre>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Berkeley · Transaction explainer — decode a pending wallet action, verdict it.
-const TX_SAMPLES = [
-  { id: "swap", title: "swapExactTokensForTokens(120 USDC → ≈0.041 ETH)", to: "Uniswap V3 Router · verified", verdict: "safe" as const,
-    facts: [["Touches", "USDC, WETH, Uniswap V3 Router"], ["Allowance change", "none"], ["Slippage bound", "0.5% — protected"], ["Recipient", "your own wallet"]],
-    reasons: ["Standard swap on a long-lived, verified router", "No new approvals are granted", "Output is bounded by an explicit slippage limit"] },
-  { id: "approve", title: "approve(0x7a…Router, 115792089…MAX_UINT256)", to: "USDC token contract", verdict: "caution" as const,
-    facts: [["Touches", "USDC allowance for a router"], ["Allowance change", "0 → unlimited"], ["Spender age", "active 2y · widely used"], ["Reversible", "yes — re-approve to 0"]],
-    reasons: ["Unlimited allowance means the router can move all your USDC, now and forever", "The router is reputable, but a future exploit of it would put this balance at risk", "Prefer an exact-amount approval for the swap you're doing"] },
-  { id: "drainer", title: "setApprovalForAll(0x9f…ba1, true)", to: "unverified contract · deployed 2 days ago", verdict: "danger" as const,
-    facts: [["Touches", "EVERY NFT in this collection"], ["Allowance change", "full operator rights granted"], ["Spender age", "2 days · unverified · 0 other users"], ["Pattern match", "known wallet-drainer signature"]],
-    reasons: ["Grants a stranger the right to transfer all your NFTs in this collection", "Destination is a brand-new, unverified contract with no usage history", "This is the classic NFT-drainer pattern — do not sign this"] },
-];
-
-function TxExplainerPanel({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [id, setId] = useState<string>(TX_SAMPLES[1].id);
-  const [calldata, setCalldata] = useState("0x095ea7b3000000000000000000000000a17e0b9c4d2192af31b7…ffffffffffffffffff");
-  const [running, setRunning] = useState(false);
-  const [decoded, setDecoded] = useState<{ verdict: "safe" | "caution" | "danger"; action: string; facts: [string, string][]; reasons: string[]; decodeId: string } | null>(null);
-  const tx = TX_SAMPLES.find((t) => t.id === id) ?? TX_SAMPLES[0];
-  const VBASE = { safe: { l: "Safe to sign", c: "#1fb58a", Ico: Check }, caution: { l: "Sign with caution", c: "#ff9b00", Ico: Shield }, danger: { l: "Do not sign", c: "#e63946", Ico: X } };
-  const V = VBASE[tx.verdict];
-  const history = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "berkeley.tx.decode").slice(0, 6), [receipts, workspace.id]);
-
-  const decode = async () => {
-    setRunning(true);
-    await new Promise((r) => setTimeout(r, 420));
-    const seed = calldata.trim() || "0x";
-    const sel = seed.slice(0, 10).toLowerCase();
-    const isApproveAll = sel === "0xa22cb465";
-    const isApprove = sel === "0x095ea7b3";
-    const isTransfer = sel === "0xa9059cbb";
-    const unlimited = isApprove && /f{20,}/i.test(seed);
-    const risk = deterministicScore(seed + "|r", 0, 1);
-    const verdict: "safe" | "caution" | "danger" = isApproveAll || (unlimited && risk > 0.4) || risk > 0.8 ? "danger" : isApprove || risk > 0.45 ? "caution" : "safe";
-    const action = isApproveAll ? "setApprovalForAll(operator, true)" : isApprove ? `approve(spender, ${unlimited ? "MAX_UINT256" : "exact"})` : isTransfer ? "transfer(to, amount)" : "unknown method · raw call";
-    const facts: [string, string][] = isApproveAll
-      ? [["Touches", "every token in the collection"], ["Allowance change", "full operator rights"], ["Spender age", `${Math.round(deterministicScore(seed + "|age", 1, 800))} days`], ["Pattern", risk > 0.5 ? "matches drainer signature" : "uncommon but seen"]]
-      : isApprove ? [["Touches", "token allowance"], ["Allowance change", unlimited ? "0 → unlimited" : "0 → exact amount"], ["Spender age", `${Math.round(deterministicScore(seed + "|age", 1, 900))} days`], ["Reversible", "yes — re-approve to 0"]]
-      : [["Method", action], ["Value", isTransfer ? "token amount" : "0"], ["Recipient", "decoded from calldata"], ["Risk score", `${Math.round(risk * 100)}/100`]];
-    const reasons = verdict === "danger" ? ["Grants broad transfer rights to the spender", "Destination looks risky / unverified", "Prefer a bounded approval or skip this"] : verdict === "caution" ? ["Allowance/scope is wider than needed", "Spender is reputable but not risk-free", "Use an exact-amount approval where possible"] : ["Standard, bounded operation", "No new broad approvals", "Output/scope is constrained"];
-    const decodeId = "dec_" + hashId("dec", seed + Date.now(), 8);
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_bk_tx_explainer", serviceName: "Tx Explainer API", amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "berkeley.tx.decode", payload: { calldata: seed.slice(0, 20) + "…", verdict, action, decodeId } });
-    setDecoded({ verdict, action, facts, reasons, decodeId });
-    setRunning(false);
-  };
-
-  return (
-    <div className="panel block svc-flavor txx">
-      <div className="block-head"><div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Explain a pending action</h3><div className="sub">decode any wallet calldata — plain-English summary + safe / caution / danger call + receipt ($0.03)</div></div></div></div>
-      <div style={{ display: "flex", gap: 8, padding: "0 16px 10px", alignItems: "stretch" }}>
-        <input value={calldata} onChange={(e) => setCalldata(e.currentTarget.value)} spellCheck={false} placeholder="0x… calldata or contract address" style={{ flex: 1, padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontFamily: "var(--mono)", fontSize: ".74rem" }} />
-        <button className="btn btn-acc btn-sm" type="button" onClick={decode} disabled={running}>{running ? <><Loader2 size={13} className="wallet-spin" /> Decoding…</> : <><Bolt width={13} height={13} /> Decode (paid)</>}</button>
-      </div>
-      {decoded && (
-        <div style={{ padding: "0 16px 12px" }}>
-          <div className={`txx-verdict txx-verdict--${decoded.verdict}`}>
-            <span className="txx-verdict__icon">{decoded.verdict === "safe" ? <Check width={16} height={16} /> : decoded.verdict === "caution" ? <Shield width={16} height={16} /> : <X width={16} height={16} />}</span>
-            <b>{VBASE[decoded.verdict].l}</b><span style={{ marginLeft: 8, fontFamily: "var(--mono)", fontSize: ".74rem", color: "var(--muted)" }}><code>{decoded.action}</code> · {decoded.decodeId}</span>
-          </div>
-          <div className="txx-facts">{decoded.facts.map(([k, v]) => (<div key={k} className="txx-fact"><span className="txx-fact__k">{k}</span><span className="txx-fact__v">{v}</span></div>))}</div>
-          <ul className="svc-guarantees txx-reasons">{decoded.reasons.map((r) => (<li key={r}><span className="txx-bullet" style={{ background: VBASE[decoded.verdict].c }} /> {r}</li>))}</ul>
-        </div>
-      )}
-      <div className="gw-divider"><span>or: try a worked example</span></div>
-      <div className="txx-pick">
-        {TX_SAMPLES.map((t) => (
-          <button key={t.id} type="button" className={"txx-pick__b txx-pick__b--" + t.verdict + (t.id === id ? " on" : "")} onClick={() => setId(t.id)}>
-            {t.verdict === "safe" ? "Token swap" : t.verdict === "caution" ? "Token approval" : "Approve-all NFT"}
-          </button>
-        ))}
-      </div>
-      <div className="txx-call"><code>{tx.title}</code><span className="txx-call__to">→ {tx.to}</span></div>
-      <div className={`txx-verdict txx-verdict--${tx.verdict}`}>
-        <span className="txx-verdict__icon"><V.Ico width={16} height={16} /></span>
-        <b>{V.l}</b>
-      </div>
-      <div className="txx-facts">
-        {tx.facts.map(([k, v]) => (<div key={k} className="txx-fact"><span className="txx-fact__k">{k}</span><span className="txx-fact__v">{v}</span></div>))}
-      </div>
-      <ul className="svc-guarantees txx-reasons">
-        {tx.reasons.map((r) => (<li key={r}><span className="txx-bullet" style={{ background: V.c }} /> {r}</li>))}
-      </ul>
-      {history.length > 0 && (
-        <div style={{ padding: "8px 16px 4px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent decodes · {history.length}</div>
-          <div className="svc-hist">{history.map((r) => { const p = (r.payload ?? {}) as { calldata?: string; verdict?: string; decodeId?: string }; return (
-            <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: p.verdict === "danger" ? "#e63946" : p.verdict === "caution" ? "#ff9b00" : "#1fb58a" }} /><div className="svc-hist__main"><b>{p.verdict?.toUpperCase()} · {p.decodeId}</b><span>{p.calldata} · {new Date(r.createdAt).toLocaleTimeString()}</span></div><span className="svc-hist__amt">{r.amount.toFixed(2)}</span></div>
-          ); })}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Berkeley · Agent debugger — replay an agent's last run, step by step.
-const DEBUG_RUN = [
-  { t: "12:04:01.220", k: "request", title: "GET /api/wallet-risk?address=0x9f…ba1", note: "agent_yield_researcher · attempt 1 · no payment header", tag: "" },
-  { t: "12:04:01.244", k: "challenge", title: "← 402 Payment Required", note: "challenge ch_8f21 · svc_wallet_risk · 0.05 USDC · base-sepolia · expires in 90s", tag: "402" },
-  { t: "12:04:01.310", k: "policy", title: "policy check", note: "0.05 ≤ max/req 0.25 ✓ · spentToday 1.40 + 0.05 ≤ daily 10 ✓ · svc on allowlist ✓ · network match ✓", tag: "pass" },
-  { t: "12:04:01.402", k: "pay", title: "wallet signs payment", note: "0.05 USDC → 0x4c…D2f (provider wallet) · nonce bound to ch_8f21", tag: "" },
-  { t: "12:04:01.560", k: "verify", title: "gateway verifies proof", note: "amount ≥ required ✓ · recipient matches ✓ · single-use ✓ · not expired ✓", tag: "" },
-  { t: "12:04:01.612", k: "settle", title: "← 200 OK + receipt", note: "receipt rcpt_abc123 · txHash 0x3f8c…91 · data { riskScore: 82, … }", tag: "200" },
-];
-const DEBUG_SCENARIOS = [
-  { id: "wallet_risk", svc: "svc_wallet_risk", name: "Wallet Risk API", price: 0.05, agent: "agent_yield_researcher", addr: "0x9f3c…ba1" },
-  { id: "tx_explain", svc: "svc_tx_explainer", name: "Tx Explainer API", price: 0.03, agent: "agent_wallet_analyst", addr: "0xA17e…3F71" },
-  { id: "trading_signal", svc: "svc_trading_signal", name: "Trading Signal API", price: 0.1, agent: "agent_yield_researcher", addr: "ETH/USDC" },
-  { id: "tool_call", svc: "svc_research_agent", name: "Research Agent Tool", price: 0.08, agent: "agent_demo", addr: "topic=mev" },
-] as const;
-function buildDebugTimeline(sc: typeof DEBUG_SCENARIOS[number], seed: string) {
-  const base = Date.now();
-  const ts = (ms: number) => new Date(base + ms).toLocaleTimeString([], { hour12: false }) + "." + String(Math.floor(deterministicScore(seed + ms, 0, 999))).padStart(3, "0");
-  const ch = "ch_" + hashId("ch", seed, 4);
-  const rcpt = "rcpt_" + hashId("rc", seed, 6);
-  const tx = "0x" + hashId("tx", seed, 12);
-  return [
-    { t: ts(0), k: "request", title: `GET /api/${sc.svc}?q=${sc.addr}`, note: `${sc.agent} · attempt 1 · no payment header`, tag: "" },
-    { t: ts(24), k: "challenge", title: "← 402 Payment Required", note: `challenge ${ch} · ${sc.svc} · ${sc.price} USDC · base-sepolia · expires in 90s`, tag: "402" },
-    { t: ts(96), k: "policy", title: "policy check", note: `${sc.price} ≤ max/req 0.25 ✓ · spentToday ${deterministicScore(seed + "|st", 0.4, 4).toFixed(2)} + ${sc.price} ≤ daily 10 ✓ · ${sc.svc} on allowlist ✓ · network match ✓`, tag: "pass" },
-    { t: ts(190), k: "pay", title: "wallet signs payment", note: `${sc.price} USDC → provider wallet · nonce bound to ${ch}`, tag: "" },
-    { t: ts(350), k: "verify", title: "gateway verifies proof", note: "amount ≥ required ✓ · recipient matches ✓ · single-use ✓ · not expired ✓", tag: "" },
-    { t: ts(412), k: "settle", title: "← 200 OK + receipt", note: `receipt ${rcpt} · txHash ${tx}… · data { … }`, tag: "200" },
-  ];
-}
-function AgentDebuggerPanel({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [open, setOpen] = useState<number | null>(1);
-  const [scId, setScId] = useState<string>(DEBUG_SCENARIOS[0].id);
-  const [running, setRunning] = useState(false);
-  const [timeline, setTimeline] = useState(DEBUG_RUN);
-  const sc = DEBUG_SCENARIOS.find((x) => x.id === scId) ?? DEBUG_SCENARIOS[0];
-  const history = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "berkeley.debug.run").slice(0, 6), [receipts, workspace.id]);
-  const rerun = async () => {
-    setRunning(true); setOpen(1);
-    await new Promise((r) => setTimeout(r, 480));
-    const seed = sc.id + Date.now();
-    setTimeline(buildDebugTimeline(sc, seed));
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_bk_debug", serviceName: "Agent Debugger · Re-run", amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "berkeley.debug.run", payload: { scenario: sc.id, svc: sc.svc, agent: sc.agent, price: sc.price } });
-    setRunning(false);
-  };
-  return (
-    <div className="panel block svc-flavor dbg">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Bolt width={15} height={15} /></span><div><h3>Replay an agent run</h3><div className="sub">pick a scenario, re-run it, and inspect every step: request → 402 → policy → pay → verify → receipt</div></div></div>
-        <div className="row sm" style={{ gap: 8 }}>
-          <select value={scId} onChange={(e) => setScId(e.currentTarget.value)} style={{ padding: "6px 9px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem" }}>{DEBUG_SCENARIOS.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.agent})</option>)}</select>
-          <button className="btn btn-acc btn-sm" type="button" onClick={rerun} disabled={running}>{running ? <><Loader2 size={13} className="wallet-spin" /> Running…</> : <><Play width={13} height={13} /> Re-run scenario</>}</button>
-        </div>
-      </div>
-      <ol className="dbg-tl">
-        {timeline.map((s, i) => (
-          <li key={i} className={`dbg-step dbg-step--${s.k}` + (open === i ? " open" : "")}>
-            <button type="button" className="dbg-step__row" onClick={() => setOpen(open === i ? null : i)}>
-              <span className="dbg-step__t">{s.t}</span>
-              <span className="dbg-step__title">{s.title}</span>
-              {s.tag && <span className={`pg-tag pg-tag--${s.tag === "402" ? "402" : s.tag === "200" ? "200" : "ok"}`}>{s.tag}</span>}
-            </button>
-            {open === i && <div className="dbg-step__note">{s.note}</div>}
-          </li>
-        ))}
-      </ol>
-      {history.length > 0 && (
-        <div style={{ padding: "8px 16px 4px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent re-runs · {history.length}</div>
-          <div className="svc-hist">{history.map((r) => { const p = (r.payload ?? {}) as { scenario?: string; agent?: string; svc?: string }; return (
-            <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: "var(--accent-primary)" }} /><div className="svc-hist__main"><b>{p.svc}</b><span>{p.agent} · {new Date(r.createdAt).toLocaleTimeString()}</span></div><span className="svc-hist__amt">{r.amount.toFixed(2)}</span></div>
-          ); })}</div>
         </div>
       )}
     </div>
@@ -3695,43 +3513,6 @@ function YieldBoard({ workspace }: { workspace: Workspace }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// BERKELEY — Paid Tools grid
-// ---------------------------------------------------------------------------
-function PaidToolsGrid({ workspace, services, onOpenPayment }: { workspace: Workspace; services: Service[]; onOpenPayment: (s: Service) => void }) {
-  const { receipts } = useAppState();
-  const paidIds = new Set(receipts.filter((r) => r.workspaceId === workspace.id && r.status === "verified").map((r) => r.serviceId));
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head"><div className="ttl"><span className="sq soft"><Play width={15} height={15} /></span><div><h3>Paid tools</h3><div className="sub">each "Run" fires a real 402 → pay → verify → unlock cycle</div></div></div></div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, padding: "4px 16px 16px" }}>
-        {services.filter((s) => s.status === "active").map((s) => {
-          const Ico = CAT_ICON[s.category] ?? CAT_ICON.data;
-          const paid = paidIds.has(s.id);
-          return (
-            <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 14px", borderRadius: 12, border: "1px solid var(--line-2)", background: paid ? "color-mix(in srgb, var(--accent-primary) 6%, transparent)" : "var(--bg-2)", transition: "all .18s" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span className="sq" style={{ background: catColor(s.category) }}><Ico width={15} height={15} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: ".82rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                  <div style={{ fontSize: ".68rem", color: "var(--muted)" }}>{s.category} · {s.network}</div>
-                </div>
-              </div>
-              <div style={{ fontSize: ".74rem", color: "var(--muted)", lineHeight: 1.4 }}>{s.description.slice(0, 80)}…</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
-                <span style={{ fontWeight: 800, fontSize: ".8rem" }}>${s.priceUsd.toFixed(3)} <span style={{ fontWeight: 500, color: "var(--muted)" }}>{s.currency}</span></span>
-                <button className={`btn btn-sm ${paid ? "btn-ghost" : "btn-acc"}`} type="button" onClick={() => onOpenPayment(s)}>
-                  {paid ? <><Check width={12} height={12} /> Paid</> : <><Bolt width={13} height={13} /> Pay &amp; Run</>}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 type SigBlock = { title: string; sub: string; headers: string[]; rows: (string | number)[][]; accentCol?: number };
 const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
   "0g": {
@@ -3772,16 +3553,6 @@ const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
       ["USDY", "5.1%", "perpetual", "+0.0%"],
       ["T-BILL 90D", "4.83%", "84 days", "+0.1%"],
       ["RWA basket A-", "6.2%", "120 days", "-0.3%"],
-    ], accentCol: 3,
-  },
-  berkeley: {
-    title: "Toolbox", sub: "the paid tools the playground agent can call",
-    headers: ["Tool", "Price / call", "Runs today", "Status"],
-    rows: [
-      ["Wallet Risk API", "$0.05", "31", "active"],
-      ["Transaction Explainer", "$0.02", "18", "active"],
-      ["Docs Search Tool", "$0.015", "12", "active"],
-      ["Code Reviewer Tool", "$0.05", "6", "active"],
     ], accentCol: 3,
   },
   sui: {
@@ -5335,99 +5106,6 @@ function ArbitrumStylusDeployPanel({ workspace }: { workspace: Workspace }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// BERKELEY — Build-a-tool wizard (Playground tab)
-// ---------------------------------------------------------------------------
-type PublishedTool = { id: string; name: string; priceUsdc: number; inputSchema: string; desc: string; calls: number; ts: string };
-type ToolRun = { id: string; toolId: string; toolName: string; receiptId: string; output: string; ts: string };
-function BuildToolWizard({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [tools, setTools] = useLocalStore<PublishedTool[]>("berkeley.published.tools", []);
-  const [runLog, setRunLog] = useLocalStore<ToolRun[]>("berkeley.tool.runs", []);
-  const [name, setName] = useState(""); const [priceStr, setPriceStr] = useState("0.05");
-  const [schema, setSchema] = useState('{"query": "string", "maxResults": "number"}');
-  const [desc, setDesc] = useState(""); const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
-  const [lastOutput, setLastOutput] = useState<ToolRun | null>(null);
-  const publish = async () => {
-    setErr("");
-    if (!name.trim()) { setErr("Tool name required"); return; }
-    try { JSON.parse(schema); } catch { setErr("Input schema must be valid JSON"); return; }
-    const price = parseFloat(priceStr) || 0;
-    if (price < 0.001) { setErr("Price must be ≥ $0.001"); return; }
-    setBusy(true);
-    await new Promise((r) => setTimeout(r, 500));
-    const tool: PublishedTool = { id: "tool_" + hashId("bk", name + Date.now(), 8), name: name.trim(), priceUsdc: price, inputSchema: schema, desc: desc.trim() || name.trim(), calls: 0, ts: new Date().toLocaleTimeString() };
-    setTools((t) => [tool, ...t]);
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_bk_tools", serviceName: "Tool Registry · Publish", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "berkeley.tool.publish", payload: { toolId: tool.id, name: tool.name, price: tool.priceUsdc, schema: tool.inputSchema } });
-    setName(""); setDesc(""); setBusy(false);
-  };
-  const run = (tool: PublishedTool) => {
-    const outputData = hashId("out", tool.id + Date.now(), 24);
-    const outputJson = JSON.stringify({ ok: true, toolId: tool.id, executedAt: new Date().toISOString(), data: outputData, tokens: Math.round(Math.random() * 400 + 50) }, null, 2);
-    const r = emitReceipt({ workspaceId: workspace.id, serviceId: "svc_bk_tools", serviceName: `Tool · ${tool.name}`, amount: tool.priceUsdc, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "berkeley.tool.run", payload: { toolId: tool.id, name: tool.name, result: outputData } });
-    const run: ToolRun = { id: "run_" + hashId("bk", tool.id + Date.now(), 8), toolId: tool.id, toolName: tool.name, receiptId: r.id, output: outputJson, ts: new Date().toLocaleTimeString() };
-    setTools((ts) => ts.map((t) => t.id === tool.id ? { ...t, calls: t.calls + 1 } : t));
-    setRunLog((prev) => [run, ...prev].slice(0, 20));
-    setLastOutput(run);
-  };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Code2 width={15} height={15} /></span><div><h3>Build &amp; publish a tool</h3><div className="sub">define name / price / input schema → publish → agents pay &amp; call it · every call issues a receipt</div></div></div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px", gap: 10, padding: "0 16px 4px" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Tool name</span><input value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="Semantic search API" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} /></label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Description</span><input value={desc} onChange={(e) => setDesc(e.currentTarget.value)} placeholder="What this tool does" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} /></label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Price (USDC)</span><input value={priceStr} onChange={(e) => setPriceStr(e.currentTarget.value)} inputMode="decimal" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem", fontFamily: "var(--mono)" }} /></label>
-      </div>
-      <div style={{ padding: "0 16px 10px" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Input schema (JSON)</span><input value={schema} onChange={(e) => setSchema(e.currentTarget.value)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem", fontFamily: "var(--mono)" }} /></label>
-      </div>
-      {err && <div style={{ margin: "0 16px 8px", padding: "7px 12px", borderRadius: 9, background: "color-mix(in srgb, var(--red) 14%, transparent)", color: "var(--red)", fontSize: ".8rem" }}>{err}</div>}
-      <div style={{ padding: "0 16px 14px" }}>
-        <button className="btn btn-acc btn-sm" type="button" onClick={publish} disabled={busy}>{busy ? <Loader2 size={13} className="wallet-spin" /> : <Bolt width={13} height={13} />} Publish tool ($0.01)</button>
-      </div>
-      {lastOutput && (
-        <div style={{ margin: "0 16px 12px", padding: "10px 14px", borderRadius: 12, border: "1px solid var(--line-2)", background: "var(--bg-2)" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--green)", marginBottom: 6 }}>Last run output · {lastOutput.toolName}</div>
-          <pre style={{ margin: 0, fontFamily: "var(--mono)", fontSize: ".72rem", color: "var(--ink)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{lastOutput.output}</pre>
-          <div style={{ marginTop: 6, fontSize: ".64rem", color: "var(--muted)" }}>receiptId: <code>{lastOutput.receiptId}</code> · {lastOutput.ts}</div>
-        </div>
-      )}
-      {tools.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0 10px" }}>Published tools · {tools.length}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {tools.map((tool) => (
-              <div key={tool.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 11, border: "1px solid var(--line-2)", background: "var(--bg-2)" }}>
-                <div style={{ flex: 1 }}><div style={{ fontSize: ".84rem", fontWeight: 700 }}>{tool.name}</div><div style={{ fontSize: ".72rem", color: "var(--muted)", marginTop: 2 }}>{tool.desc} · <code style={{ fontSize: ".7rem" }}>{tool.id}</code></div></div>
-                <span className="pill" style={{ background: "color-mix(in srgb, var(--accent-primary) 12%, transparent)", color: "var(--accent-primary)", flex: "none" }}>${tool.priceUsdc.toFixed(3)}</span>
-                <span className="muted sm" style={{ flex: "none" }}>{tool.calls} runs</span>
-                <button className="btn btn-acc btn-sm" type="button" onClick={() => run(tool)}><Bolt width={12} height={12} /> Pay &amp; run</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {runLog.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0 8px" }}>Run history · {runLog.length}</div>
-          <div className="svc-table__scroll"><table className="svc-table">
-            <thead><tr><th>Tool</th><th>Receipt</th><th>Time</th></tr></thead>
-            <tbody>{runLog.map((r) => (
-              <tr key={r.id}>
-                <td style={{ fontWeight: 600 }}>{r.toolName}</td>
-                <td><code style={{ fontSize: ".7rem" }}>{r.receiptId}</code></td>
-                <td className="muted svc-table__num">{r.ts}</td>
-              </tr>
-            ))}</tbody>
-          </table></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function ServiceTabPage({
   services,
   workspace,
@@ -5508,7 +5186,6 @@ export function ServiceTabPage({
     t.includes("checkout") || t.includes("orbit") || t.includes("monitor") || t.includes("qiedex") || t.includes("dex") ||
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
     (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit"))) ||
-    (workspace.id === "berkeley" && (t.includes("paid tool") || t.includes("catalog") || t.includes("playground"))) ||
     (workspace.id === "sui" &&(t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
@@ -5626,8 +5303,6 @@ export function ServiceTabPage({
       {workspace.id === "mantle" && (t.includes("devtool") || t.includes("dev tool")) && <MantleDevToolsPanel workspace={workspace} />}
       {workspace.id === "mantle" && t.includes("credit") && <CreditScoreMeter workspace={workspace} />}
       {workspace.id === "mantle" && t.includes("alpha") && <AlphaBotWidget workspace={workspace} />}
-      {workspace.id === "berkeley" && t.includes("playground") && <BuildToolWizard workspace={workspace} />}
-      {workspace.id === "berkeley" && (t.includes("paid tool") || t.includes("catalog")) && <PaidToolsGrid workspace={workspace} services={services} onOpenPayment={onOpenPayment} />}
       {workspace.id === "sui" && (t.includes("walrus") || t.includes("storage")) && <WalrusStorageWidget workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("move") || t.includes("contracts")) && <MoveContractViewer workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("nft") || t.includes("market")) && <SuiNftMarket workspace={workspace} />}
@@ -6551,13 +6226,9 @@ export function GatewayPage({ workspace, tabLabel }: { workspace: Workspace; tab
   const tl = tabLabel.toLowerCase();
   const bespoke =
     tl.includes("playground") ? <PlaygroundInspector />
-    : tl.includes("explainer") ? <TxExplainerPanel workspace={workspace} />
-    : tl.includes("debugger") ? <AgentDebuggerPanel workspace={workspace} />
     : null;
   const head = bespoke
-    ? (tl.includes("playground") ? { t: "402 Playground", d: <>Fire a paid tool call and watch every step of the <b>402 → pay → verify → unlock</b> flow — the same handshake every endpoint in this product uses.</> }
-      : tl.includes("explainer") ? { t: "Transaction explainer", d: <>Decode a pending wallet action before you sign it: what it touches, what it changes, and whether it's <b>safe</b>, <b>caution</b> or <b>danger</b>.</> }
-      : { t: "Agent debugger", d: <>Replay an agent's last run step by step — the request, the 402 challenge, the policy check, the payment, the proof and the settled receipt.</> })
+    ? { t: "402 Playground", d: <>Fire a paid tool call and watch every step of the <b>402 → pay → verify → unlock</b> flow — the same handshake every endpoint in this product uses.</> }
     : { t: "x402 Gateway", d: <>The gateway is the heart of TollGate. Every paid API call goes through the same handshake:{" "}<b>402 Payment Required → agent pays → gateway verifies → data unlocks</b>. The core flow is identical across all workspaces; only the network adapter changes.</> };
   return (
     <>

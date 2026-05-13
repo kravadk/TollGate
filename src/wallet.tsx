@@ -102,7 +102,6 @@ export const WORKSPACE_CHAIN: Record<string, { hex: string; name: string; native
   qie: { hex: "0x7bf", name: "QIE Testnet", native: "QIE" }, // QIE testnet (chainId 1983 = 0x7BF)
   arbitrum: { hex: "0xa4b1", name: "Arbitrum One", native: "ETH" },
   mantle: { hex: "0x1388", name: "Mantle", native: "MNT" },
-  berkeley: { hex: "0x2105", name: "Base", native: "ETH" },
   sui: { hex: "0x1", name: "Sui", native: "SUI" },              // Sui is non-EVM; hex is placeholder — Sui sidebar shows SUI balance only
 };
 

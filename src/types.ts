@@ -7,7 +7,6 @@ export type WorkspaceId =
   | "qie"
   | "arbitrum"
   | "mantle"
-  | "berkeley"
   | "sui"
   | "agora"
   | "polygon";

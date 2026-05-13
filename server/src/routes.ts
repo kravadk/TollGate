@@ -39,7 +39,7 @@ import { withX402 } from "./x402.js";
 import { mintReceiptNFT } from "./receipt-nft.js";
 import type { Service, WorkspaceId } from "./types.js";
 
-const WORKSPACE_IDS: WorkspaceId[] = ["0g", "qie", "arbitrum", "mantle", "berkeley", "sui", "agora", "polygon"];
+const WORKSPACE_IDS: WorkspaceId[] = ["0g", "qie", "arbitrum", "mantle", "sui", "agora", "polygon"];
 function asWorkspace(v: unknown): WorkspaceId | undefined {
   return WORKSPACE_IDS.includes(v as WorkspaceId) ? (v as WorkspaceId) : undefined;
 }

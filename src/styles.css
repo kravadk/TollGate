@@ -9784,21 +9784,6 @@ select.twk-field {
 }
 @keyframes ws-drift { from { background-position: 0 0; } to { background-position: 42px 42px; } }
 
-/* berkeley — playground breadboard: big dot grid + sparse gridlines */
-.ws-bg--berkeley .ws-bg__pattern {
-  inset: 0; opacity: .055;
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--accent-primary) 55%, transparent) 1.6px, transparent 2.6px);
-  background-size: 34px 34px;
-}
-.ws-bg--berkeley .ws-bg__circuit {
-  inset: 0; opacity: .06;
-  background-image:
-    linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 45%, transparent) 1px, transparent 1px),
-    linear-gradient(0deg, color-mix(in srgb, var(--accent-primary) 45%, transparent) 1px, transparent 1px);
-  background-size: 136px 136px, 136px 136px;
-  mask-image: radial-gradient(circle at 72% 38%, black, transparent 62%);
-  -webkit-mask-image: radial-gradient(circle at 72% 38%, black, transparent 62%);
-}
 @keyframes ws-morph {
   0%, 100% { transform: translate(0, 0) scale(1); border-radius: 42% 58% 55% 45% / 50% 45% 55% 50%; }
   33%      { transform: translate(4%, -3%) scale(1.08); border-radius: 56% 44% 40% 60% / 45% 56% 50% 50%; }
