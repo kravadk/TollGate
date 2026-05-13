@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   CircleDashed,
   Clock,
+  Download,
   RefreshCcw,
   Settings2,
   ShieldOff,
@@ -63,6 +64,25 @@ function initials(name: string): string {
 
 function workspaceFor(wsId: string) {
   return workspaces.find((w) => w.id === wsId);
+}
+
+function downloadBlob(content: string, filename: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCsv(receipts: Receipt[]) {
+  const header = "id,serviceName,agentName,amount,currency,network,status,txHash,createdAt";
+  const rows = receipts.map((r) =>
+    [r.id, `"${r.serviceName}"`, `"${r.agentName}"`, r.amount, r.currency, r.network, r.status, r.txHash, r.createdAt].join(",")
+  );
+  downloadBlob([header, ...rows].join("\n"), "tollgate-receipts.csv", "text/csv");
+}
+
+function exportJson(receipts: Receipt[]) {
+  downloadBlob(JSON.stringify(receipts, null, 2), "tollgate-receipts.json", "application/json");
 }
 
 function agentFor(receipt: Receipt) {
@@ -307,6 +327,28 @@ export function ReceiptsShowcase({ onBack }: { onBack: () => void }) {
             <Settings2 size={14} />
             Customize
           </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              className="rsh-side__back-btn"
+              type="button"
+              title="Export CSV"
+              onClick={() => exportCsv(visible)}
+              style={{ flex: 1 }}
+            >
+              <Download size={12} />
+              CSV
+            </button>
+            <button
+              className="rsh-side__back-btn"
+              type="button"
+              title="Export JSON"
+              onClick={() => exportJson(visible)}
+              style={{ flex: 1 }}
+            >
+              <Download size={12} />
+              JSON
+            </button>
+          </div>
           <button
             className="rsh-side__back-btn"
             type="button"

@@ -1,7 +1,8 @@
 import { type CSSProperties, useState } from "react";
-import { AlertTriangle, CheckCircle, ExternalLink, ShieldCheck, Zap } from "lucide-react";
+import { AlertTriangle, CheckCircle, ExternalLink, ShieldCheck, Trash2, Zap } from "lucide-react";
 import { useLocalStore } from "../../lib/storage";
 import { ActionPanel } from "./ActionPanel";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 const CONTRACTS = [
   { label: "Arbitrum Sepolia", addr: "0x9dD4Df1dE852c8308A2d3Aa6bD8e2257Dd786A09", url: "https://sepolia.arbiscan.io/address/0x9dD4Df1dE852c8308A2d3Aa6bD8e2257Dd786A09" },
@@ -29,6 +30,7 @@ export function BudgetWidget({ agentId = "agent_0g_worker" }: { agentId?: string
   const [dailyIn, setDailyIn] = useState(String(policy.dailyLimitUsd));
   const [maxIn,   setMaxIn]   = useState(String(policy.maxPerTxUsd));
   const [saved, setSaved] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const cutoff     = Date.now() - 86_400_000;
   const spentToday = log.filter((t) => t.ok && new Date(t.ts).getTime() > cutoff).reduce((s, t) => s + t.amount, 0);
@@ -123,17 +125,36 @@ export function BudgetWidget({ agentId = "agent_0g_worker" }: { agentId?: string
 
       {/* Result log */}
       {log.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {log.slice(0, 5).map((t) => (
-            <div key={t.id} style={okBox(t.ok)}>
-              {t.ok ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}
-              <span style={{ fontFamily: "monospace" }}>{short(t.id)}</span>
-              <span>{usd(t.amount)}</span>
-              {t.ok ? <span>→ approved</span> : <span>→ blocked: {t.reason}</span>}
-            </div>
-          ))}
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={lbl}>Recent transactions</span>
+            <button className="btn sm" onClick={() => setConfirmClear(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#f87171", fontSize: ".62rem" }}>
+              <Trash2 size={10} /> Clear
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {log.slice(0, 5).map((t) => (
+              <div key={t.id} style={okBox(t.ok)}>
+                {t.ok ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}
+                <span style={{ fontFamily: "monospace" }}>{short(t.id)}</span>
+                <span>{usd(t.amount)}</span>
+                {t.ok ? <span>→ approved</span> : <span>→ blocked: {t.reason}</span>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmClear}
+        title="Clear transaction log?"
+        description="This removes all simulated transactions from this browser. On-chain records are permanent."
+        confirmLabel="Clear log"
+        confirmDanger
+        onConfirm={() => { setLog([]); setConfirmClear(false); }}
+        onCancel={() => setConfirmClear(false)}
+      />
 
       <p style={{ margin: "14px 0 0", fontSize: ".73rem", color: "var(--muted)", lineHeight: 1.55 }}>
         On-chain: <code>AgentBudget.checkAndSpend(agentId, amountWei)</code> is called by the gateway before every

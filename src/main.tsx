@@ -12,6 +12,22 @@ import App from "./App";
 import "./theme.css";
 import "./styles.css";
 
+// Optional Sentry error tracking — set VITE_SENTRY_DSN to enable.
+// @sentry/react is intentionally not listed in package.json; it's loaded at
+// runtime only when the DSN env var is present, keeping the default bundle clean.
+if (import.meta.env.VITE_SENTRY_DSN) {
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  (new Function("m", "return import(m)"))("@sentry/react")
+    .then((sentry: { init: (o: object) => void; browserTracingIntegration: () => unknown }) => {
+      sentry.init({
+        dsn: import.meta.env.VITE_SENTRY_DSN as string,
+        integrations: [sentry.browserTracingIntegration()],
+        tracesSampleRate: 0.1,
+        environment: import.meta.env.MODE,
+      });
+    }).catch(() => { /* Sentry unavailable — no-op */ });
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

@@ -1,8 +1,9 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { ExternalLink, Search, Plus, Database, Zap } from "lucide-react";
 import { useLocalStore } from "../../lib/storage";
 import { ActionPanel } from "./ActionPanel";
 import { EmptyState } from "../ui/EmptyState";
+import { Skeleton } from "../ui/Motion";
 import { toast } from "../ui/Toast";
 
 const CONTRACTS = [
@@ -47,6 +48,8 @@ export function DiscoveryWidget() {
   const [services, setServices] = useLocalStore<RegistryService[]>("registry.services", SEED_SERVICES);
   const [query, setQuery] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setLoading(false), 420); return () => clearTimeout(t); }, []);
   const [showRegister, setShowRegister] = useState(false);
   const [form, setForm] = useState({ serviceId: "", name: "", priceUsd: "", network: "arbitrum-sepolia", endpoint: "", provider: "" });
   const [registered, setRegistered] = useState(false);
@@ -142,13 +145,22 @@ export function DiscoveryWidget() {
 
       {/* Service list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-        {filtered.length === 0 && (
+        {loading && [0, 1, 2].map((i) => (
+          <div key={i} style={{ background: "var(--bg-2)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+              <Skeleton width="55%" height={12} />
+              <Skeleton width="35%" height={10} />
+            </div>
+            <Skeleton width={42} height={20} radius={6} />
+          </div>
+        ))}
+        {!loading && filtered.length === 0 && (
           <EmptyState
             title={query || maxPrice ? "No services match your filter" : "No services registered yet"}
             description={query || maxPrice ? "Try a different keyword or remove the price cap." : "Click \"Register\" above to publish your first paid API."}
           />
         )}
-        {filtered.map((s) => (
+        {!loading && filtered.map((s) => (
           <div key={s.serviceId} style={{ background: "var(--bg-2)", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: ".84rem", color: "var(--ink)", marginBottom: 2 }}>{s.name}</div>

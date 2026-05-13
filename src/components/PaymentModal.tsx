@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Bot, CheckCircle2, ExternalLink, FileText, Link2, ServerCog, X } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ExternalLink, FileText, Fuel, Link2, ServerCog, X } from "lucide-react";
 import { Spinner } from "./ui/Motion";
 import { slugifyTab } from "./ui/AppSidebar";
 import { anchorReceiptOnChain, isOgRegistryConfigured, ogExplorerTxUrl } from "../lib/og";
@@ -22,6 +22,18 @@ const HEADER: Record<PaymentStage, string> = {
   verifying: "Verifying payment",
   approved: "Payment approved",
   unlocked: "Response unlocked",
+};
+
+// Static gas estimates per network (USD) — shown as a pre-flight hint.
+const GAS_EST: Record<string, string> = {
+  "0g-testnet":        "~$0.001",
+  "0g-mainnet":        "~$0.002",
+  "mantle-sepolia":    "~$0.002",
+  "mantle-mainnet":    "~$0.003",
+  "arbitrum-sepolia":  "~$0.003",
+  "arbitrum-one":      "~$0.005",
+  "base-sepolia":      "~$0.002",
+  "ethereum-mainnet":  "~$0.50–$2",
 };
 
 function shortAddr(addr: string): string {
@@ -202,6 +214,13 @@ export function PaymentModal({ agent, service, workspace, onApproved, onClose }:
                 <div className="text-[11px] text-text-muted mb-2.5">
                   Pay once → the gateway verifies → the API response unlocks. One paid request, then the agent continues.
                 </div>
+                {/* Gas estimate hint */}
+                {isOgRegistryConfigured() && (
+                  <div className="flex items-center gap-2 mb-3 text-[11px] text-text-muted">
+                    <Fuel size={11} style={{ flexShrink: 0 }} />
+                    <span>Estimated gas: <strong>{GAS_EST[svc.network] ?? "~$0.01"}</strong> on {svc.network}</span>
+                  </div>
+                )}
                 <motion.button
                   type="button"
                   onClick={pay}
@@ -240,6 +259,15 @@ export function PaymentModal({ agent, service, workspace, onApproved, onClose }:
                     transition={{ duration: stage === "verifying" ? 0.9 : 0.6, ease: "easeInOut" }}
                   />
                 </div>
+                {stage === "verifying" && anchorTx && (
+                  <div className="flex items-center gap-2 mt-2.5 text-[11px] text-text-muted">
+                    <span>Tx pending:</span>
+                    <a href={ogExplorerTxUrl(anchorTx)} target="_blank" rel="noreferrer"
+                      style={{ color: accent, fontWeight: 600, fontFamily: "monospace" }}>
+                      {anchorTx.slice(0, 10)}… <ExternalLink size={10} style={{ display: "inline", verticalAlign: "middle" }} />
+                    </a>
+                  </div>
+                )}
               </div>
             ) : null}
 

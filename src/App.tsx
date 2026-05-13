@@ -1,5 +1,5 @@
 import { Agentation } from "agentation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { AppStateContext, type AppState, type EmitReceiptInput } from "./app-state";
 import { ProjectLauncher } from "./pages/ProjectLauncher";
@@ -9,7 +9,8 @@ import { AppLayout } from "./layouts/AppLayout";
 import { ReceiptsShowcase } from "./components/ReceiptsShowcase";
 import { Preloader } from "./components/visual/Preloader";
 import { CustomCursor } from "./components/visual/CustomCursor";
-import { Toaster } from "./components/ui/Toast";
+import { Toaster, toast } from "./components/ui/Toast";
+import { CommandPalette } from "./components/ui/CommandPalette";
 import { agentFor, initialReceipts, makeReceiptId, makeTxHash } from "./data";
 import type { Receipt, Service, Theme } from "./types";
 
@@ -24,6 +25,8 @@ function readInitialTheme(): Theme {
 export default function App() {
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const disconnectShownRef = useRef(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [paidServiceIds, setPaidServiceIds] = useState<Record<string, string>>({});
@@ -33,6 +36,32 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  // Cmd+K / Ctrl+K → open command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // MetaMask disconnect → show toast
+  useEffect(() => {
+    const eth = (window as unknown as { ethereum?: { on?: (e: string, h: () => void) => void; removeListener?: (e: string, h: () => void) => void } }).ethereum;
+    if (!eth?.on) return;
+    const onDisconnect = () => {
+      if (disconnectShownRef.current) return;
+      disconnectShownRef.current = true;
+      toast.warn("Wallet disconnected — reconnect to sign on-chain receipts.");
+      setTimeout(() => { disconnectShownRef.current = false; }, 10_000);
+    };
+    eth.on("disconnect", onDisconnect);
+    return () => eth.removeListener?.("disconnect", onDisconnect);
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
@@ -114,6 +143,7 @@ export default function App() {
       <Preloader />
       <CustomCursor />
       <Toaster />
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <Routes>
         <Route path="/" element={<ProjectLauncher theme={theme} onToggleTheme={toggleTheme} />} />
         <Route path="/app/:wsId" element={<AppLayout />}>
