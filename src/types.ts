@@ -11,7 +11,9 @@ export type WorkspaceId =
   | "eazo"
   | "berkeley"
   | "deepsurge"
-  | "sui";
+  | "sui"
+  | "agora"
+  | "polygon";
 
 export type PaymentStage =
   | "required"

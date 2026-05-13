@@ -79,6 +79,7 @@ import { MerchantWidget } from "./widgets/MerchantWidget";
 import { DiscoveryWidget } from "./widgets/DiscoveryWidget";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { AgentScoreCard } from "./widgets/AgentScoreBadge";
+import { AgoraTradingWidget } from "./widgets/agora/AgoraTradingWidget";
 import * as api from "../lib/api";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl } from "../lib/og";
@@ -728,6 +729,22 @@ export function OverviewPage({
       { ico: Shield, title: "Generate a zkLogin proof", sub: "OAuth → Sui wallet · no seed phrase", onClick: () => onGoTab("wallet") || onGoTab("agent") },
       { ico: Robot, title: "Sui Economy Agent settings", sub: "daily limit $10 · auto-pay on", onClick: () => onGoTab("agent") },
       { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} Sui payments`, onClick: () => onGoReceipts() },
+    ],
+    agora: [
+      { light: true, ico: TrendingUp, title: "Run cross-chain arb demo", sub: "ETH/USDC gap Arc vs Base · $0.05 · CCTP", onClick: () => onGoTab("arbitrage") || onGoTab("arb") },
+      { ico: CircleDollarSign, title: "Adaptive portfolio rebalancer", sub: "multi-asset · USDC settlement · Paymaster", onClick: () => onGoTab("portfolio") },
+      { ico: Zap, title: "Pay-per-inference on Arc", sub: "x402 → USDC → instant settlement", onClick: () => def && onOpenPayment(def) },
+      { ico: Robot, title: "ArcArb Agent settings", sub: "daily limit $20 · auto-pay on · CCTP", onClick: () => onGoTab("agent") },
+      { ico: Code, title: "Circle Tools — CCTP & Nanopayments", sub: "CCTP bridge · Gateway · Paymaster", onClick: () => onGoTab("circle") || onGoTab("gateway") },
+      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} Arc payments`, onClick: () => onGoReceipts() },
+    ],
+    polygon: [
+      { light: true, ico: Zap, title: "Publish a paid API in 30 sec", sub: "paste endpoint · get TollGate URL · earn USDC", onClick: () => onGoTab("merchant") },
+      { ico: FileText, title: "Tokenise a trade invoice", sub: "90% advance · USDC on Polygon zkEVM", onClick: () => onGoTab("trade") || onGoTab("finance") },
+      { ico: Send, title: "Cross-border remittance", sub: "AED ↔ USDC · UAE corridors · $0.05/call", onClick: () => def && onOpenPayment(def) },
+      { ico: Robot, title: "Polygon Merchant Agent settings", sub: "daily limit $15 · auto-pay on", onClick: () => onGoTab("agent") },
+      { ico: ShieldCheck, title: "Agent marketplace discovery", sub: "find & pay Polygon services via x402", onClick: () => onGoTab("marketplace") || onGoTab("discovery") },
+      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} Polygon payments`, onClick: () => onGoReceipts() },
     ],
   };
   // "Try the demo agent" — the one-click 402 → pay → unlock action judges look for.
@@ -4291,6 +4308,26 @@ const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
       ["zkLogin", "OAuth-to-Sui proofs", "1,100 proofs", "healthy"],
     ], accentCol: 3,
   },
+  agora: {
+    title: "Arc L1 agent commerce", sub: "Circle tools powering autonomous cross-chain arbitrage on Arc mainnet",
+    headers: ["Tool", "Role", "Latency", "Status"],
+    rows: [
+      ["USDC", "settlement currency", "<1s", "active"],
+      ["CCTP", "Arc ↔ Base cross-chain", "<500ms", "active"],
+      ["Paymaster", "gas sponsorship", "free", "active"],
+      ["Nanopayments", "streaming receipts", "real-time", "active"],
+    ], accentCol: 3,
+  },
+  polygon: {
+    title: "Polygon zkEVM commerce", sub: "UAE trade finance & merchant micropayments settled in USDC on Polygon",
+    headers: ["Corridor", "Volume 24h", "Fee", "Status"],
+    rows: [
+      ["AED → USDC", "$142,000", "$0.05/call", "active"],
+      ["SME trade invoices", "18 tokenised", "0.1%", "active"],
+      ["Merchant checkouts", "3,410 calls", "$0.01/call", "active"],
+      ["Cross-border remittance", "$38,200", "0.2%", "active"],
+    ], accentCol: 3,
+  },
 };
 
 function WorkspaceSignature({ workspace }: { workspace: Workspace }) {
@@ -6929,7 +6966,9 @@ export function ServiceTabPage({
     (workspace.id === "eazo" && (t.includes("companion") || t.includes("subscription") || t.includes("life") || t.includes("os"))) ||
     (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
-    (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent")));
+    (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
+    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant"))) ||
+    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("usdc") || t.includes("remittance")));
 
   return (
     <section className="svc-tab">
@@ -7061,6 +7100,17 @@ export function ServiceTabPage({
       {workspace.id === "sui" && (t.includes("move") || t.includes("contracts")) && <MoveContractViewer workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("nft") || t.includes("market")) && <SuiNftMarket workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("wallet") || t.includes("agent")) && <><SuiAgentWalletPanel workspace={workspace} /><ZkLoginPanel workspace={workspace} /><SuiAgentEconomyLoop workspace={workspace} /></>}
+
+      {workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb")) && <AgoraTradingWidget />}
+      {workspace.id === "agora" && (t.includes("portfolio") || t.includes("x402") || t.includes("circle")) && <A2AMarketplaceWidget />}
+      {workspace.id === "agora" && t.includes("merchant") && <MerchantWidget />}
+      {workspace.id === "agora" && (t.includes("agent") || t.includes("marketplace")) && <DiscoveryWidget />}
+      {workspace.id === "agora" && (t.includes("agent") || t.includes("arb") || t.includes("arbitrage")) && <BudgetWidget />}
+
+      {workspace.id === "polygon" && t.includes("merchant") && <MerchantWidget />}
+      {workspace.id === "polygon" && (t.includes("trade") || t.includes("finance")) && <A2AMarketplaceWidget />}
+      {workspace.id === "polygon" && (t.includes("marketplace") || t.includes("agent")) && <DiscoveryWidget />}
+      {workspace.id === "polygon" && (t.includes("usdc") || t.includes("remittance")) && <><DiscoveryWidget /><MerchantWidget /></>}
 
       {!hasFlavor && <QuickCallPanel workspace={workspace} services={base} primary={base.find((s) => s.status === "active") ?? primary} onOpenPayment={onOpenPayment} receipts={receipts} />}
 

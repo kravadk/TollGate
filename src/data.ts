@@ -5,7 +5,7 @@ import {
   Globe2,
   type LucideIcon,
 } from "lucide-react";
-import { ZeroGLogo, MantleLogo, ArbitrumLogo, SuiLogo, QieLogo } from "./components/logos/ProjectLogos";
+import { ZeroGLogo, MantleLogo, ArbitrumLogo, SuiLogo, QieLogo, CircleLogo, PolygonLogo } from "./components/logos/ProjectLogos";
 import type { Agent, Receipt, ReceiptStatus, Service, Workspace, WorkspaceId } from "./types";
 
 export const workspaces: Workspace[] = [
@@ -134,6 +134,34 @@ export const workspaces: Workspace[] = [
     accent: "#d8ff2f",
     darkAccent: "#d9ff47",
     Icon: DatabaseZap as LucideIcon,
+  },
+  {
+    id: "agora",
+    shortName: "Agora",
+    name: "Arc Agent Commerce Layer",
+    route: "/agora",
+    hackathon: "Agora Agents Hackathon ($50K) + Stablecoins Commerce Stack Track 4 ($6K) — Circle × Arc L1",
+    pitch: "Agents autonomously discover services, pay per inference via x402 + USDC on Arc L1, and arbitrage across chains — the full agentic economy demo.",
+    tracks: ["Cross-Platform Arbitrage Agent", "Adaptive Portfolio Manager", "x402 Pay-per-Inference", "Circle Tools (CCTP/Nanopayments)"],
+    networks: ["arc-mainnet", "arbitrum-one", "base"],
+    tabs: ["Overview", "Arbitrage Agent", "Portfolio Manager", "x402 on Arc", "Circle Tools", "Receipts"],
+    accent: "#1652F0",
+    darkAccent: "#4B7BFF",
+    Icon: CircleLogo,
+  },
+  {
+    id: "polygon",
+    shortName: "Polygon",
+    name: "Polygon Agent Commerce",
+    route: "/polygon",
+    hackathon: "Smart Commerce Infrastructure Challenge — Polygon Labs × Ignyte ($25K + $100K incentives)",
+    pitch: "SME merchants publish paid APIs in 30 seconds; agents and buyers settle per call in USDC on Polygon zkEVM — UAE commerce infrastructure.",
+    tracks: ["SME Trade Finance", "Merchant Payments", "Cross-Border Stablecoins", "Agent Infrastructure"],
+    networks: ["polygon-zkevm", "polygon-pos"],
+    tabs: ["Overview", "Merchant Mode", "Trade Finance", "Agent Marketplace", "USDC Payments", "Receipts"],
+    accent: "#7B3FE4",
+    darkAccent: "#9F6FF8",
+    Icon: PolygonLogo,
   },
 ];
 
@@ -370,6 +398,34 @@ const RAW_SERVICES: SRaw[] = [
     description: "Generates a zkLogin proof bundle for a Google/Apple OAuth token so agents can authenticate without a seed phrase.",
     priceUsd: 0.01, currency: "SUI", network: "sui-mainnet", provider: "Sui zkLogin Labs", providerWallet: W,
     sampleIn: '{ "jwt": "eyJ…", "salt": "0x…" }', response: '{ "proof": "…", "address": "0x4da2…", "maxEpoch": 420 }', status: "active", calls: 1100 },
+
+  // Agora / Arc
+  { id: "svc_arc_oracle", workspaceId: "agora", name: "Arc Price Oracle", category: "data",
+    description: "Real-time USDC price feed across Arc, Arbitrum, and Base — used by arbitrage agents to spot cross-chain gaps.",
+    priceUsd: 0.02, currency: "USDC", network: "arc-mainnet", provider: "ArcArb Data", providerWallet: W,
+    sampleIn: '{ "pairs": ["ETH/USDC","USDC/EURC"], "chains": ["arc","base","arbitrum"] }', response: '{ "arc": 1.0001, "base": 0.9998, "arb": 1.0000, "gap": 0.03 }', status: "active", calls: 4820 },
+  { id: "svc_arc_arb", workspaceId: "agora", name: "Cross-Chain Arb Executor", category: "trading",
+    description: "Executes a cross-chain USDC arbitrage via CCTP: routes the optimal leg, monitors finality, returns net profit.",
+    priceUsd: 0.05, currency: "USDC", network: "arc-mainnet", provider: "ArcArb Executor", providerWallet: W2,
+    sampleIn: '{ "buyChain": "arc", "sellChain": "base", "amount": "500" }', response: '{ "profit": "0.12", "ttl": "420ms", "cctpTx": "0x…" }', status: "active", calls: 1740 },
+  { id: "svc_arc_portfolio", workspaceId: "agora", name: "Portfolio Rebalance API", category: "inference",
+    description: "Analyses multi-asset allocation against a target and emits rebalance instructions settled in USDC via Circle Paymaster.",
+    priceUsd: 0.08, currency: "USDC", network: "arc-mainnet", provider: "ArcPortfolio AI", providerWallet: W,
+    sampleIn: '{ "assets": { "ETH": 0.6, "USDC": 0.4 }, "target": { "ETH": 0.5 } }', response: '{ "action": "sell 0.1 ETH → 310 USDC", "fee": "0.001 USDC", "via": "Paymaster" }', status: "active", calls: 890 },
+
+  // Polygon
+  { id: "svc_poly_invoice", workspaceId: "polygon", name: "Invoice Finance API", category: "data",
+    description: "Tokenises a trade invoice on Polygon and advances 90% of face value in USDC for UAE SME cash flow.",
+    priceUsd: 0.10, currency: "USDC", network: "polygon-zkevm", provider: "PolyTrade Finance", providerWallet: W2,
+    sampleIn: '{ "invoice": "INV-4921", "amount": "5000", "due": "2026-06-30" }', response: '{ "advance": "4500", "tokenId": "inv_4921", "tx": "0x…" }', status: "active", calls: 640 },
+  { id: "svc_poly_merchant", workspaceId: "polygon", name: "Merchant Checkout API", category: "payment",
+    description: "Hosted x402 checkout endpoint; buyer or agent pays USDC per call, merchant receives instantly on Polygon.",
+    priceUsd: 0.01, currency: "USDC", network: "polygon-zkevm", provider: "PolyMerchant", providerWallet: W,
+    sampleIn: '{ "merchant": "0x…", "amount": "0.01" }', response: '{ "receipt": "rcpt_…", "settled": true, "txHash": "0x…" }', status: "active", calls: 3100 },
+  { id: "svc_poly_cross", workspaceId: "polygon", name: "Cross-Border Remittance API", category: "payment",
+    description: "Settles stablecoin remittances between UAE and global corridors, converting AED stablecoin ↔ USDC via Polygon bridge.",
+    priceUsd: 0.05, currency: "USDC", network: "polygon-pos", provider: "PolyRemit", providerWallet: W2,
+    sampleIn: '{ "from": "AED", "to": "USDC", "amount": "1000" }', response: '{ "usdcReceived": "272.40", "fee": "0.05%", "bridgeTx": "0x…" }', status: "active", calls: 1280 },
 ];
 
 export const services: Service[] = RAW_SERVICES.map((s) => ({
@@ -400,6 +456,8 @@ export const agents: Agent[] = [
   mkAgent({ id: "agent_bk_sandbox", workspaceId: "berkeley", name: "Sandbox Agent", wallet: "0xAg3n…f0c3", autoPay: true, dailyLimitUsd: 4, maxPerRequestUsd: 0.10, spentTodayUsd: 0.13, allowlist: ["svc_bk_tx", "svc_bk_debug", "svc_bk_research", "svc_bk_docs", "svc_bk_review"] }),
   mkAgent({ id: "agent_ds_scout", workspaceId: "deepsurge", name: "Frontier Scout", wallet: "0xAg3n…77b9", autoPay: true, dailyLimitUsd: 5, maxPerRequestUsd: 0.10, spentTodayUsd: 0.32, allowlist: ["svc_ds_resource", "svc_ds_traderisk", "svc_ds_alert", "svc_ds_oracle", "svc_ds_route"] }),
   mkAgent({ id: "agent_sui_economy", workspaceId: "sui", name: "Sui Economy Agent", wallet: "0xAg3n…4da2", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.15, spentTodayUsd: 0.74, allowlist: ["svc_sui_walrus_pin", "svc_sui_move_exec", "svc_sui_nft_mint", "svc_sui_agent_id", "svc_sui_zkproof"] }),
+  mkAgent({ id: "agent_arc_arb", workspaceId: "agora", name: "ArcArb Agent", wallet: "0xAg3n…c1f4", autoPay: true, dailyLimitUsd: 20, maxPerRequestUsd: 0.50, spentTodayUsd: 1.42, allowlist: ["svc_arc_oracle", "svc_arc_arb", "svc_arc_portfolio"] }),
+  mkAgent({ id: "agent_poly_merchant", workspaceId: "polygon", name: "Polygon Merchant Agent", wallet: "0xAg3n…9a3b", autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.25, spentTodayUsd: 0.85, allowlist: ["svc_poly_invoice", "svc_poly_merchant", "svc_poly_cross"] }),
 ];
 
 export const agentFor = (wsId: WorkspaceId) => agents.find((a) => a.workspaceId === wsId) ?? agents[0];
@@ -489,6 +547,25 @@ const SEED_ROWS: SeedRow[] = [
     kind: "sui.zklogin", name: "zkLogin Proof · Google", payload: { provider: "Google", address: "0x4da2f91a3b7c…", maxEpoch: 428 } },
   { ws: "sui", svc: "svc_sui_agent_id", agent: "agent_sui_economy", mins: 130, status: "verified" },
   { ws: "sui", svc: "svc_sui_walrus_pin", agent: "agent_sui_economy", mins: 200, status: "expired", err: "challenge_expired" },
+  { ws: "agora", svc: "svc_arc_oracle", agent: "agent_arc_arb", mins: 4, status: "verified",
+    kind: "agora.oracle", name: "Arc Price Oracle · ETH/USDC gap", payload: { pair: "ETH/USDC", arcPrice: "3141.20", basePrice: "3153.80", gapBps: 40, recommended: "arb" } },
+  { ws: "agora", svc: "svc_arc_arb", agent: "agent_arc_arb", mins: 7, status: "verified",
+    kind: "agora.arb", name: "CCTP Cross-Chain Swap · Arc → Base", payload: { from: "arc-mainnet", to: "base", amount: "1.0", profit: "0.12", txHash: "0xarc7f3…", cctpId: "cctp_4a1c" } },
+  { ws: "agora", svc: "svc_arc_portfolio", agent: "agent_arc_arb", mins: 35, status: "verified",
+    kind: "agora.portfolio", name: "Portfolio Rebalance · ETH/USDC/ARB", payload: { action: "rebalance", weights: '{"ETH":40,"USDC":40,"ARB":20}', gasFree: true, paymaster: "Circle Paymaster" } },
+  { ws: "agora", svc: "svc_arc_oracle", agent: "agent_arc_arb", mins: 62, status: "verified",
+    kind: "agora.oracle", name: "Arc Price Oracle · ARB/USDC gap", payload: { pair: "ARB/USDC", arcPrice: "0.841", basePrice: "0.849", gapBps: 95, recommended: "arb" } },
+  { ws: "agora", svc: "svc_arc_arb", agent: "agent_arc_arb", mins: 65, status: "verified",
+    kind: "agora.arb", name: "CCTP Cross-Chain Swap · Arc → Arbitrum", payload: { from: "arc-mainnet", to: "arbitrum-one", amount: "50.0", profit: "0.38", txHash: "0xarc9b1…", cctpId: "cctp_2b07" } },
+  { ws: "agora", svc: "svc_arc_arb", agent: "agent_arc_arb", mins: 140, status: "failed", err: "slippage_exceeded" },
+  { ws: "polygon", svc: "svc_poly_merchant", agent: "agent_poly_merchant", mins: 11, status: "verified",
+    kind: "polygon.merchant", name: "Merchant Checkout · SaaS API call", payload: { endpoint: "/api/report", price: "0.01", buyer: "0x7a3f…", merchantId: "merch_4a1c" } },
+  { ws: "polygon", svc: "svc_poly_invoice", agent: "agent_poly_merchant", mins: 34, status: "verified",
+    kind: "polygon.invoice", name: "Trade Invoice · tokenised AED 50,000", payload: { invoiceId: "inv_2b07", amount: "50000 AED", usdcAdvance: "45000", fee: "0.1%", zkEVM: true } },
+  { ws: "polygon", svc: "svc_poly_cross", agent: "agent_poly_merchant", mins: 58, status: "verified",
+    kind: "polygon.remittance", name: "Cross-Border · AED → USDC", payload: { from: "AED", to: "USDC", amount: "10000", fee: "0.2%", corridor: "UAE↔Base", txHash: "0xpoly3c…" } },
+  { ws: "polygon", svc: "svc_poly_merchant", agent: "agent_poly_merchant", mins: 90, status: "verified",
+    kind: "polygon.merchant", name: "Merchant Checkout · 3 API calls", payload: { endpoint: "/api/data", price: "0.03", buyer: "0x0b12…", merchantId: "merch_4a1c" } },
 ];
 
 function seedReceipts(): Receipt[] {

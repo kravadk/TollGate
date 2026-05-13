@@ -83,3 +83,33 @@ export function QieLogo({ size = 20, className, style }: LogoProps) {
     </svg>
   );
 }
+
+// ─── Circle / Arc ─────────────────────────────────────────────────────────────
+export function CircleLogo({ size = 20, className, style }: LogoProps) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 28 28" fill="none"
+      xmlns="http://www.w3.org/2000/svg" className={className} style={style}
+    >
+      <circle cx="14" cy="14" r="11" stroke="currentColor" strokeWidth="2.5" />
+      <path
+        d="M20 10.5 C18.3 8.6 16.3 7.5 14 7.5 C9.6 7.5 6 10.4 6 14 C6 17.6 9.6 20.5 14 20.5 C16.3 20.5 18.3 19.4 20 17.5"
+        stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ─── Polygon ──────────────────────────────────────────────────────────────────
+export function PolygonLogo({ size = 20, className, style }: LogoProps) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 28 28" fill="none"
+      xmlns="http://www.w3.org/2000/svg" className={className} style={style}
+    >
+      <path d="M18 5 L26 9.5 L26 18.5 L18 23 L10 18.5 L10 9.5 Z" stroke="currentColor" strokeWidth="2.3" strokeLinejoin="round" />
+      <path d="M10 9.5 L14 12 L14 16.5 L10 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.55" />
+      <circle cx="5" cy="14" r="2.2" fill="currentColor" opacity="0.5" />
+    </svg>
+  );
+}
