@@ -112,6 +112,16 @@ Every workspace is the **same core** with a different reskin, demo data, network
 | **Mantle mainnet** (5000) | `AgentIdentityRegistry` (ERC-8004 + `setMemoryRoot`) | [`0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB`](https://explorer.mantle.xyz/address/0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB) | [`0x28ee81…10fec`](https://explorer.mantle.xyz/tx/0x28ee81490e4469cfa02987d6219bb28ac78a552a2827e7df381b707a9ff10fec) |
 | **Mantle mainnet** (5000) | `AgentVault` | [`0xCbBcFc657787Fef2702ae6E35CA5a809a68480da`](https://explorer.mantle.xyz/address/0xCbBcFc657787Fef2702ae6E35CA5a809a68480da) | [`0xf4fc69…2efb7`](https://explorer.mantle.xyz/tx/0xf4fc694a3be287efaa8c854ffb6c0d8c1bd5f8ed225b1d2acd4169c06952efb7) |
 | **Arbitrum Sepolia** (421614) | `AgentEscrow` | [`0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7`](https://sepolia.arbiscan.io/address/0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7) | [`0x85549a…1ebc`](https://sepolia.arbiscan.io/tx/0x85549afe5523f25b39bdbf014d30b93a43a21fcce4be7be6e447e34965ee1ebc) |
+| **Arbitrum Sepolia** (421614) | `ServiceRegistry` (ERC-8004) | [`0xEcec950c645256686a3A7db961095164Cc596E2B`](https://sepolia.arbiscan.io/address/0xEcec950c645256686a3A7db961095164Cc596E2B) | live |
+| **Arbitrum Sepolia** (421614) | `AgentBudget` | [`0x26d7C57FaE273700A06B59651606Ad01D1B0BbCC`](https://sepolia.arbiscan.io/address/0x26d7C57FaE273700A06B59651606Ad01D1B0BbCC) | live |
+| **Arbitrum Sepolia** (421614) | `DeliveryVerifier` | [`0x54d203df5e5123d798581Dd61172F7E2a021A156`](https://sepolia.arbiscan.io/address/0x54d203df5e5123d798581Dd61172F7E2a021A156) | live |
+| **Mantle mainnet** (5000) | `ServiceRegistry` (ERC-8004) | [`0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7`](https://explorer.mantle.xyz/address/0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7) | live |
+| **Mantle mainnet** (5000) | `AgentBudget` | [`0xEcec950c645256686a3A7db961095164Cc596E2B`](https://explorer.mantle.xyz/address/0xEcec950c645256686a3A7db961095164Cc596E2B) | live |
+| **Mantle mainnet** (5000) | `DeliveryVerifier` | [`0x26d7C57FaE273700A06B59651606Ad01D1B0BbCC`](https://explorer.mantle.xyz/address/0x26d7C57FaE273700A06B59651606Ad01D1B0BbCC) | live |
+| **0G Galileo testnet** (16602) | `AgentReceiptRegistry` | [`0xF4BFd93061B160Fa376c7F66De207a00225B4e70`](https://chainscan.galileo.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70) | live |
+| **0G Galileo testnet** (16602) | `ServiceRegistry` (ERC-8004) | [`0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8`](https://chainscan.galileo.0g.ai/address/0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8) | live |
+| **0G Galileo testnet** (16602) | `AgentBudget` | [`0xA8302734081F26b8a3E42f90DCf07b3E063441de`](https://chainscan.galileo.0g.ai/address/0xA8302734081F26b8a3E42f90DCf07b3E063441de) | live |
+| **0G Galileo testnet** (16602) | `DeliveryVerifier` | [`0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6`](https://chainscan.galileo.0g.ai/address/0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6) | live |
 
 ### Judge Setup (for on-chain features)
 
@@ -151,6 +161,35 @@ Add it to Claude Desktop / any MCP client:
   }
 }
 ```
+
+### Native Claude Desktop integration (stdio)
+
+Install the stdio MCP server and add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on Mac, or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "tollgate": {
+      "command": "npx",
+      "args": ["-y", "@tollgate/mcp-server"]
+    }
+  }
+}
+```
+
+With a custom gateway:
+```json
+{
+  "mcpServers": {
+    "tollgate": {
+      "command": "npx",
+      "args": ["-y", "@tollgate/mcp-server", "--gateway=https://tollgate-1.onrender.com"]
+    }
+  }
+}
+```
+
+Claude can then autonomously call `tollgate_pay`, `tollgate_list_services`, etc. — no UI, no human approval loop.
 
 Or hit it directly:
 
@@ -206,6 +245,7 @@ Build it from source in this repo: `cd packages/sdk && npm install && npm run bu
 6. **TEE & Privacy** tab → **OpenClaw Skill Console** → choose "Sealed Inference" → "Run via OpenClaw" → TEE attestation quote returned. **Receipt proof verifier** → paste a receipt id → **"Sign with my wallet"** (real EIP-191) → recovers the signer → **"Anchor on 0G"** → **"Check on 0G"** → `AgentReceiptRegistry` confirms the record → "✓ cryptographically verified · payer-signed · anchored on 0G".
 7. **Receipts** tab → all paid calls listed with amounts, hashes, and 0G explorer links.
 8. **Agent Identity** tab → MantleAgentIdentity panel → "Register ERC-8004 identity" → on-chain identity NFT minted on Mantle mainnet → in **"Memory snapshot"**, paste the 0G Storage root from step 2 and **"Bind brain"** → the NFT now points at a verifiable 0G Storage blob (intelligent NFT).
+9. **New:** Claude Desktop → add `@tollgate/mcp-server` to config → type: "list services on 0g workspace" → Claude autonomously calls `tollgate_list_services`, selects the cheapest service, pays with `tollgate_pay` — no human approval.
 
 **Quick judge path (all tracks — 2 min):**
 1. `/app/liquify` → x402 Gateway → "Send unpaid request" → real `HTTP 402` → "Pay & retry" → `200 OK` + receipt.
@@ -355,6 +395,18 @@ npm run deploy:arb                # Arbitrum Sepolia (421614)   →  prints VITE
 Set `VITE_ARBITRUM_ESCROW_ADDRESS` in `.env.local` → the Arbitrum **Escrow** tab gains a real
 **"AgentEscrow"** panel (open / release / refund / cancel — native-ETH escrows, real txs; the wallet
 is switched/added to the configured Arbitrum chain). Unset → that tab keeps the simulated escrow only.
+
+### ServiceRegistry — on-chain service discovery (ERC-8004)
+
+Agents autonomously discover paid services: `register(serviceId, name, priceWei, currency, network, endpoint, agentCardUri)`. The `agentCardUri` field points to an ERC-8004 agent card JSON (IPFS/0G Storage). Deployable to any chain via `npx hardhat run scripts/deploy-service-registry.mjs --network <chain>`.
+
+### AgentBudget — on-chain spending guardrails
+
+Per-agent spending policies enforced on-chain: `setPolicy(agentId, dailyLimitWei, maxPerTxWei)`, emergency `pause/unpause`. The gateway calls `checkAndSpend` before each payment — rogue agents cannot exceed their treasury limits. Deployable via `scripts/deploy-agent-budget.mjs`.
+
+### DeliveryVerifier — cryptographic proof of delivery
+
+Service providers sign their response hash (EIP-191): `anchor(requestHash, responseHash, signature)` records the proof on-chain. `verify(responseHash, sig, provider)` is a pure function — no gas. Any agent can confirm a service actually delivered what was paid for.
 
 ## Environment variables
 

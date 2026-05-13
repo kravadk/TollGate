@@ -32,10 +32,25 @@ contract AgentIdentityRegistry is ERC721 {
     // itself lives on 0G Storage — this just makes the NFT's state point at it.
     mapping(uint256 => bytes32) public memoryRoot;
 
+    // ERC-8004 agent card URI — points to the agent's JSON card (IPFS / 0G Storage URL).
+    mapping(uint256 => string) public agentCardUri;
+
+    // Structured on-chain reputation built from payment history.
+    mapping(uint256 => AgentReputation) public reputation;
+
+    struct AgentReputation {
+        uint64  txCount;        // total successful payments
+        uint64  successRate;    // basis points (10000 = 100%)
+        uint256 totalSpentWei; // total amount spent across all services
+        uint64  lastActiveAt;  // last payment timestamp
+    }
+
     event AgentRegistered(uint256 indexed agentId, string agentDomain, address indexed agentAddress, address indexed owner);
     event AgentUpdated(uint256 indexed agentId, string agentDomain, address indexed agentAddress);
     event FeedbackRecorded(uint256 indexed agentId, address indexed from, uint8 score, bytes32 ref);
     event MemoryRootUpdated(uint256 indexed agentId, bytes32 indexed root, address indexed by);
+    event AgentCardUriSet(uint256 indexed agentId, string uri, address indexed by);
+    event ReputationUpdated(uint256 indexed agentId, uint64 txCount, uint64 successRate);
 
     error EmptyDomain();
     error ZeroAddress();
@@ -111,6 +126,30 @@ contract AgentIdentityRegistry is ERC721 {
         memoryRoot[agentId] = root;
         _info[agentId].updatedAt = uint64(block.timestamp);
         emit MemoryRootUpdated(agentId, root, msg.sender);
+    }
+
+    /// @notice Set or update the ERC-8004 agent card URI for an agent. Only the NFT owner.
+    function setAgentCardUri(uint256 agentId, string calldata uri) external {
+        if (ownerOf(agentId) != msg.sender) revert NotAgentOwner(agentId);
+        agentCardUri[agentId] = uri;
+        _info[agentId].updatedAt = uint64(block.timestamp);
+        emit AgentCardUriSet(agentId, uri, msg.sender);
+    }
+
+    /// @notice Record payment-derived reputation metrics for an agent. Only the NFT owner.
+    function updateReputation(
+        uint256 agentId,
+        uint64  txCount,
+        uint64  successRate,
+        uint256 totalSpentWei
+    ) external {
+        if (ownerOf(agentId) != msg.sender) revert NotAgentOwner(agentId);
+        AgentReputation storage rep = reputation[agentId];
+        rep.txCount       = txCount;
+        rep.successRate   = successRate;
+        rep.totalSpentWei = totalSpentWei;
+        rep.lastActiveAt  = uint64(block.timestamp);
+        emit ReputationUpdated(agentId, txCount, successRate);
     }
 
     // ── Views ────────────────────────────────────────────────────────────────

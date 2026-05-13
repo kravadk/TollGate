@@ -101,6 +101,22 @@ async function main() {
     }
   }
 
+  // ── AgentCreditRegistry ────────────────────────────────────────────────────
+  let creditRegistryAddress = process.env.MANTLE_CREDIT_ADDRESS?.trim() || null;
+  if (creditRegistryAddress) {
+    console.log(`AgentCreditRegistry: reusing existing ${creditRegistryAddress}`);
+  } else {
+    try {
+      const CreditRegistry = await hre.ethers.getContractFactory("AgentCreditRegistry");
+      const creditRegistry = await CreditRegistry.deploy();
+      await creditRegistry.waitForDeployment();
+      creditRegistryAddress = await creditRegistry.getAddress();
+      console.log(`  ✓ AgentCreditRegistry: ${creditRegistryAddress}`);
+    } catch (e) {
+      console.warn(`  ⚠ AgentCreditRegistry NOT deployed: ${(e && (e.shortMessage || e.message)) || e}`);
+    }
+  }
+
   // ── ReceiptNFT ─────────────────────────────────────────────────────────────
   let receiptNftAddress = process.env.MANTLE_RECEIPT_NFT_ADDRESS?.trim() || null;
   const gatewayMinter = process.env.MANTLE_GATEWAY_MINTER?.trim() || deployer.address;
@@ -139,6 +155,7 @@ async function main() {
   console.log(`  VITE_MANTLE_VAULT_ADDRESS=${vaultAddress}`);
   if (budgetControllerAddress) console.log(`  VITE_BUDGET_CONTROLLER=${budgetControllerAddress}`);
   if (serviceRegistryAddress) console.log(`  VITE_SERVICE_REGISTRY=${serviceRegistryAddress}`);
+  if (creditRegistryAddress) console.log(`  VITE_MANTLE_CREDIT_ADDRESS=${creditRegistryAddress}`);
   console.log(`  VITE_MANTLE_CHAIN_ID=${net === "mantle" ? "0x1388" : "0x138b"}`);
   console.log(`  VITE_MANTLE_EXPLORER=${explorerBase}`);
   console.log("And in server/.env —");
@@ -155,6 +172,7 @@ async function main() {
     budgetController: budgetControllerAddress,
     serviceRegistry: serviceRegistryAddress,
     receiptNft: receiptNftAddress,
+    creditRegistry: creditRegistryAddress,
     yieldToken,
     identityTxHash: idTx ? idTx.hash : null,
     vaultTxHash: vTx ? vTx.hash : null,

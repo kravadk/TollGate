@@ -34,7 +34,7 @@ const qieAccounts = QIE_PRIVATE_KEY ? [QIE_PRIVATE_KEY] : [];
 module.exports = {
   solidity: {
     version: "0.8.24",
-    settings: { optimizer: { enabled: true, runs: 200 } },
+    settings: { optimizer: { enabled: true, runs: 200 }, viaIR: true },
   },
   networks: {
     // 0G mainnet (or whatever RPC you point OG_RPC_URL at).
