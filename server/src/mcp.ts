@@ -7,6 +7,7 @@
  * Protocol: JSON-RPC 2.0, MCP spec 2024-11-05.  Endpoint: POST /mcp  (GET /mcp = discovery)
  */
 
+import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { env, isProd } from "./env.js";
 import {
@@ -14,6 +15,8 @@ import {
   agents,
   serviceById,
   services,
+  userServices,
+  addUserService,
   servicesForWorkspace,
 } from "./data.js";
 import {
@@ -21,11 +24,39 @@ import {
   consumeChallenge,
   issueChallenge,
   listReceipts,
+  receiptById,
   recordActivity,
 } from "./store.js";
-import type { Service, WorkspaceId } from "./types.js";
+import type { Receipt, Service, WorkspaceId } from "./types.js";
 
 export const mcpRouter = Router();
+
+// ─── AgentScore helpers ───────────────────────────────────────────────────────
+
+function agentScoreTier(score: number): string {
+  if (score >= 850) return "Platinum";
+  if (score >= 700) return "Gold";
+  if (score >= 400) return "Silver";
+  return "Bronze";
+}
+
+function computeAgentScore(agentId: string, receipts: Receipt[]) {
+  const count = receipts.length;
+  const volumeUsd = receipts.reduce((sum, r) => sum + r.amount, 0);
+  const base = Math.min(count * 5, 500);
+  const vol = Math.min(Math.floor(volumeUsd), 300);
+  const score = Math.min(base + vol, 1000);
+  const tier = agentScoreTier(score);
+  return {
+    agentId,
+    score,
+    tier,
+    receiptCount: count,
+    volumeUsd: Math.round(volumeUsd * 100) / 100,
+    breakdown: { base, vol, pen: 0 },
+    note: "Score computed from x402 receipt history. Formula mirrors AgentCreditRegistry.sol on Mantle.",
+  };
+}
 
 const WORKSPACE_IDS: WorkspaceId[] = ["0g", "liquify", "qie", "arbitrum", "mantle", "eazo", "berkeley", "deepsurge"];
 
@@ -69,6 +100,52 @@ const TOOLS = [
     name: "get_agent_policy",
     description: "Get an agent's spend policy: daily limit, max-per-request, autopay, allowlist, spent today.",
     inputSchema: { type: "object", properties: { agentId: { type: "string" } }, required: ["agentId"] },
+  },
+  {
+    name: "get_agent_score",
+    description: "Get an agent's AgentScore (0–1000) derived from its on-chain x402 payment receipt history. Returns score, tier (Bronze/Silver/Gold/Platinum), receipt count, and total volume. Use this to compare agents before hiring them.",
+    inputSchema: { type: "object", properties: { agentId: { type: "string" } }, required: ["agentId"] },
+  },
+  {
+    name: "discover_services",
+    description: "Discover paid x402 services by keyword, max price, or workspace. Returns services sorted by relevance. Use before tollgate_pay to find the cheapest or best-matched service.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Keyword to match against service name/description" },
+        maxPriceUsd: { type: "number", description: "Only return services at or below this price" },
+        workspace: { type: "string", description: "Filter by workspace (0g, arbitrum, mantle, etc.)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "create_service",
+    description: "Register a new paid x402 API endpoint on TollGate. Returns a live gateway URL — any agent can immediately discover and pay for it via tollgate_discover + tollgate_pay. ERC-8004 agent card JSON is also generated.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name:           { type: "string",  description: "Human-readable service name, e.g. 'My Sentiment API'" },
+        priceUsd:       { type: "number",  description: "Price per call in USD, e.g. 0.05" },
+        endpoint:       { type: "string",  description: "Your backend endpoint URL that TollGate will proxy" },
+        description:    { type: "string",  description: "Short description of what the service does" },
+        category:       { type: "string",  description: "Category tag, e.g. inference, analytics, data (default: custom)" },
+        workspace:      { type: "string",  description: "Workspace to list under (0g, arbitrum, mantle, etc.; default: arbitrum)" },
+        providerWallet: { type: "string",  description: "EVM address to receive USDC payments (optional)" },
+      },
+      required: ["name", "priceUsd", "endpoint"],
+    },
+  },
+  {
+    name: "verify_receipt",
+    description: "Look up a TollGate receipt by ID and verify its status. Returns receipt details including serviceId, agentId, amount, network, status (paid/verified), and timestamps.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        receiptId: { type: "string", description: "Receipt ID returned by tollgate_pay, e.g. rcpt_abc123" },
+      },
+      required: ["receiptId"],
+    },
   },
 ];
 
@@ -192,6 +269,109 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         receiptId: receipt.id,
         receipt,
         note: proof ? "x402 payment verified." : "dev-bypass: simulated settlement; production requires a real proof.",
+      };
+    }
+
+    case "get_agent_score": {
+      const agentId = String(args["agentId"] ?? "");
+      const receipts = listReceipts({ agentId });
+      const score = computeAgentScore(agentId, receipts);
+      return score;
+    }
+
+    case "discover_services": {
+      const query = args["query"] ? String(args["query"]).toLowerCase() : "";
+      const maxPrice = typeof args["maxPriceUsd"] === "number" ? args["maxPriceUsd"] : Infinity;
+      const ws = asWorkspace(args["workspace"]);
+      const pool = ws ? servicesForWorkspace(ws) : services;
+      const filtered = pool
+        .filter((s) => s.status === "active" && s.priceUsd <= maxPrice)
+        .filter((s) => !query || s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query))
+        .sort((a, b) => a.priceUsd - b.priceUsd);
+      return { count: filtered.length, services: filtered.map(publicService) };
+    }
+
+    case "create_service": {
+      const svcName = String(args["name"] ?? "").trim();
+      if (!svcName) return { error: "name_required" };
+      const price = Number(args["priceUsd"] ?? 0);
+      if (!price || price <= 0) return { error: "priceUsd_must_be_positive" };
+      const endpoint = String(args["endpoint"] ?? "").trim();
+      if (!endpoint) return { error: "endpoint_required" };
+
+      const ws = asWorkspace(args["workspace"]) ?? "arbitrum";
+      const slug = svcName.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24);
+      const serviceId = `svc_user_${slug}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+      const providerWallet = typeof args["providerWallet"] === "string" && args["providerWallet"]
+        ? args["providerWallet"]
+        : env.x402PayoutAddress;
+
+      const newSvc: import("./types.js").Service = {
+        id: serviceId,
+        name: svcName,
+        provider: "Agent-registered via MCP",
+        providerWallet,
+        category: typeof args["category"] === "string" ? args["category"] : "custom",
+        priceUsd: price,
+        currency: env.x402Asset,
+        network: ws === "arbitrum" ? "arbitrum-sepolia" : ws === "mantle" ? "mantle-mainnet" : ws === "0g" ? "0g-mainnet" : "arbitrum-sepolia",
+        description: typeof args["description"] === "string" ? args["description"] : `Custom paid API: ${svcName}`,
+        status: "active",
+        workspaceIds: [ws],
+        sampleResponse: { status: "ok", source: endpoint.slice(0, 60) },
+      };
+
+      addUserService(newSvc);
+
+      const origin = process.env.SERVER_URL ?? "https://tollgate-1.onrender.com";
+      const gatewayUrl = `${origin}/api/gateway/${serviceId}`;
+      const agentCard = {
+        "@type": "AgentCard",
+        "erc": "ERC-8004",
+        "serviceId": serviceId,
+        "name": svcName,
+        "priceUsd": price,
+        "currency": "USDC",
+        "network": newSvc.network,
+        "gatewayUrl": gatewayUrl,
+        "endpoint": endpoint,
+        "registeredAt": new Date().toISOString(),
+        "protocol": "x402",
+      };
+
+      return {
+        ok: true,
+        serviceId,
+        name: svcName,
+        priceUsd: price,
+        network: newSvc.network,
+        workspace: ws,
+        gatewayUrl,
+        agentCardJson: agentCard,
+        note: "Service is live immediately. Use tollgate_discover to verify, then tollgate_pay to consume it.",
+      };
+    }
+
+    case "verify_receipt": {
+      const receiptId = String(args["receiptId"] ?? "").trim();
+      if (!receiptId) return { error: "receiptId_required" };
+      const r = receiptById(receiptId);
+      if (!r) return { error: "receipt_not_found", receiptId };
+      return {
+        receiptId: r.id,
+        serviceId: r.serviceId,
+        serviceName: r.serviceName,
+        agentId: r.agentId,
+        amountUsd: r.amount,
+        currency: r.currency,
+        network: r.network,
+        status: r.status,
+        paidAt: r.paidAt,
+        verifiedAt: r.verifiedAt,
+        txHash: r.txHash ?? null,
+        payerWallet: r.payerWallet,
+        providerWallet: r.providerWallet,
+        valid: r.status === "paid" || r.status === "verified",
       };
     }
 

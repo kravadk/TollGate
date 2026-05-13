@@ -65,6 +65,15 @@ export const services: Service[] = [
     sampleResponse: { block: 1284412, settlement: "ok", bridgeHealth: "green" } }),
 
   // Mantle
+  svc({ id: "svc_mnt_meth", workspaceIds: ["mantle"], name: "mETH/USDY Yield Signal", category: "data", priceUsd: 0.10,
+    description: "Rotation signal across mETH and USDY based on live yield spreads, protocol TVL, and on-chain flows.",
+    sampleResponse: { signal: "rotate_to_meth", mETH: { apy: 4.2, tvlUsd: 182_000_000 }, USDY: { apy: 5.1, tvlUsd: 74_000_000 }, confidence: 0.74, ts: "…" } }),
+  svc({ id: "svc_mnt_rwa", workspaceIds: ["mantle"], name: "Mantle RWA Risk API", category: "analytics", priceUsd: 0.06,
+    description: "Risk metrics for tokenised RWA baskets on Mantle — concentration, liquidity, depegging risk.",
+    sampleResponse: { basket: "USDY+FBTC+FETH", concentration: 0.41, liquidityScore: 88, depegRisk: "low" } }),
+  svc({ id: "svc_mnt_liq", workspaceIds: ["mantle"], name: "Mantle Liquidity Map", category: "data", priceUsd: 0.04,
+    description: "Liquidity depth across Mantle DEX pools (Agni Finance, Merchant Moe) — spread, TVL, slippage estimate.",
+    sampleResponse: { pool: "MNT/USDC", tvlUsd: 8_400_000, bid: 0.3088, ask: 0.3096, spread_bps: 2.6 } }),
   svc({ id: "svc_mnt_alpha", workspaceIds: ["mantle"], name: "Mantle · Alpha Data", category: "data", priceUsd: 0.04,
     description: "Paid trading / RWA / yield alpha drops, pulled per call inside wallet policy.",
     sampleResponse: { drops: [{ ts: "…", asset: "mETH", note: "…", confidence: 0.7 }] } }),
@@ -107,12 +116,23 @@ export const agents: AgentPolicy[] = [
   { id: "agent_0g_runner", workspaceId: "0g", name: "0G Job Runner", wallet: "0x2bA9...c011", status: "active", autoPay: true, dailyLimitUsd: 8, maxPerRequestUsd: 0.2, spentTodayUsd: 0.11, allowlist: ["svc_0g_inference", "svc_0g_storage", "svc_0g_private"] },
 ];
 
+// User-created services (added via tollgate_create_service MCP tool at runtime).
+export const userServices: Service[] = [];
+
+export function addUserService(s: Service): void {
+  userServices.push(s);
+}
+
+function allServices(): Service[] {
+  return [...services, ...userServices];
+}
+
 export function serviceById(id: string): Service | undefined {
-  return services.find((s) => s.id === id);
+  return allServices().find((s) => s.id === id);
 }
 
 export function servicesForWorkspace(ws: WorkspaceId): Service[] {
-  return services.filter((s) => s.workspaceIds.includes(ws));
+  return allServices().filter((s) => s.workspaceIds.includes(ws));
 }
 
 export function agentById(id: string): AgentPolicy | undefined {

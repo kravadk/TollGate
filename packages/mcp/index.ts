@@ -93,6 +93,64 @@ const TOOLS = [
       required: ["agentId"],
     },
   },
+  {
+    name: "tollgate_agent_score",
+    description:
+      "Get an agent's AgentScore (0–1000) derived from its x402 receipt history. Returns score, tier (Bronze/Silver/Gold/Platinum), receipt count, and volume. Use to compare agents before hiring them in an agent-to-agent workflow.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agentId: { type: "string" },
+      },
+      required: ["agentId"],
+    },
+  },
+  {
+    name: "tollgate_discover",
+    description:
+      "Discover paid x402 services by keyword, max price, or workspace. Returns services sorted cheapest-first. Use before tollgate_pay to find the best matching service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Keyword to match against service name/description" },
+        maxPriceUsd: { type: "number", description: "Maximum price in USD" },
+        workspace: { type: "string", description: "Filter by workspace: 0g, arbitrum, mantle, etc." },
+      },
+    },
+  },
+  {
+    name: "tollgate_create_service",
+    description:
+      "Register a new paid x402 API endpoint on TollGate and get a live gateway URL immediately. " +
+      "Any agent can discover and pay for it via tollgate_discover + tollgate_pay. " +
+      "Generates an ERC-8004 agent card JSON for on-chain registration.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name:           { type: "string",  description: "Service name, e.g. 'My Sentiment API'" },
+        priceUsd:       { type: "number",  description: "Price per call in USD, e.g. 0.05" },
+        endpoint:       { type: "string",  description: "Your backend API endpoint URL" },
+        description:    { type: "string",  description: "Short description of what the service does" },
+        category:       { type: "string",  description: "Category: inference, analytics, data, custom (default: custom)" },
+        workspace:      { type: "string",  description: "Workspace to list under: 0g, arbitrum, mantle (default: arbitrum)" },
+        providerWallet: { type: "string",  description: "EVM address to receive USDC payments" },
+      },
+      required: ["name", "priceUsd", "endpoint"],
+    },
+  },
+  {
+    name: "tollgate_verify",
+    description:
+      "Verify a TollGate receipt by ID. Returns service, agent, amount, network, status (paid/verified), " +
+      "timestamps, and txHash if on-chain. Use after tollgate_pay to confirm delivery before releasing funds.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        receiptId: { type: "string", description: "Receipt ID from tollgate_pay, e.g. rcpt_abc123" },
+      },
+      required: ["receiptId"],
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -100,11 +158,15 @@ const TOOLS = [
 // ---------------------------------------------------------------------------
 
 const HTTP_TOOL_NAME: Record<string, string> = {
-  tollgate_list_services: "list_services",
-  tollgate_get_service: "get_service",
-  tollgate_pay: "pay_for_service",
-  tollgate_list_receipts: "list_receipts",
-  tollgate_agent_policy: "get_agent_policy",
+  tollgate_list_services:  "list_services",
+  tollgate_get_service:    "get_service",
+  tollgate_pay:            "pay_for_service",
+  tollgate_list_receipts:  "list_receipts",
+  tollgate_agent_policy:   "get_agent_policy",
+  tollgate_agent_score:    "get_agent_score",
+  tollgate_discover:       "discover_services",
+  tollgate_create_service: "create_service",
+  tollgate_verify:         "verify_receipt",
 };
 
 // ---------------------------------------------------------------------------
