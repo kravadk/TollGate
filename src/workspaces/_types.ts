@@ -1,4 +1,5 @@
-import type { ReceiptStatus, WorkspaceId } from "../types";
+import type { ComponentType } from "react";
+import type { ReceiptStatus, WorkspaceId, Service, Receipt } from "../types";
 
 export type SRaw = {
   id: string;
@@ -40,4 +41,32 @@ export type SeedRow = {
   kind?: string;
   payload?: Record<string, unknown>;
   name?: string;
+};
+
+// ── Workspace UI types (used by each workspace's widgets.tsx) ─────────────────
+
+export type SigBlock = {
+  title: string;
+  sub: string;
+  headers: string[];
+  rows: (string | number)[][];
+  accentCol: number;
+};
+
+export type CardDef = {
+  ico: ComponentType<{ width?: number; height?: number }>;
+  title: string;
+  sub?: string;
+  light?: boolean;
+  link?: string;
+  onLink?: () => void;
+  onClick: () => void;
+};
+
+export type CardCtx = {
+  onGoTab: (t: string) => boolean;
+  onOpenPayment: (s: Service) => void;
+  wsReceipts: Receipt[];
+  def: Service | undefined;
+  onGoReceipts: () => void;
 };
