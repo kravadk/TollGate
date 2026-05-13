@@ -58,12 +58,12 @@ function computeAgentScore(agentId: string, receipts: Receipt[]) {
   };
 }
 
-const WORKSPACE_IDS: WorkspaceId[] = ["0g", "qie", "arbitrum", "mantle", "berkeley", "deepsurge", "sui", "agora", "polygon"];
+const WORKSPACE_IDS: WorkspaceId[] = ["0g", "qie", "arbitrum", "mantle", "berkeley", "sui", "agora", "polygon"];
 
 const TOOLS = [
   {
     name: "list_services",
-    description: "List paid x402 services on TollGate. Optional workspace filter (0g, qie, arbitrum, mantle, berkeley, deepsurge, sui, agora, polygon).",
+    description: "List paid x402 services on TollGate. Optional workspace filter (0g, qie, arbitrum, mantle, berkeley, sui, agora, polygon).",
     inputSchema: { type: "object", properties: { workspace: { type: "string", description: "Workspace id to filter by" } }, required: [] },
   },
   {

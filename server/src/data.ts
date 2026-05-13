@@ -91,14 +91,6 @@ export const services: Service[] = [
   svc({ id: "svc_bk_debug", workspaceIds: ["berkeley"], name: "Berkeley · Debug Tool", category: "inference", priceUsd: 0.02,
     description: "Replay an agent's last run step by step: request → 402 → proof → settled receipt.",
     sampleResponse: { steps: ["request", "402", "pay", "verified"], receiptId: "rcpt_…" } }),
-
-  // DeepSurge
-  svc({ id: "svc_ds_intel", workspaceIds: ["deepsurge"], name: "DeepSurge · Resource Intel", category: "game-intel", priceUsd: 0.04,
-    description: "Live EVE Frontier intel per call — resources, routes, market, trade-risk.",
-    sampleResponse: { region: "Jita", hostilesSpotted: 3, gateCampRisk: "high", recommendedRoute: "via Perimeter" } }),
-  svc({ id: "svc_ds_trade_risk", workspaceIds: ["deepsurge"], name: "DeepSurge · Trade Risk", category: "game-intel", priceUsd: 0.04,
-    description: "Per-call risk read on a Frontier trade/route — gank prob, spread, escort advice.",
-    sampleResponse: { from: "Jita", to: "Amarr", gankProbPct: 18, spreadPct: 4.2, escort: "recommended", jumps: 9 } }),
 ];
 
 export const agents: AgentPolicy[] = [

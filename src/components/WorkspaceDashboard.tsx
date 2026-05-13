@@ -699,14 +699,6 @@ export function OverviewPage({
       { ico: Code, title: "Transaction explainer tool", sub: "plain-English decode + risk notes", onClick: () => onGoTab("explainer") },
       { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} paid tool calls`, onClick: () => onGoReceipts() },
     ],
-    deepsurge: [
-      { light: true, ico: TrendingUp, title: "Score a trade route", sub: "gank prob · spread · escort · $0.05", onClick: () => onGoTab("trade") || onGoTab("safety") },
-      { ico: FileText, title: "Query resource intel", sub: "node yields · contested zones · hostiles", onClick: () => onGoTab("resource") || onGoTab("intel") },
-      { ico: Radio, title: "Subscribe to live alerts", sub: "fleet movement · market shocks · metered", onClick: () => onGoTab("alert") },
-      { ico: Robot, title: "Frontier Scout agent settings", sub: "daily limit $5 · auto-pay on", onClick: () => onGoTab("agent") },
-      { ico: Zap, title: "Market oracle queries", sub: "commodity prices · hub spread · per-query", onClick: () => onGoTab("intel") || onGoTab("api") },
-      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} intel calls`, onClick: () => onGoReceipts() },
-    ],
     sui: [
       { light: true, ico: Bolt, title: "Pin a blob to Walrus storage", sub: "decentralised · epoch-based · verifiable", onClick: () => onGoTab("walrus") || onGoTab("storage") },
       { ico: Code, title: "Execute a Move PTB", sub: "dry-run or live · programmable tx blocks", onClick: () => onGoTab("move") || onGoTab("contracts") },
@@ -1050,13 +1042,7 @@ const TAB_COPY: Record<string, [string, string]> = {
   "paid tools": ["Paid tools", "The catalogue of tools an agent can call here — each one returns 402 until the micro-payment settles."],
   "agent debugger": ["Agent debugger", "Replay an agent's last run step by step: the request, the 402 challenge, the proof and the settled receipt."],
   "transaction explainer": ["Transaction explainer", "Decode a pending wallet action: what it does, what it touches and whether it's safe, caution or danger."],
-  "intel api": ["Frontier intel API", "Live EVE Frontier intel agents and players buy per call — resources, routes, market and trade-risk feeds."],
-  "frontier terminal": ["Frontier terminal", "The terminal view over EVE Frontier — resources, market, routes, player activity and trade safety."],
-  "resource data": ["Resource data", "Paid resource maps and yield estimates across Frontier systems — priced per query."],
-  "market oracle": ["Market oracle", "Paid Frontier market reads — prices, spreads and trade-risk scores for any system or item."],
-  "routes & risk": ["Routes & risk", "Paid route planning with trade-safety scoring — avoid hostile space, get the receipt with the answer."],
-  "trade safety": ["Trade safety", "Per-call risk reads on Frontier trades and routes — billed before the answer is returned."],
-  "alerts": ["Alerts", "Subscriptions to Frontier events — price moves, hostiles, resource spawns — each alert delivery is metered."],
+  "alerts": ["Alerts", "Subscriptions to events — each alert delivery is metered."],
 };
 
 // ── Bespoke per-workspace flavor panels ──────────────────────────────────────
@@ -1895,84 +1881,6 @@ function ArbAddressBook({ onSelect }: { onSelect?: (addr: string) => void }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// DEEPSURGE — Trade Profit Calculator
-// ---------------------------------------------------------------------------
-function DeepSurgeProfitCalc({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [buyPrice, setBuyPrice] = useState("1200");
-  const [sellPrice, setSellPrice] = useState("1450");
-  const [qty, setQty] = useState("10");
-  const [fee, setFee] = useState("0.5");
-  const [saved, setSaved] = useLocalStore<{ id: string; asset: string; profit: number; roi: number; ts: string }[]>("ds.trades", []);
-
-  const buy = parseFloat(buyPrice) || 0;
-  const sell = parseFloat(sellPrice) || 0;
-  const q = parseFloat(qty) || 0;
-  const feeP = parseFloat(fee) || 0;
-
-  const gross = (sell - buy) * q;
-  const feeTotal = (buy * q + sell * q) * feeP / 100;
-  const net = gross - feeTotal;
-  const roi = buy > 0 ? net / (buy * q) * 100 : 0;
-  const isProfit = net >= 0;
-
-  const saveCalc = () => {
-    const entry = { id: hashId("trade", `${buy}${sell}${q}${Date.now()}`, 6), asset: "ISK/item", profit: net, roi, ts: new Date().toISOString() };
-    setSaved((p) => [entry, ...p].slice(0, 12));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Trade Profit Calc", amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "deepsurge-chain", kind: "ds.trade.calc", payload: { buy, sell, qty: q, net, roi } });
-  };
-
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft">⚔️</span><div><h3>Trade profit calculator</h3><div className="sub">enter buy / sell price + quantity → see real profit after fees · EVE Frontier / any commodity</div></div></div>
-      </div>
-      <div style={{ padding: "0 16px 14px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-          {[
-            { label: "Buy price (ISK)", val: buyPrice, set: setBuyPrice },
-            { label: "Sell price (ISK)", val: sellPrice, set: setSellPrice },
-            { label: "Quantity", val: qty, set: setQty },
-            { label: "Fee %", val: fee, set: setFee },
-          ].map((f) => (
-            <label key={f.label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>{f.label}</span>
-              <input value={f.val} onChange={(e) => f.set(e.currentTarget.value)} inputMode="decimal" style={{ padding: "9px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".9rem", fontWeight: 700 }} />
-            </label>
-          ))}
-        </div>
-        {/* result hero */}
-        <div style={{ padding: "16px 20px", borderRadius: 14, background: `color-mix(in srgb, ${isProfit ? "var(--green)" : "var(--red)"} 10%, var(--bg-2))`, border: `1.5px solid ${isProfit ? "var(--green)" : "var(--red)"}40`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: ".6rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>Gross profit</div>
-            <div style={{ fontSize: "1.3rem", fontWeight: 900, color: isProfit ? "var(--green)" : "var(--red)" }}>{gross >= 0 ? "+" : ""}{gross.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: ".6rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>Net (after fees)</div>
-            <div style={{ fontSize: "1.3rem", fontWeight: 900, color: isProfit ? "var(--green)" : "var(--red)" }}>{net >= 0 ? "+" : ""}{net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: ".6rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>ROI</div>
-            <div style={{ fontSize: "1.3rem", fontWeight: 900, color: isProfit ? "var(--green)" : "var(--red)" }}>{roi >= 0 ? "+" : ""}{roi.toFixed(1)}%</div>
-          </div>
-        </div>
-        <div className="row sm" style={{ gap: 8, marginTop: 10 }}>
-          <span style={{ fontSize: ".72rem", color: "var(--muted)", flex: 1 }}>Fees: {feeTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} ISK ({fee}% broker + tax)</span>
-          <button type="button" className="btn btn-acc btn-sm" onClick={saveCalc}>Save trade</button>
-        </div>
-        {saved.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0 4px" }}>Saved trades · {saved.length}</div>
-            <div className="svc-hist">
-              {saved.map((s) => <div className="svc-hist__row" key={s.id}><span className="svc-hist__dot" style={{ background: s.profit >= 0 ? "var(--green)" : "var(--red)" }} /><div className="svc-hist__main"><b>{s.profit >= 0 ? "+" : ""}{s.profit.toFixed(0)} ISK</b><span>ROI {s.roi.toFixed(1)}% · {new Date(s.ts).toLocaleTimeString()}</span></div></div>)}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // QIE — Wallet Dashboard (QIE Wallet tab — replaces empty QuickCallPanel)
@@ -3788,89 +3696,6 @@ function YieldBoard({ workspace }: { workspace: Workspace }) {
 }
 
 // ---------------------------------------------------------------------------
-// DEEPSURGE — Frontier Intel Query
-// ---------------------------------------------------------------------------
-const INTEL_REGIONS = ["Jita", "Amarr", "Rens", "Dodixie", "Hek"] as const;
-const INTEL_KINDS = ["Resource Yield", "Hostile Activity", "Market Anomaly"] as const;
-const INTEL_ROUTES = ["via Perimeter", "via New Caldari", "via Ikuchi", "direct (high-sec)", "via Niarja (caution)"];
-
-function FrontierIntelQuery({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [region, setRegion] = useState<typeof INTEL_REGIONS[number]>(INTEL_REGIONS[0]);
-  const [kind, setKind] = useState<typeof INTEL_KINDS[number]>(INTEL_KINDS[0]);
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<Record<string, unknown> | null>(null);
-
-  const history = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "ds.intel.query").slice(0, 8), [receipts, workspace.id]);
-
-  const buy = async () => {
-    setRunning(true);
-    await new Promise((r) => setTimeout(r, 500));
-    const seed = `${region}|${kind}`;
-    const hostiles = Math.round(deterministicScore(seed + "|h", 0, 9));
-    const campRisk = hostiles >= 6 ? "high" : hostiles >= 3 ? "medium" : "low";
-    const route = INTEL_ROUTES[Math.floor(deterministicScore(seed + "|r", 0, INTEL_ROUTES.length - 0.001))]!;
-    const queryId = "qi_" + hashId("qi", seed + Date.now(), 8);
-    let body: Record<string, unknown>;
-    if (kind === "Resource Yield") {
-      body = { region, query: kind, top_node: ["Veldspar belt 7", "Pyroxeres pocket", "Arkonor cluster", "Gas site C-3"][Math.floor(deterministicScore(seed + "|n", 0, 3.999))], est_yield_per_hour: Math.round(deterministicScore(seed + "|y", 12_000, 92_000)), contested: hostiles >= 4, hostiles_24h: hostiles, recommended_route: route, queryId };
-    } else if (kind === "Hostile Activity") {
-      body = { region, query: kind, hostiles_spotted: hostiles, gate_camp_risk: campRisk, top_threat: ["Catalyst gang", "Cynabal solo", "Tornado camp", "Bomber wing"][Math.floor(deterministicScore(seed + "|t", 0, 3.999))], last_kill_min_ago: Math.round(deterministicScore(seed + "|k", 1, 58)), recommended_route: route, queryId };
-    } else {
-      body = { region, query: kind, anomaly: ["mineral spike +14%", "module dump detected", "spread compression", "thin sell wall"][Math.floor(deterministicScore(seed + "|a", 0, 3.999))], confidence: Number(deterministicScore(seed + "|c", 0.45, 0.95).toFixed(2)), window_min: Math.round(deterministicScore(seed + "|w", 8, 90)), recommended_route: route, queryId };
-    }
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_ds_intel", serviceName: "Frontier Intel API", amount: 0.04, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "ds.intel.query", payload: { region, kind, queryId, hostiles } });
-    setResult(body);
-    setRunning(false);
-  };
-
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Radio width={15} height={15} /></span><div><h3>Frontier intel query</h3><div className="sub">live resource / hostile / market intel for a Frontier region · $0.04 USDC / query</div></div></div>
-        <button className="btn btn-acc btn-sm" type="button" onClick={buy} disabled={running}>{running ? <><Loader2 size={13} className="wallet-spin" /> Querying…</> : <><Bolt width={13} height={13} /> Pay &amp; buy intel</>}</button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "0 16px 12px" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Region</span>
-          <select value={region} onChange={(e) => setRegion(e.currentTarget.value as typeof region)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }}>
-            {INTEL_REGIONS.map((r) => <option key={r}>{r}</option>)}
-          </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Query type</span>
-          <select value={kind} onChange={(e) => setKind(e.currentTarget.value as typeof kind)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }}>
-            {INTEL_KINDS.map((k) => <option key={k}>{k}</option>)}
-          </select>
-        </label>
-      </div>
-      {result && <div style={{ padding: "0 16px 12px" }}><pre className="code-block">{JSON.stringify(result, null, 2)}</pre></div>}
-      <div style={{ padding: "0 16px 14px" }}>
-        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent queries · {history.length}</div>
-        <div className="svc-table__scroll"><table className="svc-table">
-          <thead><tr><th>Query</th><th>Region</th><th>Type</th><th>Hostiles 24h</th><th>Cost</th></tr></thead>
-          <tbody>
-            {history.length === 0 && <tr><td colSpan={5} style={{ color: "var(--muted)", padding: 12 }}>No queries yet — buy one above.</td></tr>}
-            {history.map((r) => {
-              const p = (r.payload ?? {}) as { region?: string; kind?: string; queryId?: string; hostiles?: number };
-              return (
-                <tr key={r.id}>
-                  <td><code>{p.queryId ?? "qi_" + hashId("qi", r.id, 8)}</code></td>
-                  <td>{p.region ?? "—"}</td>
-                  <td>{p.kind ?? "—"}</td>
-                  <td className="svc-table__num">{p.hostiles ?? "—"}</td>
-                  <td className="svc-table__num">${r.amount.toFixed(2)} <span className="muted">{r.currency}</span></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table></div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // BERKELEY — Paid Tools grid
 // ---------------------------------------------------------------------------
 function PaidToolsGrid({ workspace, services, onOpenPayment }: { workspace: Workspace; services: Service[]; onOpenPayment: (s: Service) => void }) {
@@ -3906,64 +3731,6 @@ function PaidToolsGrid({ workspace, services, onOpenPayment }: { workspace: Work
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// DEEPSURGE — Route risk scorer
-// ---------------------------------------------------------------------------
-const DS_HUBS = ["Hub-A", "Rim-7", "Q-OP4", "B-2 Gate", "Core-1", "Delta-9"] as const;
-function RouteRiskScorer({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [from, setFrom] = useState<string>(DS_HUBS[0]);
-  const [to_, setTo_] = useState<string>(DS_HUBS[1]);
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<{ risk: number; spread: string; jumps: number; escort: string; runId: string } | null>(null);
-
-  const score = async () => {
-    setRunning(true);
-    await new Promise((r) => setTimeout(r, 500));
-    const seed = `${from}|${to_}`;
-    const risk = Math.round(deterministicScore(seed + "|risk", 10, 90));
-    const spread = deterministicScore(seed + "|spr", 1, 14).toFixed(1) + "%";
-    const jumps = Math.round(deterministicScore(seed + "|jmp", 2, 12));
-    const escort = risk > 60 ? "recommended" : risk > 35 ? "optional" : "not needed";
-    const runId = hashId("route", seed, 6);
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Trade Risk API", amount: 0.05, currency: "mock", network: workspace.networks[0] ?? "frontier-testnet", kind: "ds.route.risk", payload: { from, to: to_, risk, spread, jumps, escort, runId } });
-    setResult({ risk, spread, jumps, escort, runId });
-    setRunning(false);
-  };
-
-  const riskColor = result ? (result.risk > 60 ? "#e63946" : result.risk > 35 ? "#ff9b00" : "#1fb58a") : "var(--muted)";
-
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft" style={{ color: "var(--accent-primary)" }}><TrendingUp width={15} height={15} /></span><div><h3>Route risk scorer</h3><div className="sub">$0.05 / check · gank probability + spread + escort recommendation</div></div></div>
-        <button className="btn btn-acc btn-sm" type="button" onClick={score} disabled={running || from === to_}>{running ? <><Loader2 size={13} className="wallet-spin" /> Scoring…</> : "Score route"}</button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "0 16px 12px" }}>
-        {([["From", from, setFrom], ["To", to_, setTo_]] as [string, string, (v: string) => void][]).map(([label, val, set]) => (
-          <label key={label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>{label}</span>
-            <select value={val} onChange={(e) => set(e.currentTarget.value)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontFamily: "inherit", fontSize: ".84rem" }}>
-              {DS_HUBS.map((h) => <option key={h}>{h}</option>)}
-            </select>
-          </label>
-        ))}
-      </div>
-      {result && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, padding: "4px 16px 14px" }}>
-          {[["Risk score", result.risk + " / 100", riskColor], ["Market spread", result.spread, "var(--ink)"], ["Jumps", result.jumps + " gates", "var(--ink)"], ["Escort", result.escort, result.escort === "recommended" ? "#e63946" : result.escort === "optional" ? "#ff9b00" : "#1fb58a"]].map(([k, v, c]) => (
-            <div key={String(k)} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800 }}>{k}</span>
-              <span style={{ fontSize: "1rem", fontWeight: 800, color: String(c), letterSpacing: "-.03em" }}>{v}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 type SigBlock = { title: string; sub: string; headers: string[]; rows: (string | number)[][]; accentCol?: number };
 const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
@@ -4015,16 +3782,6 @@ const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
       ["Transaction Explainer", "$0.02", "18", "active"],
       ["Docs Search Tool", "$0.015", "12", "active"],
       ["Code Reviewer Tool", "$0.05", "6", "active"],
-    ], accentCol: 3,
-  },
-  deepsurge: {
-    title: "Frontier feed", sub: "live intel the resource, oracle and route endpoints serve",
-    headers: ["Region", "Top resource", "Hostiles", "Trade risk"],
-    rows: [
-      ["Q-OP4", "Veldspar +18%", "3", "64 · high"],
-      ["Hub-A", "Tritanium 5.21", "0", "22 · low"],
-      ["Rim-7", "Mexallon +9%", "1", "38 · medium"],
-      ["B-2 Gate", "—", "2", "51 · medium"],
     ], accentCol: 3,
   },
   sui: {
@@ -4750,105 +4507,6 @@ function SealedPayloadVault({ workspace }: { workspace: Workspace }) {
           <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent seals · {recent.length}</div>
           <div className="svc-hist">{recent.map((r) => { const p = (r.payload ?? {}) as { sealId?: string; recipient?: string }; return (
             <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: "var(--accent-primary)" }} /><div className="svc-hist__main"><b>{p.sealId}</b><span>→ {p.recipient} · receipt {r.id} · {new Date(r.createdAt).toLocaleTimeString()}</span></div><span className="svc-hist__amt">{r.amount.toFixed(3)}</span></div>
-          ); })}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DEEPSURGE — Resource map query (Resource Data tab)
-// ---------------------------------------------------------------------------
-const DS_SYSTEMS = ["Jita", "Amarr", "Rens", "Dodixie", "Hek", "Tash-Murkon", "Perimeter", "New Caldari"] as const;
-const DS_NODES = ["Veldspar belt 7", "Pyroxeres pocket", "Arkonor cluster", "Gas site C-3", "Ice field NW", "Mercoxit vein"] as const;
-function ResourceMapQuery({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [sys, setSys] = useState<string>(DS_SYSTEMS[0]);
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<Record<string, unknown> | null>(null);
-  const history = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "ds.resource.map").slice(0, 8), [receipts, workspace.id]);
-  const query = async () => {
-    setRunning(true);
-    await new Promise((r) => setTimeout(r, 480));
-    const seed = sys;
-    const hostiles = Math.round(deterministicScore(seed + "|h", 0, 9));
-    const yieldHr = Math.round(deterministicScore(seed + "|y", 14_000, 96_000));
-    const topNode = DS_NODES[Math.floor(deterministicScore(seed + "|n", 0, DS_NODES.length - 0.001))]!;
-    const contested = hostiles >= 4;
-    const queryId = "rm_" + hashId("rm", seed + Date.now(), 8);
-    const body = { system: sys, top_node: topNode, est_yield_per_hour: yieldHr, contested, hostiles_24h: hostiles, gate_camp_risk: hostiles >= 6 ? "high" : hostiles >= 3 ? "medium" : "low", recommended_approach: contested ? "wait for downtime or bring escort" : "safe to mine — solo OK", queryId };
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_ds_oracle", serviceName: "Frontier Resource Map API · " + sys, amount: 0.04, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "ds.resource.map", payload: { system: sys, queryId, hostiles, contested } });
-    setResult(body);
-    setRunning(false);
-  };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><FileText width={15} height={15} /></span><div><h3>Resource map query</h3><div className="sub">live resource intel for a Frontier system — top node · yield/hr · contested · hostiles · $0.04 USDC / query</div></div></div>
-        <div className="row sm" style={{ gap: 8 }}>
-          <select value={sys} onChange={(e) => setSys(e.currentTarget.value)} style={{ padding: "6px 9px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem" }}>{DS_SYSTEMS.map((s) => <option key={s}>{s}</option>)}</select>
-          <button className="btn btn-acc btn-sm" type="button" onClick={query} disabled={running}>{running ? <><Loader2 size={13} className="wallet-spin" /> Querying…</> : <><Bolt width={13} height={13} /> Pay &amp; query map</>}</button>
-        </div>
-      </div>
-      {result && <div style={{ padding: "0 16px 12px" }}><pre className="code-block">{JSON.stringify(result, null, 2)}</pre></div>}
-      <div style={{ padding: "0 16px 14px" }}>
-        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent map queries · {history.length}</div>
-        <div className="svc-table__scroll"><table className="svc-table">
-          <thead><tr><th>Query</th><th>System</th><th>Hostiles 24h</th><th>Contested</th><th>Cost</th></tr></thead>
-          <tbody>
-            {history.length === 0 && <tr><td colSpan={5} style={{ color: "var(--muted)", padding: 12 }}>No queries yet — buy one above.</td></tr>}
-            {history.map((r) => { const p = (r.payload ?? {}) as { system?: string; queryId?: string; hostiles?: number; contested?: boolean }; return (
-              <tr key={r.id}><td><code>{p.queryId ?? "rm_" + hashId("rm", r.id, 8)}</code></td><td>{p.system ?? "—"}</td><td className="svc-table__num">{p.hostiles ?? "—"}</td><td>{p.contested ? <span className="pill warn">contested</span> : <span className="muted">clear</span>}</td><td className="svc-table__num">${r.amount.toFixed(2)} <span className="muted">{r.currency}</span></td></tr>
-            ); })}
-          </tbody>
-        </table></div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DEEPSURGE — Alert subscriptions (Alerts tab, replaces the static list)
-// ---------------------------------------------------------------------------
-const DS_ALERT_TYPES = [
-  { id: "gate_camp", name: "Gate camp on a route", freq: "realtime", fee: 0.002 },
-  { id: "resource_surge", name: "Resource surge nearby", freq: "5 min", fee: 0.0015 },
-  { id: "market_crash", name: "Market crash / price spike", freq: "realtime", fee: 0.0025 },
-  { id: "hostile_fleet", name: "Hostile fleet forming", freq: "realtime", fee: 0.003 },
-] as const;
-function AlertSubscriptions({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [subs, setSubs] = useLocalStore<Record<string, boolean>>("ds.alerts", { gate_camp: true });
-  const today = new Date().toDateString();
-  const deliveredToday = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "ds.alert.deliver" && new Date(r.createdAt).toDateString() === today).length, [receipts, workspace.id, today]);
-  const recent = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && (r.kind === "ds.alert.deliver" || r.kind === "ds.alert.sub")).slice(0, 8), [receipts, workspace.id]);
-  const toggle = (t: typeof DS_ALERT_TYPES[number]) => {
-    const next = !subs[t.id]; setSubs((s) => ({ ...s, [t.id]: next }));
-    if (next) emitReceipt({ workspaceId: workspace.id, serviceName: "Alert Feed · Subscribe · " + t.name, amount: 0, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "ds.alert.sub", payload: { type: t.id, name: t.name } });
-  };
-  const deliver = (t: typeof DS_ALERT_TYPES[number]) => emitReceipt({ workspaceId: workspace.id, serviceId: "svc_ds_route", serviceName: "Alert · " + t.name, amount: t.fee, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "ds.alert.deliver", payload: { type: t.id, name: t.name, detail: t.id === "gate_camp" ? "5-man camp at Niarja gate" : t.id === "market_crash" ? `${(deterministicScore(t.id + Date.now(), 4, 22)).toFixed(1)}% drop on Tritanium` : "see route board" } });
-  const activeCount = DS_ALERT_TYPES.filter((t) => subs[t.id]).length;
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head"><div className="ttl"><span className="sq soft"><Radio width={15} height={15} /></span><div><h3>Alert subscriptions</h3><div className="sub">subscribe to live Frontier alerts — each delivery is metered & billed; {activeCount} active · {deliveredToday} delivered today</div></div></div></div>
-      <div className="svc-hist" style={{ padding: "4px 16px 12px" }}>
-        {DS_ALERT_TYPES.map((t) => (
-          <div key={t.id} className="svc-hist__row">
-            <span className="svc-hist__dot" style={{ background: subs[t.id] ? "#1fb58a" : "var(--muted)" }} />
-            <div className="svc-hist__main"><b>{t.name}</b><span>{t.freq} · ${t.fee.toFixed(4)} / delivery</span></div>
-            <span className="row sm" style={{ gap: 6 }}>
-              {subs[t.id] && <button className="btn btn-ghost btn-sm" type="button" onClick={() => deliver(t)} title="simulate a delivery"><Bolt width={11} height={11} /> Deliver</button>}
-              <button className={"btn btn-sm" + (subs[t.id] ? " btn-ghost" : " btn-acc")} type="button" onClick={() => toggle(t)}>{subs[t.id] ? "Unsubscribe" : "Subscribe"}</button>
-            </span>
-          </div>
-        ))}
-      </div>
-      {recent.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent · {recent.length}</div>
-          <div className="svc-hist">{recent.map((r) => { const p = (r.payload ?? {}) as { name?: string; detail?: string }; const sub = r.kind === "ds.alert.sub"; return (
-            <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: sub ? "var(--accent-primary)" : "#ff9b00" }} /><div className="svc-hist__main"><b>{sub ? "Subscribed: " : "Alert: "}{p.name}</b><span>{p.detail ?? ""}{p.detail ? " · " : ""}{new Date(r.createdAt).toLocaleTimeString()}</span></div>{sub ? <span className="pill ok">on</span> : <span className="svc-hist__amt">{r.amount.toFixed(4)}</span>}</div>
           ); })}</div>
         </div>
       )}
@@ -5770,135 +5428,6 @@ function BuildToolWizard({ workspace }: { workspace: Workspace }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// DEEPSURGE — Frontier trade escrow (Trade Safety tab)
-// ---------------------------------------------------------------------------
-type FrontierEscrow = { id: string; seller: string; buyer: string; item: string; amountUsd: number; status: "open" | "confirmed" | "released" | "refunded"; ts: string };
-function FrontierTradeEscrow({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [escrows, setEscrows] = useLocalStore<FrontierEscrow[]>("deepsurge.escrows", []);
-  const [seller, setSeller] = useState(""); const [item, setItem] = useState(""); const [amtStr, setAmtStr] = useState("50");
-  const [busy, setBusy] = useState(false);
-  const open = async () => {
-    if (!seller.trim() || !item.trim()) return;
-    setBusy(true);
-    await new Promise((r) => setTimeout(r, 500));
-    const esc: FrontierEscrow = { id: "esc_" + hashId("ds", seller + item + Date.now(), 8), seller: seller.trim(), buyer: "You", item: item.trim(), amountUsd: parseFloat(amtStr) || 50, status: "open", ts: new Date().toLocaleTimeString() };
-    setEscrows((e) => [esc, ...e]);
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_ds_frontier", serviceName: "Frontier Trade Escrow · Open", amount: 0.05, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "deepsurge.escrow.open", payload: { escrowId: esc.id, seller: esc.seller, item: esc.item, amountUsd: esc.amountUsd } });
-    setSeller(""); setItem(""); setBusy(false);
-  };
-  const confirm = (id: string) => {
-    setEscrows((es) => es.map((e) => e.id === id ? { ...e, status: "confirmed" } : e));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Frontier Trade Escrow · Confirm delivery", amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "deepsurge.escrow.confirm", payload: { escrowId: id } });
-  };
-  const release = (id: string) => {
-    setEscrows((es) => es.map((e) => e.id === id ? { ...e, status: "released" } : e));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Frontier Trade Escrow · Release funds", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "deepsurge.escrow.release", payload: { escrowId: id } });
-  };
-  const refund = (id: string) => {
-    setEscrows((es) => es.map((e) => e.id === id ? { ...e, status: "refunded" } : e));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Frontier Trade Escrow · Refund", amount: 0, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "deepsurge.escrow.refund", payload: { escrowId: id } });
-  };
-  const statusColor = (s: FrontierEscrow["status"]) => s === "released" ? "#1fb58a" : s === "refunded" ? "#e63946" : s === "confirmed" ? "#ff9b00" : "var(--accent-primary)";
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Frontier trade escrow</h3><div className="sub">lock funds until delivery confirmed · open / confirm / release or refund · $0.05 USDC to open</div></div></div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 10, padding: "0 16px 10px" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Seller (player name / addr)</span><input value={seller} onChange={(e) => setSeller(e.currentTarget.value)} placeholder="pilot_xyz" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem", fontFamily: "var(--mono)" }} /></label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Item / cargo</span><input value={item} onChange={(e) => setItem(e.currentTarget.value)} placeholder="Tritanium × 5000" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} /></label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Amount (USD)</span><input value={amtStr} onChange={(e) => setAmtStr(e.currentTarget.value)} inputMode="decimal" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem", fontFamily: "var(--mono)" }} /></label>
-      </div>
-      <div style={{ padding: "0 16px 14px" }}>
-        <button className="btn btn-acc btn-sm" type="button" onClick={open} disabled={busy || !seller.trim() || !item.trim()}>{busy ? <Loader2 size={13} className="wallet-spin" /> : <Shield width={13} height={13} />} Open escrow ($0.05)</button>
-      </div>
-      {escrows.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0 10px" }}>Active escrows · {escrows.length}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {escrows.map((esc) => (
-              <div key={esc.id} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid var(--line-2)", background: "var(--bg-2)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span className="pill" style={{ background: `color-mix(in srgb, ${statusColor(esc.status)} 14%, transparent)`, color: statusColor(esc.status), textTransform: "capitalize" }}>{esc.status}</span>
-                  <span style={{ fontWeight: 700, fontSize: ".84rem" }}>{esc.item}</span>
-                  <span style={{ marginLeft: "auto", fontWeight: 800, color: "var(--accent-primary)" }}>${esc.amountUsd}</span>
-                </div>
-                <div style={{ fontSize: ".72rem", color: "var(--muted)", marginBottom: 8 }}>Seller: <code>{esc.seller}</code> · Buyer: You · <code style={{ fontSize: ".68rem" }}>{esc.id}</code> · {esc.ts}</div>
-                {esc.status === "open" && <div style={{ display: "flex", gap: 6 }}><button className="btn btn-sm" type="button" onClick={() => confirm(esc.id)}><Check width={12} height={12} /> Confirm delivery</button><button className="btn btn-ghost btn-sm" type="button" onClick={() => refund(esc.id)}><X width={12} height={12} /> Refund</button></div>}
-                {esc.status === "confirmed" && <div style={{ display: "flex", gap: 6 }}><button className="btn btn-acc btn-sm" type="button" onClick={() => release(esc.id)}><Bolt width={12} height={12} /> Release funds</button><button className="btn btn-ghost btn-sm" type="button" onClick={() => refund(esc.id)}><X width={12} height={12} /> Refund</button></div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DEEPSURGE — Frontier market oracle (Intel API tab)
-// ---------------------------------------------------------------------------
-const FRONTIER_COMMODITIES = [
-  { id: "tritanium", name: "Tritanium", hub: "Jita IV", basePrice: 5.2 },
-  { id: "mexallon", name: "Mexallon", hub: "Dodixie", basePrice: 87.4 },
-  { id: "isogen", name: "Isogen", hub: "Amarr", basePrice: 110.8 },
-  { id: "nocxium", name: "Nocxium", hub: "Rens", basePrice: 890.3 },
-  { id: "zydrine", name: "Zydrine", hub: "Jita IV", basePrice: 1250.0 },
-] as const;
-type CommodityQuote = { id: string; name: string; hub: string; buy: number; sell: number; spread: number; vol: number; ts: string };
-function FrontierMarketOracle({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [quotes, setQuotes] = useState<CommodityQuote[]>([]);
-  const [loading, setLoading] = useState(false);
-  const fetch = async () => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    const ts = new Date().toLocaleTimeString();
-    const rows: CommodityQuote[] = FRONTIER_COMMODITIES.map((c) => {
-      const jitter = 1 + (Math.random() - 0.5) * 0.06;
-      const sell = Math.round(c.basePrice * jitter * 100) / 100;
-      const buy = Math.round(sell * 0.94 * 100) / 100;
-      const spread = Math.round((sell - buy) / sell * 10000) / 100;
-      const vol = Math.round(Math.random() * 80000 + 5000);
-      return { id: c.id, name: c.name, hub: c.hub, buy, sell, spread, vol, ts };
-    });
-    setQuotes(rows);
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_ds_frontier", serviceName: "Market Oracle · Query", amount: 0.04, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "deepsurge.market.query", payload: { commodities: rows.length, ts: Date.now() } });
-    setLoading(false);
-  };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><TrendingUp width={15} height={15} /></span><div><h3>Frontier market oracle</h3><div className="sub">hub buy/sell spreads for Frontier commodities · $0.04 USDC per query</div></div></div>
-        <button className="btn btn-acc btn-sm" type="button" onClick={fetch} disabled={loading}>{loading ? <><Loader2 size={13} className="wallet-spin" /> Querying…</> : <><RefreshCw width={13} height={13} /> Query market</>}</button>
-      </div>
-      {quotes.length === 0 && <div className="muted sm" style={{ padding: "0 16px 14px" }}>Click "Query market" to fetch live hub prices and spreads.</div>}
-      {quotes.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", color: "var(--muted)", marginBottom: 8 }}>Last updated {quotes[0]?.ts} · Frontier market data</div>
-          <div className="svc-table__scroll"><table className="svc-table">
-            <thead><tr><th>Commodity</th><th>Hub</th><th className="svc-table__num">Buy</th><th className="svc-table__num">Sell</th><th className="svc-table__num">Spread %</th><th className="svc-table__num">Volume</th></tr></thead>
-            <tbody>
-              {quotes.map((q) => (
-                <tr key={q.id}>
-                  <td style={{ fontWeight: 700 }}>{q.name}</td>
-                  <td style={{ fontSize: ".72rem", color: "var(--muted)" }}>{q.hub}</td>
-                  <td className="svc-table__num" style={{ fontFamily: "var(--mono)" }}>{q.buy.toFixed(2)}</td>
-                  <td className="svc-table__num" style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>{q.sell.toFixed(2)}</td>
-                  <td className="svc-table__num" style={{ color: q.spread > 8 ? "#e63946" : q.spread < 4 ? "#1fb58a" : "var(--ink)" }}>{q.spread}%</td>
-                  <td className="svc-table__num">{q.vol.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function ServiceTabPage({
   services,
   workspace,
@@ -5980,7 +5509,6 @@ export function ServiceTabPage({
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
     (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit"))) ||
     (workspace.id === "berkeley" && (t.includes("paid tool") || t.includes("catalog") || t.includes("playground"))) ||
-    (workspace.id === "deepsurge" && (t.includes("trade") || t.includes("safety") || t.includes("intel") || t.includes("resource"))) ||
     (workspace.id === "sui" &&(t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
@@ -6010,8 +5538,6 @@ export function ServiceTabPage({
 
       {t.includes("escrow") && <InteractiveEscrow workspace={workspace} />}
       {workspace.id === "arbitrum" && t.includes("escrow") && <ArbitrumEscrowPanel workspace={workspace} />}
-
-      {t.includes("alert") && <AlertSubscriptions workspace={workspace} />}
 
       {(t.includes("strateg") || t.includes("sandbox")) && <BacktestRunner workspace={workspace} />}
 
@@ -6102,9 +5628,6 @@ export function ServiceTabPage({
       {workspace.id === "mantle" && t.includes("alpha") && <AlphaBotWidget workspace={workspace} />}
       {workspace.id === "berkeley" && t.includes("playground") && <BuildToolWizard workspace={workspace} />}
       {workspace.id === "berkeley" && (t.includes("paid tool") || t.includes("catalog")) && <PaidToolsGrid workspace={workspace} services={services} onOpenPayment={onOpenPayment} />}
-      {workspace.id === "deepsurge" && (t.includes("trade") || t.includes("safety")) && <><DeepSurgeProfitCalc workspace={workspace} /><FrontierTradeEscrow workspace={workspace} /><RouteRiskScorer workspace={workspace} /></>}
-      {workspace.id === "deepsurge" && t.includes("intel") && <><FrontierMarketOracle workspace={workspace} /><FrontierIntelQuery workspace={workspace} /></>}
-      {workspace.id === "deepsurge" && t.includes("resource") && <ResourceMapQuery workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("walrus") || t.includes("storage")) && <WalrusStorageWidget workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("move") || t.includes("contracts")) && <MoveContractViewer workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("nft") || t.includes("market")) && <SuiNftMarket workspace={workspace} />}

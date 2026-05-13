@@ -1,7 +1,6 @@
 import {
   Cable,
   ChartNoAxesCombined,
-  DatabaseZap,
   Globe2,
   type LucideIcon,
 } from "lucide-react";
@@ -92,20 +91,6 @@ export const workspaces: Workspace[] = [
     accent: "#13b5d5",
     darkAccent: "#6ee5ff",
     Icon: Cable as LucideIcon,
-  },
-  {
-    id: "deepsurge",
-    shortName: "DeepSurge",
-    name: "Frontier Intel Market",
-    route: "/deepsurge",
-    hackathon: "DeepSurge × EVE Frontier",
-    pitch: "Players and agents pay for live EVE Frontier intel — resource routes, market data and trade-risk feeds.",
-    tracks: ["Utility", "Technical Implementation", "Live Frontier Integration"],
-    networks: ["frontier-testnet"],
-    tabs: ["Overview", "Intel API", "Resource Data", "Trade Safety", "Alerts", "Payments"],
-    accent: "#d8ff2f",
-    darkAccent: "#d9ff47",
-    Icon: DatabaseZap as LucideIcon,
   },
   {
     id: "agora",
@@ -226,20 +211,6 @@ const RAW_SERVICES: SRaw[] = [
     priceUsd: 0.04, currency: "USDC", network: "base-sepolia", provider: "Ddoski's World", providerWallet: W2,
     sampleIn: '{ "q": "What is x402?" }', response: '{ "answer": "…", "sources": 4 }', status: "active", calls: 880 },
 
-  // DeepSurge
-  { id: "svc_ds_resource", workspaceId: "deepsurge", name: "Resource Intel API", category: "game-intel",
-    description: "Live resource node yields and contested-zone status for a region of EVE Frontier. Billed per query.",
-    priceUsd: 0.04, currency: "mock", network: "frontier-testnet", provider: "Frontier Intel Co.", providerWallet: W,
-    sampleIn: '{ "region": "Q-OP4" }', response: '{ "topNode": "Veldspar +18%", "contested": true, "hostiles": 3 }', status: "active", calls: 740 },
-  { id: "svc_ds_traderisk", workspaceId: "deepsurge", name: "Trade Risk API", category: "game-intel",
-    description: "Risk score for a trade route: gank probability, market spread, escort recommendation.",
-    priceUsd: 0.05, currency: "mock", network: "frontier-testnet", provider: "Frontier Intel Co.", providerWallet: W,
-    sampleIn: '{ "from": "Hub-A", "to": "Rim-7" }', response: '{ "riskScore": 64, "spread": "7.1%", "escort": "recommended" }', status: "active", calls: 510 },
-  { id: "svc_ds_alert", workspaceId: "deepsurge", name: "Live Alert Feed", category: "game-intel",
-    description: "A streaming alert feed for fleet movement and market shocks in a watched region. Billed per session.",
-    priceUsd: 0.03, currency: "mock", network: "frontier-testnet", provider: "Frontier Watch", providerWallet: W2,
-    sampleIn: '{ "region": "Q-OP4", "ttlMin": 30 }', response: '{ "session": "al_…", "first": "Fleet +12 entering grid" }', status: "active", calls: 330 },
-
   // --- extra services (denser endpoint tables) ---
   // 0G
   { id: "svc_0g_dav", workspaceId: "0g", name: "0G DA Verify", category: "storage",
@@ -290,16 +261,6 @@ const RAW_SERVICES: SRaw[] = [
     description: "Reviews a code diff for bugs and risk, returns inline notes and a verdict. Billed per review.",
     priceUsd: 0.05, currency: "USDC", network: "base-sepolia", provider: "Ddoski's Playground", providerWallet: W,
     sampleIn: '{ "diff": "…", "lang": "ts" }', response: '{ "notes": 3, "verdict": "request-changes", "risk": "medium" }', status: "active", calls: 410 },
-
-  // DeepSurge
-  { id: "svc_ds_oracle", workspaceId: "deepsurge", name: "Market Oracle API", category: "game-intel",
-    description: "Aggregated market price + spread for a Frontier commodity across the major hubs. Billed per query.",
-    priceUsd: 0.03, currency: "mock", network: "frontier-testnet", provider: "Frontier Intel Co.", providerWallet: W2,
-    sampleIn: '{ "item": "Tritanium" }', response: '{ "mid": 5.21, "spread": "4.0%", "bestHub": "Hub-A" }', status: "active", calls: 880 },
-  { id: "svc_ds_route", workspaceId: "deepsurge", name: "Route Planner API", category: "game-intel",
-    description: "Plans the lowest-risk haul route between two systems given current hostiles and gate status.",
-    priceUsd: 0.04, currency: "mock", network: "frontier-testnet", provider: "Frontier Intel Co.", providerWallet: W,
-    sampleIn: '{ "from": "Hub-A", "to": "Rim-7" }', response: '{ "jumps": 6, "riskScore": 38, "avoid": ["Q-OP4"] }', status: "active", calls: 520 },
 
   // Sui
   { id: "svc_sui_walrus_pin", workspaceId: "sui", name: "Walrus Storage Pin", category: "storage",
@@ -376,7 +337,6 @@ export const agents: Agent[] = [
   mkAgent({ id: "agent_arb_treasury", workspaceId: "arbitrum", name: "Treasury Agent", wallet: "0xAg3n…0b12", autoPay: true, dailyLimitUsd: 12, maxPerRequestUsd: 0.20, spentTodayUsd: 0.88, allowlist: ["svc_arb_invoice", "svc_arb_orbit", "svc_arb_escrow", "svc_arb_bridge", "svc_arb_usdc"] }),
   mkAgent({ id: "agent_mnt_strategist", workspaceId: "mantle", name: "Alpha Strategist", wallet: "0xAg3n…ee71", autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.30, spentTodayUsd: 0.96, allowlist: ["svc_mnt_rwa", "svc_mnt_meth", "svc_mnt_backtest", "svc_mnt_liq", "svc_mnt_stress"] }),
   mkAgent({ id: "agent_bk_sandbox", workspaceId: "berkeley", name: "Sandbox Agent", wallet: "0xAg3n…f0c3", autoPay: true, dailyLimitUsd: 4, maxPerRequestUsd: 0.10, spentTodayUsd: 0.13, allowlist: ["svc_bk_tx", "svc_bk_debug", "svc_bk_research", "svc_bk_docs", "svc_bk_review"] }),
-  mkAgent({ id: "agent_ds_scout", workspaceId: "deepsurge", name: "Frontier Scout", wallet: "0xAg3n…77b9", autoPay: true, dailyLimitUsd: 5, maxPerRequestUsd: 0.10, spentTodayUsd: 0.32, allowlist: ["svc_ds_resource", "svc_ds_traderisk", "svc_ds_alert", "svc_ds_oracle", "svc_ds_route"] }),
   mkAgent({ id: "agent_sui_economy", workspaceId: "sui", name: "Sui Economy Agent", wallet: "0xAg3n…4da2", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.15, spentTodayUsd: 0.74, allowlist: ["svc_sui_walrus_pin", "svc_sui_move_exec", "svc_sui_nft_mint", "svc_sui_agent_id", "svc_sui_zkproof"] }),
   mkAgent({ id: "agent_arc_arb", workspaceId: "agora", name: "ArcArb Agent", wallet: "0xAg3n…c1f4", autoPay: true, dailyLimitUsd: 20, maxPerRequestUsd: 0.50, spentTodayUsd: 1.42, allowlist: ["svc_arc_oracle", "svc_arc_arb", "svc_arc_portfolio"] }),
   mkAgent({ id: "agent_poly_merchant", workspaceId: "polygon", name: "Polygon Merchant Agent", wallet: "0xAg3n…9a3b", autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.25, spentTodayUsd: 0.85, allowlist: ["svc_poly_invoice", "svc_poly_merchant", "svc_poly_cross"] }),
@@ -442,10 +402,6 @@ const SEED_ROWS: SeedRow[] = [
   { ws: "berkeley", svc: "svc_bk_docs", agent: "agent_bk_sandbox", mins: 18, status: "verified" },
   { ws: "berkeley", svc: "svc_bk_research", agent: "agent_bk_sandbox", mins: 40, status: "verified" },
   { ws: "berkeley", svc: "svc_bk_review", agent: "agent_bk_sandbox", mins: 72, status: "verified" },
-  { ws: "deepsurge", svc: "svc_ds_resource", agent: "agent_ds_scout", mins: 9, status: "verified" },
-  { ws: "deepsurge", svc: "svc_ds_oracle", agent: "agent_ds_scout", mins: 31, status: "verified" },
-  { ws: "deepsurge", svc: "svc_ds_traderisk", agent: "agent_ds_scout", mins: 60, status: "verified" },
-  { ws: "deepsurge", svc: "svc_ds_route", agent: "agent_ds_scout", mins: 95, status: "verified" },
   { ws: "sui", svc: "svc_sui_walrus_pin", agent: "agent_sui_economy", mins: 7, status: "verified",
     kind: "sui.walrus.pin", name: "Walrus Storage · agent-snapshot.json", payload: { blobId: "wl_4a1c2b07d93f", name: "agent-snapshot.json", size: 184, epochs: 3, tx: "DkPxyz1234567890abcde" } },
   { ws: "sui", svc: "svc_sui_move_exec", agent: "agent_sui_economy", mins: 24, status: "verified",

@@ -9805,40 +9805,6 @@ select.twk-field {
   66%      { transform: translate(-3%, 3%) scale(.94); border-radius: 50% 50% 60% 40% / 56% 50% 44% 50%; }
 }
 
-/* deepsurge — frontier starfield + planet arc */
-.ws-bg--deepsurge .ws-bg__pattern { display: none; }
-.ws-bg--deepsurge .ws-bg__halo--b { display: none; }
-.ws-bg--deepsurge .ws-bg__stars { inset: 0; background-repeat: no-repeat; }
-.ws-bg--deepsurge .ws-bg__stars--1 {
-  opacity: .35;
-  background-image:
-    radial-gradient(1px 1px at 18% 28%, #fff, transparent), radial-gradient(1px 1px at 41% 71%, #fff, transparent),
-    radial-gradient(1px 1px at 63% 19%, #fff, transparent), radial-gradient(1px 1px at 82% 52%, #fff, transparent),
-    radial-gradient(1px 1px at 90% 81%, #fff, transparent), radial-gradient(1px 1px at 9% 86%, #fff, transparent),
-    radial-gradient(1.6px 1.6px at 54% 44%, #fff, transparent), radial-gradient(1px 1px at 32% 11%, #fff, transparent),
-    radial-gradient(1px 1px at 73% 89%, #fff, transparent), radial-gradient(1px 1px at 47% 33%, #fff, transparent),
-    radial-gradient(1px 1px at 12% 47%, #fff, transparent), radial-gradient(1.4px 1.4px at 67% 62%, #fff, transparent);
-  animation: ws-twinkle-a 6s ease-in-out infinite alternate;
-}
-.ws-bg--deepsurge .ws-bg__stars--2 {
-  opacity: .5;
-  background-image:
-    radial-gradient(1px 1px at 24% 58%, color-mix(in srgb, var(--accent-primary) 80%, #fff), transparent),
-    radial-gradient(1px 1px at 49% 24%, color-mix(in srgb, var(--accent-primary) 80%, #fff), transparent),
-    radial-gradient(1.6px 1.6px at 85% 36%, color-mix(in srgb, var(--accent-primary) 80%, #fff), transparent),
-    radial-gradient(1px 1px at 66% 72%, color-mix(in srgb, var(--accent-primary) 80%, #fff), transparent),
-    radial-gradient(1px 1px at 28% 78%, color-mix(in srgb, var(--accent-primary) 80%, #fff), transparent),
-    radial-gradient(1px 1px at 7% 18%, color-mix(in srgb, var(--accent-primary) 80%, #fff), transparent);
-  animation: ws-twinkle-b 8s ease-in-out infinite alternate;
-}
-@keyframes ws-twinkle-a { from { opacity: .18; } to { opacity: .42; } }
-@keyframes ws-twinkle-b { from { opacity: .52; } to { opacity: .26; } }
-.ws-bg--deepsurge .ws-bg__planet {
-  width: 920px; height: 920px; border-radius: 50%; right: -560px; bottom: -480px;
-  background: radial-gradient(circle at 36% 30%, color-mix(in srgb, var(--accent-primary) 16%, transparent), transparent 66%);
-  border: 1px solid color-mix(in srgb, var(--accent-primary) 14%, transparent);
-  box-shadow: inset 0 0 120px -20px color-mix(in srgb, var(--accent-primary) 28%, transparent), 0 0 220px -40px color-mix(in srgb, var(--accent-primary) 20%, transparent);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .ws-bg__rails, .ws-bg__rings, .ws-bg__ticker, .ws-bg__mesh, .ws-bg__aurora, .ws-bg__stars { animation: none !important; }

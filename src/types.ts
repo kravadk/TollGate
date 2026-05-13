@@ -8,7 +8,6 @@ export type WorkspaceId =
   | "arbitrum"
   | "mantle"
   | "berkeley"
-  | "deepsurge"
   | "sui"
   | "agora"
   | "polygon";
