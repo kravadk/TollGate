@@ -69,16 +69,31 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
             className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.25em] text-primary px-3 py-1 rounded-full bg-primary/10 border border-primary/20 mb-6"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            x402 payment infrastructure
+            x402 payment rail · live on 0G
           </motion.span>
           <motion.h1 variants={fadeInUp} className="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.05] mb-4" style={{ fontFamily: "var(--font-display)" }}>
-            One core, eight tracks.
+            The payment rail for the 0G AI economy.
             <br />
-            <span className="gradient-text">Pick a project to launch.</span>
+            <span className="gradient-text">Agents pay per call. Receipts on-chain.</span>
           </motion.h1>
           <motion.p variants={fadeInUpSmall} className="text-base md:text-lg text-text-secondary leading-relaxed max-w-2xl">
-            Every project opens into a workspace with paid endpoints, agent budgets, a 402 → pay → unlock gateway, and verifiable receipts — ready to use.
+            Agents pay for <b className="text-text-primary">0G Compute</b> inference and <b className="text-text-primary">0G Storage</b> over HTTP&nbsp;402 — every payment a verifiable receipt anchored on <b className="text-text-primary">0G mainnet</b>. The same gateway runs on Mantle, Arbitrum, Sui &amp; more — it&apos;s infrastructure, not a one-off.
           </motion.p>
+          <motion.div variants={fadeInUpSmall} className="mt-5 flex flex-wrap items-center gap-2">
+            <a
+              href="https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              AgentReceiptRegistry — live on 0G mainnet
+              <ArrowUpRight size={11} />
+            </a>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border border-border-default bg-surface-1 text-text-muted">
+              HTTP 402 · ERC-8004 · MCP server
+            </span>
+          </motion.div>
         </motion.div>
 
         <motion.div
@@ -91,13 +106,25 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
             const Icon = ws.Icon;
             const firstTabSlug = slugifyTab(ws.tabs[0] ?? "Overview");
             const chain = prettyChain(ws.networks[0] ?? "");
+            const featured = ws.id === "0g";
             return (
-              <motion.div key={ws.id} variants={fadeInScale}>
+              <motion.div key={ws.id} variants={fadeInScale} className={featured ? "sm:col-span-2" : undefined}>
                 <Link
                   to={`/app/${ws.id}/${firstTabSlug}`}
-                  className="launch-card group relative flex flex-col h-full p-5 rounded-2xl bg-surface-1 border border-border-default hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                  className={
+                    "launch-card group relative flex flex-col h-full p-5 rounded-2xl border transition-all duration-300 overflow-hidden hover:-translate-y-1 " +
+                    (featured
+                      ? "launch-card--featured bg-surface-1 border-primary/40 shadow-[0_0_40px_-12px_var(--ws-c)]"
+                      : "bg-surface-1 border-border-default")
+                  }
                   style={{ ["--ws-c" as string]: ws.accent }}
                 >
+                  {featured && (
+                    <span className="absolute top-4 right-4 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-primary/15 border border-primary/30 text-primary">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      Live on 0G mainnet
+                    </span>
+                  )}
                   <div className="flex items-start justify-between mb-4">
                     <span
                       className="grid place-items-center w-11 h-11 rounded-xl"
@@ -105,7 +132,7 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
                     >
                       <Icon size={20} />
                     </span>
-                    <span className="text-[10px] text-text-muted uppercase tracking-[0.2em] font-bold">{chain}</span>
+                    {!featured && <span className="text-[10px] text-text-muted uppercase tracking-[0.2em] font-bold">{chain}</span>}
                   </div>
                   <h3 className="text-[15px] font-extrabold leading-snug mb-2 group-hover:text-primary transition-colors" style={{ fontFamily: "var(--font-display)" }}>
                     {ws.name}
@@ -128,15 +155,6 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
           })}
         </motion.div>
 
-        <div className="relative mt-14 flex justify-center">
-          <Link
-            to="/showcase"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border-default bg-surface-1 text-text-secondary hover:text-text-primary hover:border-primary/30 text-[13px] font-bold transition-colors"
-          >
-            Receipts showcase
-            <ArrowUpRight size={13} />
-          </Link>
-        </div>
       </main>
     </div>
   );

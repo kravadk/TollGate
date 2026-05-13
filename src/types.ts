@@ -15,7 +15,7 @@ export type WorkspaceId =
 
 export type PaymentStage =
   | "required"
-  | "holding"
+  | "paying"
   | "verifying"
   | "approved"
   | "unlocked";

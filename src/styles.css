@@ -97,6 +97,64 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* ── Shimmer skeleton placeholders (reuses @keyframes shimmer in theme.css) ── */
+.skel {
+  display: inline-block;
+  border-radius: 6px;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--text-soft, #888) 10%, transparent) 30%,
+    color-mix(in srgb, var(--text-soft, #888) 22%, transparent) 50%,
+    color-mix(in srgb, var(--text-soft, #888) 10%, transparent) 70%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skel-text { height: 12px; border-radius: 5px; }
+.skel-row { height: 38px; border-radius: 8px; }
+.skel-card { height: 120px; border-radius: var(--radius, 12px); }
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+}
+
+/* ── Soft entrance for every dashboard card + tactile hover on grid items ──── */
+@keyframes ap-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ap402 .block { animation: ap-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.ap402 .service-card,
+.ap402 .stat-card {
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s ease, box-shadow 0.22s ease;
+}
+.ap402 .service-card:hover,
+.ap402 .stat-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent, var(--accent-primary, #b7fc72)) 40%, var(--border));
+}
+@keyframes ap-fade { from { opacity: 0; } to { opacity: 1; } }
+.ap402 table tbody tr {
+  transition: background-color 0.15s ease;
+  animation: ap-fade 0.34s ease-out both;
+}
+.ap402 table tbody tr:nth-child(1)  { animation-delay: 0ms; }
+.ap402 table tbody tr:nth-child(2)  { animation-delay: 35ms; }
+.ap402 table tbody tr:nth-child(3)  { animation-delay: 70ms; }
+.ap402 table tbody tr:nth-child(4)  { animation-delay: 105ms; }
+.ap402 table tbody tr:nth-child(5)  { animation-delay: 140ms; }
+.ap402 table tbody tr:nth-child(6)  { animation-delay: 175ms; }
+.ap402 table tbody tr:nth-child(7)  { animation-delay: 210ms; }
+.ap402 table tbody tr:nth-child(8)  { animation-delay: 245ms; }
+.ap402 table tbody tr:nth-child(9)  { animation-delay: 280ms; }
+.ap402 table tbody tr:nth-child(n+10) { animation-delay: 315ms; }
+.ap402 table tbody tr:hover { background: color-mix(in srgb, var(--accent, var(--accent-primary, #b7fc72)) 7%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .ap402 .block { animation: none; }
+  .ap402 table tbody tr { animation: none; }
+  .ap402 .service-card:hover,
+  .ap402 .stat-card:hover { transform: none; }
+}
+
 button,
 input {
   font: inherit;
@@ -804,9 +862,9 @@ input:focus-visible {
 
 .dashboard-main {
   display: grid;
-  gap: 24px;
+  gap: 16px;
   width: min(1480px, 100%);
-  padding: 24px;
+  padding: 18px;
 }
 
 .dashboard-topbar {
@@ -921,14 +979,14 @@ input:focus-visible {
 
 .dashboard-hero {
   display: grid;
-  grid-template-columns: minmax(360px, 0.92fr) minmax(460px, 1.08fr);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.86fr);
   gap: 16px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .invoice-preview {
   position: relative;
-  min-height: 640px;
+  min-height: 440px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-large);
@@ -1188,7 +1246,7 @@ input:focus-visible {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
 }
 
@@ -1204,10 +1262,9 @@ input:focus-visible {
 
 .stat-card {
   display: grid;
-  min-height: 249px;
   align-content: space-between;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px;
 }
 
 .stat-card__icon,
@@ -1246,14 +1303,14 @@ input:focus-visible {
 
 .service-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
   gap: 12px;
 }
 
 .service-card {
   display: grid;
-  min-height: 285px;
-  gap: 16px;
+  align-content: start;
+  gap: 12px;
   padding: 16px;
 }
 
@@ -1286,7 +1343,7 @@ input:focus-visible {
 }
 
 .service-card p {
-  min-height: 68px;
+  min-height: 40px;
   margin: 0;
 }
 
@@ -1968,7 +2025,7 @@ input:focus-visible {
   }
 
   .invoice-preview {
-    min-height: 650px;
+    min-height: 420px;
   }
 
   .stats-grid,
@@ -2066,7 +2123,7 @@ input:focus-visible {
   }
 
   .invoice-preview {
-    min-height: 640px;
+    min-height: 420px;
     border-radius: 18px;
   }
 
@@ -6432,8 +6489,17 @@ input:focus-visible {
 .ap402 .notice b { font-weight: 700; }
 
 
-/* receipt detail */
-.ap402 .receipt-paper { background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); padding: 18px 20px 14px; box-shadow: var(--sh-1); position: relative; }
+/* receipt detail — the "paper receipt" is always white, so force dark text on it
+   (otherwise the .kv .v values inherit the dark theme's light ink → invisible) */
+.ap402 .receipt-paper { background: #fff; color: #1c1c1c; border: 1px solid rgba(0,0,0,.12); border-radius: var(--r-md); padding: 18px 20px 14px; box-shadow: var(--sh-1); position: relative; }
+.ap402 .receipt-paper .kv .v,
+.ap402 .receipt-paper .num { color: #1c1c1c; }
+.ap402 .receipt-paper .kv .k,
+.ap402 .receipt-paper .label,
+.ap402 .receipt-paper .muted { color: #6b6b6b !important; }
+.ap402 .receipt-paper hr.line,
+.ap402 .receipt-paper .line,
+.ap402 .receipt-paper .kv + .kv { border-color: #e6e6e6; }
 
 .ap402 .receipt-paper.zig { border-radius: var(--r-md) var(--r-md) 0 0; }
 
@@ -9874,3 +9940,23 @@ select.twk-field {
 .svc-ep-card__meta b { color: var(--ink, #1c1916); font-weight: 800; }
 :root[data-theme="dark"] .svc-ep-card__meta b { color: var(--d-ink, #f4efe8); }
 .svc-ep-card > .btn { margin-top: auto; justify-content: center; }
+
+/* --- 0G Overview "Demo flow" guided block (OgDemoFlow) --- */
+.ogdf .block-head { margin-bottom: 2px; }
+.ogdf-steps { display: flex; flex-direction: column; gap: 0; margin-top: 6px; }
+.ogdf-step { display: grid; grid-template-columns: 30px 1fr; gap: 14px; padding: 13px 0; position: relative; }
+.ogdf-step:not(:last-child)::before { content: ""; position: absolute; left: 14px; top: 35px; bottom: -3px; width: 2px; background: var(--line-2, rgba(140,140,150,.22)); }
+.ogdf-step--done:not(:last-child)::before { background: color-mix(in srgb, #1fb58a 55%, transparent); }
+.ogdf-step__num { width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: var(--field, rgba(140,140,150,.1)); color: var(--muted); border: 1.5px solid var(--line-2, rgba(140,140,150,.25)); flex: none; z-index: 1; transition: background .2s, color .2s, box-shadow .2s; }
+.ogdf-step--done .ogdf-step__num { background: color-mix(in srgb, #1fb58a 16%, transparent); color: #1fb58a; border-color: color-mix(in srgb, #1fb58a 42%, transparent); }
+.ogdf-step--live .ogdf-step__num { background: color-mix(in srgb, var(--accent-primary, #ff8c1a) 18%, transparent); color: var(--accent-primary, #ff8c1a); border-color: color-mix(in srgb, var(--accent-primary, #ff8c1a) 52%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary, #ff8c1a) 13%, transparent); }
+.ogdf-step__body { min-width: 0; }
+.ogdf-step__title { font-weight: 700; font-size: .92rem; letter-spacing: -.01em; line-height: 1.3; }
+.ogdf-step--todo .ogdf-step__title { color: var(--muted); }
+.ogdf-step__desc { font-size: .8rem; color: var(--text-secondary, var(--muted)); line-height: 1.55; margin-top: 3px; }
+.ogdf-step--todo .ogdf-step__desc { opacity: .7; }
+.ogdf-out { margin-top: 9px; padding: 10px 12px; border-radius: 10px; background: var(--field, rgba(140,140,150,.08)); border: 1px solid var(--line-2, rgba(140,140,150,.18)); }
+.ogdf-out__tag { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .74rem; }
+.ogdf-out pre.code-block { margin-bottom: 0; }
+.ogdf-foot { margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--line-2, rgba(140,140,150,.22)); font-size: .76rem; }
+.ogdf-foot a { font-weight: 600; }

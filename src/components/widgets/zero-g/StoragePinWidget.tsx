@@ -7,6 +7,7 @@ import { sha256Hex, fmtBytes, hashId, deterministicScore } from "../../../lib/ut
 import { anchorReceiptOnChain, isOgRegistryConfigured, ogExplorerTxUrl, uploadToOgStorage } from "../../../lib/og";
 import { SEEDED_PINS } from "../../../data";
 import { ActionPanel } from "../ActionPanel";
+import { WidgetMeta } from "../../ui/Motion";
 
 type PinnedBlob = {
   id: string;
@@ -84,6 +85,7 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
   const [stage, setStage] = useState<"idle" | "pinning" | "done">("idle");
   const [lastPinned, setLastPinned] = useState<PinnedBlob | null>(null);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const [copiedRoot, setCopiedRoot] = useState(false);
   const [restored, setRestored] = useState<string | null>(null);
   const [anchoring, setAnchoring] = useState<string | null>(null);
   const [anchorErr, setAnchorErr] = useState<string | null>(null);
@@ -196,6 +198,14 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
         </button>
       }
     >
+      <WidgetMeta
+        live={ogReady}
+        what={<>a permanent <code>0g://&lt;sha256&gt;</code> link for whatever you typed below, plus a settled storage receipt. With the indexer it carries a real 0G Merkle root; with a registry you can also anchor it on-chain (button appears after pinning).</>}
+        enter="type or paste the content (text / JSON) in the editor below and give it a filename. “Agent memory snapshot” mode auto-fills an example agent-state JSON you can edit."
+        liveText="0G registry configured — “Anchor on 0G” sends a real tx"
+        demoText="content hash & 0g:// link are always real; set VITE_0G_STORAGE_INDEXER for real Merkle roots and VITE_0G_REGISTRY_ADDRESS to anchor on-chain"
+      />
+
       <div className="seg" style={{ display: "inline-flex", marginBottom: 10 }}>
         <button type="button" className={mode === "pin" ? "on" : ""} onClick={() => switchMode("pin")}>Pin blob</button>
         <button type="button" className={mode === "snapshot" ? "on" : ""} onClick={() => switchMode("snapshot")}>Agent memory snapshot</button>
@@ -291,6 +301,21 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
           <RotateCcw width={13} height={13} /> Memory restored into the editor — re-snapshot to advance the generation, or edit and pin.
         </div>
       )}
+      {lastPinned && lastPinned.kind === "memory" && lastPinned.storageRoot && (() => {
+        const root = "0x" + lastPinned.storageRoot.replace(/^0x/, "");
+        const copyRoot = () => { navigator.clipboard?.writeText(root).catch(() => {}); setCopiedRoot(true); setTimeout(() => setCopiedRoot(false), 1500); };
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, padding: "10px 12px", borderRadius: 11, border: "1px solid color-mix(in srgb, var(--accent-primary) 32%, transparent)", background: "color-mix(in srgb, var(--accent-primary) 8%, transparent)", marginBottom: 12 }}>
+            <div style={{ fontSize: ".72rem", color: "var(--ink)", lineHeight: 1.5 }}>
+              <b>This snapshot is {SNAP_AGENTS[agentIdx]?.name ?? "the agent"}&apos;s brain.</b> Bind its root to the agent&apos;s <b>identity NFT</b> — open an agent identity registry (e.g. the Mantle workspace → <i>Agents</i> tab → &ldquo;Memory snapshot&rdquo;), enter the agentId and paste this root. The NFT then points at a verifiable 0G Storage blob — an intelligent NFT whose brain lives on 0G.
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <code style={{ flex: "1 1 220px", fontFamily: "var(--mono)", fontSize: ".72rem", background: "rgba(0,0,0,.1)", borderRadius: 7, padding: "5px 9px", wordBreak: "break-all" }}>{root}</code>
+              <button type="button" className="btn btn-sm" onClick={copyRoot}>{copiedRoot ? <><Check size={12} /> Copied root</> : <><Copy size={12} /> Copy memory root</>}</button>
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>{mode === "snapshot" ? "Memory snapshots & pins" : "Pinned blobs"} · {blobs.length}</div>

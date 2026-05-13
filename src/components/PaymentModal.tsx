@@ -1,266 +1,327 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bot,
-  Check,
-  CheckCircle2,
-  ChevronRight,
-  CircleDollarSign,
-  Clock3,
-  FileText,
-  LockKeyhole,
-  MessageCircle,
-  X,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Bot, CheckCircle2, ExternalLink, FileText, Link2, ServerCog, X } from "lucide-react";
+import { Spinner } from "./ui/Motion";
+import { slugifyTab } from "./ui/AppSidebar";
+import { anchorReceiptOnChain, isOgRegistryConfigured, ogExplorerTxUrl } from "../lib/og";
+import { sha256Hex } from "../lib/util-hash";
 import type { Agent, PaymentStage, Service, Workspace } from "../types";
 
 type PaymentModalProps = {
   agent: Agent;
   service: Service | null;
   workspace: Workspace | null;
-  onApproved: (service: Service) => void;
+  onApproved: (service: Service, onchainTxHash?: string) => void;
   onClose: () => void;
 };
 
-const stageContent: Record<
-  PaymentStage,
-  { eyebrow: string; title: string; detail: string; button: string }
-> = {
-  required: {
-    eyebrow: "402 Payment Required",
-    title: "Invoice",
-    detail: "The agent needs one paid request before the API returns data.",
-    button: "Hold to Pay",
-  },
-  holding: {
-    eyebrow: "Hold authorization",
-    title: "Invoice",
-    detail: "Keeping this request inside the agent policy and budget cap.",
-    button: "Keep holding",
-  },
-  verifying: {
-    eyebrow: "Verifying",
-    title: "Verifying invoice",
-    detail: "Payment submitted. Waiting for receipt verification.",
-    button: "Verifying...",
-  },
-  approved: {
-    eyebrow: "Approved",
-    title: "Invoice paid",
-    detail: "Receipt is verified and the provider can unlock the response.",
-    button: "Approved",
-  },
-  unlocked: {
-    eyebrow: "API Response Unlocked",
-    title: "Response unlocked",
-    detail: "The agent can now consume this paid response and continue.",
-    button: "Response unlocked",
-  },
+const HEADER: Record<PaymentStage, string> = {
+  required: "402 Payment Required",
+  paying: "Submitting payment",
+  verifying: "Verifying payment",
+  approved: "Payment approved",
+  unlocked: "Response unlocked",
 };
 
-export function PaymentModal({
-  agent,
-  service,
-  workspace,
-  onApproved,
-  onClose,
-}: PaymentModalProps) {
+function shortAddr(addr: string): string {
+  if (!addr || addr.length < 12 || !addr.startsWith("0x")) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+/** Pick black or white text for readability on a given accent hex. */
+function textOn(hex: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return "#0a0a0a";
+  const n = parseInt(m[1], 16);
+  const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+  return lum > 0.58 ? "#0a0a0a" : "#ffffff";
+}
+
+export function PaymentModal({ agent, service, workspace, onApproved, onClose }: PaymentModalProps) {
   const [stage, setStage] = useState<PaymentStage>("required");
+  const [anchorTx, setAnchorTx] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
-  const sentReceipt = useRef(false);
-  const activeServiceId = service?.id;
+  const prevId = useRef<string | undefined>(undefined);
+  const navigate = useNavigate();
 
+  const accent = workspace?.accent ?? "#b7fc72";
+  const open = service != null;
+
+  // Reset to the first stage whenever a *different* service opens.
   useEffect(() => {
-    setStage("required");
-    sentReceipt.current = false;
-    timers.current.forEach(window.clearTimeout);
-    timers.current = [];
-  }, [activeServiceId]);
-
-  useEffect(() => {
-    return () => timers.current.forEach(window.clearTimeout);
-  }, []);
-
-  const content = stageContent[stage];
-
-  const networkTag = useMemo(() => {
-    if (!service) {
-      return "Testnet";
+    if (service && service.id !== prevId.current) {
+      prevId.current = service.id;
+      setStage("required");
+      setAnchorTx(null);
+      timers.current.forEach(window.clearTimeout);
+      timers.current = [];
     }
-
-    return service.network.replace(" Sepolia", "");
+    if (!service) prevId.current = undefined;
   }, [service]);
 
-  if (!service) {
-    return null;
-  }
+  // Clear pending timers if the modal unmounts mid-flow.
+  useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
 
-  const startPayment = () => {
-    if (stage !== "required") {
-      return;
-    }
+  // Close on Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
-    setStage("holding");
+  if (!service) return null;
+  const svc = service;
+
+  const priceParts = svc.price.split(" ");
+  const amount = priceParts[0] ?? svc.price;
+  const unit = priceParts.slice(1).join(" ");
+  const receiptId = `rcpt_${svc.id.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "tollgate"}`;
+  const WsIcon = workspace?.Icon;
+  const accentSoft = `color-mix(in srgb, ${accent} 16%, transparent)`;
+  const inProgress = stage === "paying" || stage === "verifying";
+
+  const pay = async () => {
+    if (stage !== "required") return;
     timers.current.forEach(window.clearTimeout);
+    setStage("paying");
+    const eth = typeof window !== "undefined" ? (window as unknown as { ethereum?: unknown }).ethereum : undefined;
+    if (isOgRegistryConfigured() && eth) {
+      // Real on-chain path: anchor the receipt via AgentReceiptRegistry.record() (MetaMask sign).
+      try {
+        const receiptHashHex = await sha256Hex(`${svc.id}|${Date.now()}|${agent.wallet}`);
+        const payloadHashHex = await sha256Hex(svc.response).catch(() => undefined);
+        setStage("verifying");
+        const res = await anchorReceiptOnChain({ receiptHashHex, payloadHashHex });
+        setAnchorTx(res.txHash);
+        onApproved(svc, res.txHash);
+        setStage("approved");
+        timers.current = [window.setTimeout(() => setStage("unlocked"), 850)];
+        return;
+      } catch {
+        // user cancelled / chain error → fall through to the simulated demo flow
+      }
+    }
+    setStage("paying");
     timers.current = [
-      window.setTimeout(() => setStage("verifying"), 780),
-      window.setTimeout(() => setStage("approved"), 1650),
+      window.setTimeout(() => setStage("verifying"), 650),
+      window.setTimeout(() => setStage("approved"), 1700),
       window.setTimeout(() => {
-        if (!sentReceipt.current) {
-          sentReceipt.current = true;
-          onApproved(service);
-        }
-
+        onApproved(svc);
         setStage("unlocked");
       }, 2350),
     ];
   };
 
-  const cancelHold = () => {
-    if (stage !== "holding") {
-      return;
-    }
-
-    timers.current.forEach(window.clearTimeout);
-    timers.current = [];
-    setStage("required");
-  };
-
-  const isDone = stage === "approved" || stage === "unlocked";
-  const isBusy = stage === "holding" || stage === "verifying";
-
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        aria-label="Payment modal"
-        aria-modal="true"
-        className={`payment-modal payment-modal--${stage}`}
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="payment-modal__top">
-          <button className="round-icon" type="button" onClick={onClose}>
-            <X size={17} />
-          </button>
-          <span className="invoice-chip">IN-402</span>
-          <button className="round-icon" type="button">
-            <MessageCircle size={17} />
-          </button>
-        </header>
-
-        <div className="paper-stack">
-          <div className="paper-stack__sheet">
-            <div className="paper-stack__dates">
-              <span>
-                <small>ISSUED</small>
-                {new Date().toLocaleDateString("uk-UA")}
-              </span>
-              <span>
-                <small>DUE</small>
-                instant
-              </span>
-            </div>
-            <div className="paper-stack__columns">
-              <small>DESCRIPTION</small>
-              <small>PRICE</small>
-              <small>NETWORK</small>
-            </div>
-            <div className="paper-stack__row">
-              <span>{service.name}</span>
-              <strong>{service.price}</strong>
-              <span>{networkTag}</span>
-            </div>
-            <div className="paper-stack__row is-muted">
-              <span>{service.category}</span>
-              <strong>{agent.maxPerRequest}</strong>
-              <span>x402</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="payment-sheet">
-          <span className="sheet-grabber" />
-          <div className="payment-sheet__title-row">
-            <div>
-              <p className="eyebrow">{content.eyebrow}</p>
-              <h2>{content.title}</h2>
-            </div>
-            <span className={isDone ? "payment-status is-approved" : "payment-status"}>
-              {isDone ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}
-              {isDone ? "Approved" : "Pending"}
-            </span>
-          </div>
-
-          <div className="payment-route">
-            <span>
-              <small>FROM</small>
-              <b>
-                <Bot size={16} />
-                {agent.name}
-              </b>
-            </span>
-            <span className="route-arrow">
-              <ChevronRight size={18} />
-            </span>
-            <span>
-              <small>FOR</small>
-              <b>
-                <CircleDollarSign size={16} />
-                {service.provider}
-              </b>
-            </span>
-          </div>
-
-          <div className="payment-focus">
-            <div className="verification-orb">
-              <span className="orb-ring orb-ring--one" />
-              <span className="orb-ring orb-ring--two" />
-              <span className="orb-core">
-                {isDone ? <Check size={28} /> : <LockKeyhole size={27} />}
-              </span>
-            </div>
-
-            <div className="payment-amount">
-              <span>{service.price.split(" ")[0]}</span>
-              <small>{service.price.split(" ")[1]}</small>
-            </div>
-          </div>
-
-          <p className="payment-detail">{content.detail}</p>
-
-          {stage === "unlocked" ? (
-            <div className="unlocked-response">
-              <span>
-                <FileText size={16} />
-                Provider response
-              </span>
-              <p>{service.response}</p>
-            </div>
-          ) : null}
-
-          <button
-            className="hold-button"
-            disabled={isBusy || isDone}
-            type="button"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                startPayment();
-              }
-            }}
-            onClick={startPayment}
-            onPointerDown={startPayment}
-            onPointerLeave={cancelHold}
-            onPointerUp={cancelHold}
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="x402-backdrop"
+          role="presentation"
+          onMouseDown={onClose}
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <motion.section
+            role="dialog"
+            aria-modal="true"
+            aria-label="x402 payment"
+            onMouseDown={(e) => e.stopPropagation()}
+            className="relative w-full max-w-[440px] rounded-2xl border border-border-default bg-surface-1 p-6 shadow-2xl"
+            style={{ ["--ws-c" as string]: accent }}
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 4 }}
+            transition={{ type: "spring", damping: 24, stiffness: 280 }}
           >
-            <span className="hold-button__fill" />
-            <span>{content.button}</span>
-          </button>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accent }} />
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-text-secondary truncate">
+                  {HEADER[stage]}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="w-8 h-8 grid place-items-center rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-          <p style={{ marginTop: 12, fontSize: ".68rem", lineHeight: 1.4, color: "var(--muted)", textAlign: "center", opacity: 0.85 }}>
-            Demo facilitator mode — the 402 handshake is simulated here. The production path verifies a real x402 facilitator / on-chain proof.
-            For the live gateway, see the <b>x402 Gateway</b> tab.
-          </p>
-        </div>
-      </section>
-    </div>
+            {/* Service row */}
+            <div className="flex items-start gap-3 rounded-xl border border-border-default bg-surface-2 p-3.5 mb-4">
+              <span
+                className="w-9 h-9 shrink-0 grid place-items-center rounded-lg"
+                style={{ background: accentSoft, color: accent }}
+              >
+                {WsIcon ? <WsIcon size={17} /> : <ServerCog size={17} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold leading-tight truncate">{svc.name}</div>
+                <div className="text-[11.5px] text-text-secondary mt-0.5 truncate">
+                  {svc.category} · {svc.network}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-extrabold leading-tight">{amount}</div>
+                {unit ? (
+                  <div className="text-[10px] text-text-muted font-bold uppercase tracking-wider">{unit}</div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Route: agent → provider */}
+            <div className="flex items-center gap-2 text-[11.5px] mb-5 min-w-0">
+              <span className="flex items-center gap-1.5 min-w-0">
+                <Bot size={13} className="text-text-muted shrink-0" />
+                <span className="font-bold truncate">{agent.name}</span>
+                <span className="font-mono text-text-muted shrink-0">{shortAddr(agent.wallet)}</span>
+              </span>
+              <ArrowRight size={13} className="text-text-muted shrink-0" />
+              <span className="flex items-center gap-1.5 min-w-0">
+                <ServerCog size={13} className="text-text-muted shrink-0" />
+                <span className="font-bold truncate">{svc.provider}</span>
+              </span>
+            </div>
+
+            {/* Stage body */}
+            {stage === "required" ? (
+              <>
+                <div className="text-[11px] text-text-muted mb-2.5">
+                  Pay once → the gateway verifies → the API response unlocks. One paid request, then the agent continues.
+                </div>
+                <motion.button
+                  type="button"
+                  onClick={pay}
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.985 }}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    height: 46, borderRadius: 12, border: "none", cursor: "pointer",
+                    background: accent, color: textOn(accent), fontSize: 14.5, fontWeight: 800,
+                    boxShadow: `0 10px 28px -10px ${accent}`,
+                  }}
+                >
+                  Pay {svc.price}
+                  <ArrowRight size={16} />
+                </motion.button>
+                <p className="mt-3 text-[10.5px] leading-relaxed text-text-muted text-center">
+                  {isOgRegistryConfigured()
+                    ? <>Connect MetaMask on 0G → this anchors the receipt on-chain via <b>AgentReceiptRegistry</b> (real tx, you'll get a chainscan link). No wallet → demo mode.</>
+                    : <>Demo facilitator mode — the x402 handshake is simulated. Set <b>VITE_0G_REGISTRY_ADDRESS</b> + connect a wallet for a real on-chain receipt; see the <b>x402 Gateway</b> tab.</>}
+                </p>
+              </>
+            ) : null}
+
+            {inProgress ? (
+              <div>
+                <div className="flex items-center gap-2 text-[12.5px] font-bold text-text-secondary mb-2.5">
+                  <Spinner size={14} />
+                  {stage === "paying" ? "Submitting payment proof…" : "Verifying receipt…"}
+                </div>
+                <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: accent }}
+                    initial={{ width: "8%" }}
+                    animate={{ width: stage === "verifying" ? "92%" : "46%" }}
+                    transition={{ duration: stage === "verifying" ? 0.9 : 0.6, ease: "easeInOut" }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {stage === "approved" ? (
+              <div className="flex items-center gap-3 rounded-xl border border-border-default bg-surface-2 p-3.5">
+                <CheckCircle2 size={20} style={{ color: accent }} />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-bold">{anchorTx ? "Anchored on 0G" : "Receipt verified"}</div>
+                  <div className="text-[11px] font-mono text-text-muted truncate">
+                    {anchorTx ? `${anchorTx.slice(0, 12)}…${anchorTx.slice(-6)}` : `${receiptId} · ${svc.network}`}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {stage === "unlocked" ? (
+              <div>
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary mb-2">
+                  <FileText size={13} /> Provider response
+                </div>
+                <pre
+                  className="mb-4"
+                  style={{
+                    maxHeight: 180, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, lineHeight: 1.55,
+                    background: "var(--surface-2, rgba(255,255,255,0.04))",
+                    border: "1px solid var(--border-default, rgba(255,255,255,0.1))",
+                    borderRadius: 8, padding: "9px 11px", margin: "0 0 16px",
+                  }}
+                >
+                  {svc.response}
+                </pre>
+                {anchorTx ? (
+                  <a
+                    href={ogExplorerTxUrl(anchorTx)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, fontSize: 12, fontWeight: 700, color: accent }}
+                  >
+                    <Link2 size={13} /> Receipt anchored on 0G — view tx <ExternalLink size={11} />
+                  </a>
+                ) : null}
+                <div className="flex gap-2">
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.015 }}
+                    whileTap={{ scale: 0.985 }}
+                    onClick={() => {
+                      onClose();
+                      if (workspace) {
+                        const tab = workspace.tabs.find((t) => /receipt/i.test(t)) ?? workspace.tabs[0] ?? "Overview";
+                        navigate(`/app/${workspace.id}/${slugifyTab(tab)}`);
+                      }
+                    }}
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", height: 40,
+                      borderRadius: 10, cursor: "pointer", background: "transparent",
+                      border: "1px solid var(--border-default, rgba(255,255,255,0.14))",
+                      color: "var(--text-secondary, #9aa)", fontSize: 13, fontWeight: 700,
+                    }}
+                  >
+                    View receipt
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.015 }}
+                    whileTap={{ scale: 0.985 }}
+                    onClick={onClose}
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", height: 40,
+                      borderRadius: 10, border: "none", cursor: "pointer",
+                      background: accent, color: textOn(accent), fontSize: 13, fontWeight: 800,
+                    }}
+                  >
+                    Close
+                  </motion.button>
+                </div>
+              </div>
+            ) : null}
+          </motion.section>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

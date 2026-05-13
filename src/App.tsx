@@ -40,7 +40,7 @@ export default function App() {
     setExtraServices((prev) => [...prev, service]);
   }, []);
 
-  const approvePayment = useCallback((service: Service) => {
+  const approvePayment = useCallback((service: Service, onchainTxHash?: string) => {
     setReceipts((prev) => {
       const workspaceId = service.workspaceIds[0];
       const agent = agentFor(workspaceId);
@@ -55,9 +55,11 @@ export default function App() {
         amount: service.priceUsd,
         currency: service.currency,
         network: service.network,
-        txHash: makeTxHash(),
+        txHash: onchainTxHash ?? makeTxHash(),
         status: "verified",
         createdAt: new Date().toISOString(),
+        kind: "x402.pay",
+        payload: onchainTxHash ? { onchainTxHash, x402: true } : { x402: true, demo: true },
       };
       return [receipt, ...prev];
     });

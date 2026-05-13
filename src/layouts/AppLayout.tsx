@@ -92,14 +92,17 @@ export function AppLayout() {
         </div>
 
         <div className="max-w-6xl mx-auto px-5 py-7 md:px-10 md:py-12">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-          >
-            <Outlet context={{ workspaceId: workspace.id } satisfies WorkspaceOutletContext} />
-          </motion.div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
+            >
+              <Outlet context={{ workspaceId: workspace.id } satisfies WorkspaceOutletContext} />
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 
@@ -107,7 +110,7 @@ export function AppLayout() {
         agent={agentFor(workspace.id)}
         service={selectedService}
         workspace={workspace}
-        onApproved={(svc) => approvePayment(svc)}
+        onApproved={(svc, tx) => approvePayment(svc, tx)}
         onClose={() => setSelectedService(null)}
       />
     </div>

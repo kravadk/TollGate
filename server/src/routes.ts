@@ -17,6 +17,7 @@
 import { Router, type Request, type Response } from "express";
 import { env, isProd } from "./env.js";
 import { uploadToOg } from "./og-upload.js";
+import { runOgInference } from "./og-compute.js";
 import {
   agentById,
   agents,
@@ -72,6 +73,21 @@ apiRouter.post("/og/upload", async (req: Request, res: Response) => {
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
+});
+
+// ─── 0G Compute inference (server-side, uses compute private key) ────────────
+
+apiRouter.post("/og/compute", async (req: Request, res: Response) => {
+  const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+  const model = typeof req.body?.model === "string" ? req.body.model : undefined;
+  if (!prompt) return res.status(400).json({ error: "prompt required" });
+  const result = await runOgInference(prompt, model);
+  if (!result.ok && result.reason === "compute_not_configured") {
+    return res.status(503).json({ ok: false, reason: "compute_not_configured" });
+  }
+  recordActivity("og.upload", "0g");
+  if (!result.ok) return res.status(502).json({ ok: false, reason: "error", message: result.message });
+  res.json(result);
 });
 
 // ─── Services ───────────────────────────────────────────────────────────────

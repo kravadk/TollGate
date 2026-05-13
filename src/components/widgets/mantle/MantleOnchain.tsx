@@ -9,6 +9,7 @@ import {
   isMantleIdentityConfigured, isMantleVaultConfigured, getMantleConfig,
   registerAgentIdentity, resolveAgentId, mantleExplorerTxUrl, mantleExplorerAddrUrl, mantleExplorerTokenUrl,
   vaultDeposit, vaultDeployToYield, vaultRecordDecision,
+  bindAgentMemoryRoot, readAgentMemoryRoot, isZeroBytes32,
 } from "../../../lib/mantle";
 import { ActionPanel } from "../ActionPanel";
 
@@ -48,6 +49,13 @@ export function MantleAgentIdentity({ workspace }: { workspace: Workspace }) {
   const [err, setErr] = useState<string | null>(null);
   const [last, setLast] = useState<{ agentId: number | null; txHash: string } | null>(null);
   const [existingId, setExistingId] = useState<number | null>(null);
+  // Memory-snapshot → iNFT brain
+  const [memAgentId, setMemAgentId] = useState("");
+  const [memRoot, setMemRoot] = useState("");
+  const [memBusy, setMemBusy] = useState(false);
+  const [memErr, setMemErr] = useState<string | null>(null);
+  const [memBound, setMemBound] = useState<{ agentId: number; root: string; txHash: string } | null>(null);
+  const [memCurrent, setMemCurrent] = useState<string | null>(null);
 
   useEffect(() => { if (wallet.address && !agentAddr) setAgentAddr(wallet.address); }, [wallet.address, agentAddr]);
 
@@ -81,6 +89,40 @@ export function MantleAgentIdentity({ workspace }: { workspace: Workspace }) {
     setErr(null);
     try { const id = await resolveAgentId(target); setExistingId(id); } catch { setExistingId(null); }
   };
+
+  const effectiveAgentId = (): number => {
+    const fromInput = parseInt(memAgentId, 10);
+    if (Number.isInteger(fromInput) && fromInput > 0) return fromInput;
+    if (last?.agentId != null && last.agentId > 0) return last.agentId;
+    if (existingId != null && existingId > 0) return existingId;
+    return NaN;
+  };
+  const bindMemory = async () => {
+    if (memBusy) return;
+    const id = effectiveAgentId();
+    if (!Number.isInteger(id)) { setMemErr("Enter the agentId (NFT token id) — register or resolve one above."); return; }
+    if (!/^0x[0-9a-fA-F]{1,64}$/.test(memRoot)) { setMemErr("Paste a hex memory root (0x…, ≤32 bytes) — copy it from a 0G Storage pin (0G workspace → Storage tab)."); return; }
+    setMemBusy(true); setMemErr(null);
+    try {
+      const res = await bindAgentMemoryRoot({ agentId: id, rootHex: memRoot });
+      setMemBound({ agentId: id, root: res.root, txHash: res.txHash });
+      setMemCurrent(res.root);
+      emitReceipt({
+        workspaceId: workspace.id, serviceName: "ERC-8004 · Bind agent memory root", amount: 0, currency: "MNT",
+        network: workspace.networks[0] ?? "mantle", kind: "mantle.identity.memory",
+        payload: { agentId: id, memoryRoot: res.root, txHash: res.txHash, contract: cfg.identityAddress, source: "0g-storage" },
+        status: "verified",
+      });
+    } catch (e) { setMemErr((e as { message?: string }).message ?? "Bind failed"); }
+    finally { setMemBusy(false); }
+  };
+  const readMemory = async () => {
+    const id = effectiveAgentId();
+    if (!Number.isInteger(id)) { setMemErr("Enter an agentId to read its memory root."); return; }
+    setMemErr(null);
+    try { setMemCurrent(await readAgentMemoryRoot(id)); } catch { setMemCurrent(null); }
+  };
+  const retrieveUrl = (root: string) => `https://storage.0g.ai/retrieve/${root.replace(/^0x/, "")}`;
 
   return (
     <ActionPanel
@@ -117,6 +159,41 @@ export function MantleAgentIdentity({ workspace }: { workspace: Workspace }) {
         </div>
       )}
       {err && <div style={{ marginBottom: 12, color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
+
+      {/* Memory snapshot → "intelligent NFT" brain on 0G Storage */}
+      <div style={{ marginTop: 2, marginBottom: 14, padding: "11px 13px", borderRadius: 11, border: "1px solid var(--line-2)", background: "var(--field)" }}>
+        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: "var(--muted)", marginBottom: 7, display: "flex", alignItems: "center", gap: 6 }}>
+          <Bolt width={12} height={12} /> Memory snapshot · agent brain on 0G Storage
+        </div>
+        <p style={{ margin: "0 0 9px", fontSize: ".76rem", color: "var(--muted)", lineHeight: 1.5 }}>
+          Pin the agent's working memory in the <b>0G workspace → Storage</b> tab, copy the <code style={code}>0x…</code> root, and bind it here. The identity NFT then points at a verifiable 0G Storage blob — an "intelligent NFT" whose brain lives on 0G.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 9, alignItems: "end" }}>
+          <label style={labelStyle}><span style={headStyle}>agentId</span>
+            <input value={memAgentId} onChange={(e) => setMemAgentId(e.currentTarget.value.replace(/[^0-9]/g, ""))} placeholder={last?.agentId != null ? String(last.agentId) : existingId ? String(existingId) : "#"} style={{ ...inputStyle, width: 84, fontVariantNumeric: "tabular-nums" }} />
+          </label>
+          <label style={labelStyle}><span style={headStyle}>0G Storage memory root</span>
+            <input value={memRoot} onChange={(e) => setMemRoot(e.currentTarget.value.trim())} placeholder="0x… (paste from a 0G Storage pin)" style={{ ...inputStyle, fontFamily: "var(--mono)", fontSize: ".74rem" }} />
+          </label>
+          <button className="btn btn-acc btn-sm" type="button" onClick={bindMemory} disabled={memBusy || !memRoot}>
+            {memBusy ? <><Loader2 size={12} className="wallet-spin" /> Binding…</> : <><BadgeCheck width={12} height={12} /> Bind brain</>}
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8, fontSize: ".74rem" }}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={readMemory}>Read current root</button>
+          {memCurrent != null && (isZeroBytes32(memCurrent)
+            ? <span style={{ color: "var(--muted)" }}>no memory bound yet</span>
+            : <span style={{ color: "var(--green)", fontWeight: 700, display: "inline-flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>brain&nbsp;<code style={code}>{SHORT(memCurrent)}</code> <a href={retrieveUrl(memCurrent)} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", gap: 3, alignItems: "center" }}>0G Storage <ExternalLink width={10} height={10} /></a></span>)}
+        </div>
+        {memBound && (
+          <div style={{ ...okStrip, marginTop: 9 }}>
+            <Check width={13} height={13} /> Bound agent <code style={code}>#{memBound.agentId}</code>'s brain → <code style={code}>{SHORT(memBound.root)}</code> ·{" "}
+            <a href={mantleExplorerTxUrl(memBound.txHash)} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", gap: 4, alignItems: "center" }}>tx {SHORT(memBound.txHash)} <ExternalLink width={11} height={11} /></a> ·{" "}
+            <a href={retrieveUrl(memBound.root)} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", gap: 4, alignItems: "center" }}>0G Storage blob <ExternalLink width={11} height={11} /></a>
+          </div>
+        )}
+        {memErr && <div style={{ marginTop: 8, color: "var(--red)", fontSize: ".74rem", fontWeight: 600 }}>{memErr}</div>}
+      </div>
 
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Registered identities · {history.length}</div>

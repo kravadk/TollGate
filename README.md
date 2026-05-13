@@ -84,13 +84,15 @@ Every workspace is the **same core** with a different reskin, demo data, network
 
 ### 0G Components Used
 
-| Component | How it's used |
-|---|---|
-| **0G Chain (mainnet)** | `AgentReceiptRegistry.record(receiptHash, payloadHash)` anchors every x402 receipt on-chain. Deployed at `0xF4BFd93061B160Fa376c7F66De207a00225B4e70`. |
-| **0G Storage** | Agent memory blobs (inference results, policy snapshots, checkpoints) are pinned via the 0G Storage indexer (`https://indexer-storage-turbo.0g.ai`) and returned as Merkle roots. |
-| **0G Compute** | Inference jobs are priced per-token via x402 — the `InferenceJobRunner` widget submits a job and receives a verifiable result hash. |
-| **OpenClaw** | The `OpenClawSkillConsole` registers skill manifests and orchestrates sealed TEE inference jobs (`0g.sealed.inference`), returning SGX/TDX attestation quotes. |
-| **Agent ID** | `AgentIdentityRegistry` (ERC-8004) is deployed on Mantle mainnet; the 0G workspace's **Agent Identity** tab demonstrates the same identity model for 0G agents. |
+| Component | How it's used | Real / demo |
+|---|---|---|
+| **0G Chain (mainnet)** | `AgentReceiptRegistry.record(receiptHash, payloadHash)` anchors x402 receipts on-chain — a real ethers tx from the connected wallet. Deployed & live at [`0xF4BFd93061B160Fa376c7F66De207a00225B4e70`](https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70). | ✅ **real** |
+| **0G Storage** | Agent memory blobs (snapshots, checkpoints, bulk pins) go through the server endpoint `POST /api/og/upload`, which uses `@0glabs/0g-ts-sdk` to compute a genuine 0G **Merkle root** and submit to the `FixedPriceFlow` contract. Falls back to a SHA-256 content hash if `OG_PRIVATE_KEY` isn't set. | ✅ **real** (with key) |
+| **0G Compute** | Inference jobs run on the **0G Compute Network** via `POST /api/og/compute` → the serving broker (`createZGComputeNetworkBroker`) picks a provider from `compute-marketplace.0g.ai`, fetches single-use request headers, calls the provider's OpenAI-compatible endpoint, then `processResponse()` settles & verifies on 0G. The `InferenceJobRunner` widget shows a `🟢 Live · 0G Compute` badge + provider/chatID/verified when `OG_COMPUTE_PRIVATE_KEY` is set; otherwise a `🟡 Demo` deterministic fallback so the UI never breaks. | ✅ **real** (with key) |
+| **x402 gateway** | `server/src/x402.ts` issues single-use, 5-min-expiry payment challenges and verifies the `X-PAYMENT` proof (challengeId, payTo, amount, asset, network) before unlocking — replay-safe. *Note: txHash in the proof is informational; on-chain settlement verification is a documented next step.* | ✅ challenge/proof real |
+| **MCP server** | `server/src/mcp.ts` exposes `list_services / get_service / pay_for_service / list_receipts / get_agent_policy` over JSON-RPC 2.0 at `POST /mcp` — any Claude-powered agent can use TollGate as a paid-API tool. | ✅ **real** |
+| **OpenClaw** | The `OpenClawSkillConsole` registers skill manifests and orchestrates inference jobs; "Sealed Inference" templates and the SGX/TDX attestation verdict are **demo** (deterministic, no real Intel IAS/PCCS round-trip — clearly labelled in-UI). | 🟡 demo |
+| **Agent ID** | `AgentIdentityRegistry` (ERC-8004 "Trustless Agents", ERC-721) is deployed on Mantle mainnet; the 0G workspace's **Agent Identity** tab demonstrates the same identity model for 0G agents. | ✅ contract real |
 
 ### 0G Hackathon Track Mapping
 
@@ -107,7 +109,7 @@ Every workspace is the **same core** with a different reskin, demo data, network
 | Network | Contract | Address | Deploy TX |
 |---|---|---|---|
 | **0G mainnet** (16661) | `AgentReceiptRegistry` | [`0xF4BFd93061B160Fa376c7F66De207a00225B4e70`](https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70) | [`0xe9ae97bb…3b167`](https://chainscan.0g.ai/tx/0xe9ae97bb7304d5a162e6d361a066f0492b7628076eb1b19bf35abf872bc3b167) |
-| **Mantle mainnet** (5000) | `AgentIdentityRegistry` (ERC-8004) | [`0xdA549367192a41c6e1a7eAa161e766d87d15606b`](https://explorer.mantle.xyz/address/0xdA549367192a41c6e1a7eAa161e766d87d15606b) | [`0x2e94b2…59bb7`](https://explorer.mantle.xyz/tx/0x2e94b240327c744fee8fa26b40c2555e3a91a44240eac45bdd33b87a3c659bb7) |
+| **Mantle mainnet** (5000) | `AgentIdentityRegistry` (ERC-8004 + `setMemoryRoot`) | [`0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB`](https://explorer.mantle.xyz/address/0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB) | [`0x28ee81…10fec`](https://explorer.mantle.xyz/tx/0x28ee81490e4469cfa02987d6219bb28ac78a552a2827e7df381b707a9ff10fec) |
 | **Mantle mainnet** (5000) | `AgentVault` | [`0xCbBcFc657787Fef2702ae6E35CA5a809a68480da`](https://explorer.mantle.xyz/address/0xCbBcFc657787Fef2702ae6E35CA5a809a68480da) | [`0xf4fc69…2efb7`](https://explorer.mantle.xyz/tx/0xf4fc694a3be287efaa8c854ffb6c0d8c1bd5f8ed225b1d2acd4169c06952efb7) |
 | **Arbitrum Sepolia** (421614) | `AgentEscrow` | [`0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7`](https://sepolia.arbiscan.io/address/0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7) | [`0x85549a…1ebc`](https://sepolia.arbiscan.io/tx/0x85549afe5523f25b39bdbf014d30b93a43a21fcce4be7be6e447e34965ee1ebc) |
 
@@ -134,6 +136,58 @@ Every workspace is the **same core** with a different reskin, demo data, network
 - **MCP (Model Context Protocol)** — `POST /mcp` (JSON-RPC 2.0, spec 2024-11-05) exposes `list_services`, `get_service`, `pay_for_service`, `list_receipts`, `get_agent_policy` so any Claude-powered agent can use TollGate as a reusable skill.
 - **Wallets** — EIP-1193 (MetaMask etc.) for connect, live balance, block, gas; per-workspace network hints.
 
+## Run TollGate as an MCP tool
+
+The gateway ships an MCP server (`server/src/mcp.ts`) so **any Claude-powered agent can pay for and consume TollGate's paid APIs as a tool** — no bespoke wiring. JSON-RPC 2.0 at `POST /mcp` (`GET /mcp` = capability discovery), MCP spec 2024-11-05.
+
+Tools exposed: `list_services` · `get_service` · `pay_for_service` (full x402 flow: mint challenge → pay → policy check → unlock + receipt) · `list_receipts` · `get_agent_policy`.
+
+Add it to Claude Desktop / any MCP client:
+
+```jsonc
+{
+  "mcpServers": {
+    "tollgate": { "url": "https://tollgate-1.onrender.com/mcp" }
+  }
+}
+```
+
+Or hit it directly:
+
+```bash
+# list available paid services on the 0G workspace
+curl -s -X POST https://tollgate-1.onrender.com/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_services","arguments":{"workspace":"0g"}}}'
+
+# pay for one and get the unlocked response + receipt
+curl -s -X POST https://tollgate-1.onrender.com/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pay_for_service","arguments":{"serviceId":"svc_0g_inference","agentId":"agent_0g_worker"}}}'
+```
+
+## Use TollGate from any app — `@tollgate/sdk`
+
+A tiny zero-dependency client (`packages/sdk/`) wraps the whole 402 → pay → unlock loop in one call. Browser, Node 18+, Bun, Deno, Workers.
+
+```ts
+import { fetchPaid } from "@tollgate/sdk";
+
+const res = await fetchPaid("svc_0g_inference", { agentId: "my-agent" });
+console.log(res.data);       // unlocked resource
+console.log(res.receiptId);  // receipt for this paid call
+```
+
+```ts
+import { createTollGate } from "@tollgate/sdk";
+const tg = createTollGate({ baseUrl: "http://localhost:8787", devBypass: true });
+await tg.listServices("0g");          // discover paid endpoints
+await tg.fetchPaid("svc_0g_storage"); // pay & unlock
+// production: pass a `proof` builder that does a real on-chain payment — see packages/sdk/README.md
+```
+
+Build it from source in this repo: `cd packages/sdk && npm install && npm run build`. Full API in [`packages/sdk/README.md`](packages/sdk/README.md).
+
 ## Demo
 
 - **Live frontend:** https://toll-gatee.vercel.app/
@@ -144,13 +198,14 @@ Every workspace is the **same core** with a different reskin, demo data, network
 - **X post:** _[link with #0GHackathon #BuildOn0G]_
 
 **3-minute judge path (0G track):**
-1. Open `/app/0g` → **"0G Agent Payment Router"**.
-2. **Storage & Memory** tab → paste any text → **"Pin to 0G Storage"** → get a real Merkle root from 0G Storage indexer.
+1. Open `/app/0g` → **"0G Agent Payment Router"**. The Overview leads with **"Demo flow"** — hit **"Run the demo"** to watch one agent go 402 → pay $0.03 USDC → **real 0G Compute** inference → receipt anchored on 0G mainnet, step by step.
+2. **Storage & Memory** tab → paste any text → **"Pin to 0G Storage"** → get a real Merkle root from 0G Storage indexer. In *Agent memory snapshot* mode, copy the `0x…` root — that's the agent's brain.
 3. Click **"Anchor on 0G"** → MetaMask opens on 0G mainnet (chain 16661) → confirm → see the tx on [chainscan.0g.ai](https://chainscan.0g.ai).
-4. **Compute** tab → **InferenceJobRunner** → select a model → "Run job ($0.03)" → x402 challenge issued → job result + receipt emitted.
-5. **TEE & Privacy** tab → **OpenClaw Skill Console** → choose "Sealed Inference" → "Run via OpenClaw" → TEE attestation quote returned.
-6. **Receipts** tab → see all paid calls listed with amounts, hashes, and 0G explorer links.
-7. **Agent Identity** tab → MantleAgentIdentity panel → "Register ERC-8004 identity" → on-chain identity NFT minted on Mantle mainnet.
+4. **Compute** tab → **InferenceJobRunner** → select a model → "Run job ($0.03)" → x402 challenge issued → real 0G Compute result (provider/chatID/verified) + receipt emitted (falls back to a labelled demo when `OG_COMPUTE_PRIVATE_KEY` is unset).
+5. **Trading Arena** tab → **"Agents pay agents"** → "Run the loop": a Strategist agent hires an Executor over HTTP 402 → the Executor pulls a BUY/SELL/HOLD signal from 0G Compute → it anchors the decision via `AgentVault.recordDecision` (real Mantle tx when the vault is configured). Three hops, three receipts.
+6. **TEE & Privacy** tab → **OpenClaw Skill Console** → choose "Sealed Inference" → "Run via OpenClaw" → TEE attestation quote returned. **Receipt proof verifier** → paste a receipt id → **"Sign with my wallet"** (real EIP-191) → recovers the signer → **"Anchor on 0G"** → **"Check on 0G"** → `AgentReceiptRegistry` confirms the record → "✓ cryptographically verified · payer-signed · anchored on 0G".
+7. **Receipts** tab → all paid calls listed with amounts, hashes, and 0G explorer links.
+8. **Agent Identity** tab → MantleAgentIdentity panel → "Register ERC-8004 identity" → on-chain identity NFT minted on Mantle mainnet → in **"Memory snapshot"**, paste the 0G Storage root from step 2 and **"Bind brain"** → the NFT now points at a verifiable 0G Storage blob (intelligent NFT).
 
 **Quick judge path (all tracks — 2 min):**
 1. `/app/liquify` → x402 Gateway → "Send unpaid request" → real `HTTP 402` → "Pay & retry" → `200 OK` + receipt.
@@ -248,13 +303,16 @@ benchmarking — every agent decision recorded on Mantle — and ② an ERC-8004
 **Deployed on Mantle mainnet (chainId 5000):**
 `AgentVault` at [`0xCbBcFc657787Fef2702ae6E35CA5a809a68480da`](https://explorer.mantle.xyz/address/0xCbBcFc657787Fef2702ae6E35CA5a809a68480da)
 (yield token = mETH `0xcDA86A2…0bb0`) and
-`AgentIdentityRegistry` at [`0xdA549367192a41c6e1a7eAa161e766d87d15606b`](https://explorer.mantle.xyz/address/0xdA549367192a41c6e1a7eAa161e766d87d15606b)
+`AgentIdentityRegistry` (with `setMemoryRoot`) at [`0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB`](https://explorer.mantle.xyz/address/0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB)
 — deploy txs [`0xf4fc69…2efb7`](https://explorer.mantle.xyz/tx/0xf4fc694a3be287efaa8c854ffb6c0d8c1bd5f8ed225b1d2acd4169c06952efb7) /
-[`0x2e94b2…59bb7`](https://explorer.mantle.xyz/tx/0x2e94b240327c744fee8fa26b40c2555e3a91a44240eac45bdd33b87a3c659bb7).
+[`0x28ee81…10fec`](https://explorer.mantle.xyz/tx/0x28ee81490e4469cfa02987d6219bb28ac78a552a2827e7df381b707a9ff10fec).
 
 - `contracts/AgentIdentityRegistry.sol` — ERC-8004-style identity registry implemented as an
-  ERC-721: `register(domain, agentAddress)` mints the agent's unique identity NFT; plus a light
-  on-chain reputation tally (`recordFeedback`). No admin, no funds held.
+  ERC-721: `register(domain, agentAddress)` mints the agent's unique identity NFT; a light
+  on-chain reputation tally (`recordFeedback`); and `setMemoryRoot(agentId, root)` — binds the
+  agent's **0G Storage memory-snapshot root** to its NFT (an "intelligent NFT" whose brain lives
+  on 0G Storage; pin the snapshot in the 0G workspace's Storage tab, then bind the root in the
+  Agents-tab "Memory snapshot" panel). No admin, no funds held.
 - `contracts/AgentVault.sol` — an AI-callable vault: `deposit()` parks idle MNT, `deployToYield(amount, strategyRef)`
   marks capital allocated to mETH, `recordDecision(decisionHash, contextHash)` anchors every agent
   decision on-chain (the benchmarking trail), `withdraw`/`unwind` reverse it. On Mantle mainnet the
@@ -309,7 +367,7 @@ is switched/added to the configured Arbitrum chain). Unset → that tab keeps th
 | `VITE_0G_CHAIN_ID` | `0x4115` (16661, 0G mainnet) | 0G chain id MetaMask must be on for anchoring. Hex or decimal. (`0x40da` = 16602 Galileo testnet.) |
 | `VITE_0G_EXPLORER` | `https://chainscan.0g.ai` | Block explorer base URL for the receipt links. |
 | `VITE_0G_STORAGE_INDEXER` | _(unset)_ | 0G Storage indexer HTTP endpoint. Set → the Pin widget shows real Merkle roots; unset → deterministic sha256-derived root, flagged "simulated". |
-| `VITE_MANTLE_IDENTITY_ADDRESS` | _(unset)_ | Deployed `AgentIdentityRegistry` (ERC-8004) address on Mantle. Set → enables the "ERC-8004 agent identity" panel. Live demo: `0xdA549367192a41c6e1a7eAa161e766d87d15606b` (Mantle mainnet); redeploy with `cd contracts && npm run deploy:mantle`. |
+| `VITE_MANTLE_IDENTITY_ADDRESS` | _(unset)_ | Deployed `AgentIdentityRegistry` (ERC-8004 + `setMemoryRoot`) address on Mantle. Set → enables the "ERC-8004 agent identity" panel including "Bind brain" (memory-root to 0G Storage). Live demo: `0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB` (Mantle mainnet, 2026-05-13 deploy); redeploy with `cd contracts && npm run deploy:mantle`. |
 | `VITE_MANTLE_VAULT_ADDRESS` | _(unset)_ | Deployed `AgentVault` address on Mantle. Set → enables the "AgentVault" panel (deposit / deployToYield / recordDecision). Live demo: `0xCbBcFc657787Fef2702ae6E35CA5a809a68480da` (Mantle mainnet). |
 | `VITE_MANTLE_CHAIN_ID` | `0x1388` (5000, Mantle mainnet) | Mantle chain id MetaMask must be on. Hex or decimal. (`0x138b` = 5003 Mantle Sepolia.) |
 | `VITE_MANTLE_EXPLORER` | `https://explorer.mantle.xyz` | Block explorer base URL for the Mantle links. |
@@ -365,6 +423,7 @@ src/                       frontend (React + Vite)
   data.ts                  workspaces, services, agents, seeded receipts
   wallet.tsx               EIP-1193 connect, live balance/block/gas, ERC-20 transfer
 server/                    Express x402 gateway + MCP + activity tracker (see server/README.md)
+packages/sdk/              @tollgate/sdk — zero-dep x402 client (fetchPaid / createTollGate); 402 → pay → unlock in one call (see packages/sdk/README.md)
 contracts/                 on-chain: 0G AgentReceiptRegistry + Mantle AgentIdentityRegistry (ERC-8004) + AgentVault + Arbitrum AgentEscrow + Hardhat + deploy scripts (see contracts/README.md)
 TRACK-PLAN.md              per-track gap analysis + build plan
 PROJECT-PLAYBOOK.md        product spec

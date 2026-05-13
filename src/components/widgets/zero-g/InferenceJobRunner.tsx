@@ -4,8 +4,9 @@ import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId, fnv1aHex, sha256Hex } from "../../../lib/util-hash";
-import { anchorReceiptOnChain, isOgRegistryConfigured, ogExplorerTxUrl } from "../../../lib/og";
+import { anchorReceiptOnChain, isOgRegistryConfigured, ogExplorerTxUrl, runOgInference } from "../../../lib/og";
 import { ActionPanel } from "../ActionPanel";
+import { WidgetMeta } from "../../ui/Motion";
 
 const MODELS = [
   { id: "risk-scorer-v2", name: "Risk Scorer v2", pricePerToken: 0.000004, base: 0.01 },
@@ -61,7 +62,8 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
   const [sealed, setSealed] = useState(true);
   const [strategyMode, setStrategyMode] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
-  const [result, setResult] = useState<{ id: string; response: string; sealed: boolean; attestationId?: string; sealHash?: string } | null>(null);
+  const [ogLive, setOgLive] = useState(false);
+  const [result, setResult] = useState<{ id: string; response: string; sealed: boolean; attestationId?: string; sealHash?: string; ogProvider?: string; ogChatID?: string; ogVerified?: boolean } | null>(null);
   const [batch, setBatch] = useLocalStore<BatchItem[]>("0g.inference.batch", []);
   const [batchRunning, setBatchRunning] = useState(false);
   const [anchoring, setAnchoring] = useState(false);
@@ -105,6 +107,36 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
     setStage("running");
     setAnchored(null);
     setAnchorErr(null);
+    // Try a REAL 0G Compute inference job first; fall back to the deterministic demo if the server has no compute key.
+    const og = await runOgInference(prompt, model.id);
+    if (og.ok) {
+      setOgLive(true);
+      let attestationId: string | undefined;
+      let sealHash: string | undefined;
+      if (sealed) {
+        const nonce = Math.random().toString(36).slice(2);
+        sealHash = await sha256Hex(prompt + model.id + nonce);
+        attestationId = "tee_" + hashId("tee", sealHash, 8);
+      }
+      const amount = Number((model.base + model.pricePerToken * tokens + (sealed ? 0.004 : 0)).toFixed(4));
+      const r = emitReceipt({
+        workspaceId: workspace.id,
+        serviceName: `0G Compute · ${og.model || model.name}${sealed ? " · sealed" : ""}`,
+        amount,
+        currency: "USDC",
+        network: workspace.networks[0] ?? "0g-testnet",
+        kind: "0g.inference",
+        payload: {
+          model: og.model || model.id, modelName: model.name,
+          prompt: sealed ? `enc:${sealHash?.slice(0, 16)}…` : prompt,
+          tokens, response: og.content, sealed, strategy: strategyMode, attestationId, sealHash,
+          ogCompute: true, provider: og.provider, chatID: og.chatID, verified: og.verified,
+        },
+      });
+      setResult({ id: r.id, response: og.content, sealed, attestationId, sealHash, ogProvider: og.provider, ogChatID: og.chatID, ogVerified: og.verified });
+      setStage("done");
+      return;
+    }
     await new Promise((r) => setTimeout(r, 480));
     const out = await runOne(model.id, prompt, tokens);
     setResult(out);
@@ -149,6 +181,14 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
         </button>
       }
     >
+      <WidgetMeta
+        live={ogLive || ogReady}
+        what={<>the model's response — a <b>real 0G Compute</b> inference if the server has <code>OG_COMPUTE_PRIVATE_KEY</code> (settled & verifiable on 0G), otherwise a deterministic demo. Plus a per-token receipt; sealed jobs add a <code>tee_…</code> attestation id for the TEE verifier.</>}
+        enter="pick a model, set token budget, type the prompt. Toggle “Sealed (TEE)” to encrypt the prompt before submit; “Add to batch” to queue several at once."
+        liveText={ogLive ? "running on 0G Compute Network — response settled & verified on 0G" : "0G registry configured — “Anchor receipt on 0G” sends a real tx"}
+        demoText="0G Compute not configured on the server — the response is a deterministic demo; set OG_COMPUTE_PRIVATE_KEY to run real inference, and VITE_0G_REGISTRY_ADDRESS to anchor receipts on-chain"
+      />
+
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Model</span>
@@ -211,6 +251,7 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
         <div style={{ marginTop: 4, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: ".72rem", color: "#1fb58a", fontWeight: 700, marginBottom: 6, flexWrap: "wrap" }}>
             <Check width={13} height={13} /> Job unlocked · receipt <code style={{ background: "rgba(31,181,138,.12)", padding: "1px 5px", borderRadius: 5 }}>{result.id}</code>
+            {result.ogProvider && <span style={{ color: "var(--accent-primary)", display: "inline-flex", alignItems: "center", gap: 4 }}><Bolt width={12} height={12} /> 0G Compute · {result.ogProvider.slice(0, 6)}…{result.ogProvider.slice(-4)} · {result.ogVerified ? "✓ verified & settled on 0G" : "settled on 0G"}{result.ogChatID ? ` · ${result.ogChatID.slice(0, 10)}` : ""}</span>}
             {result.sealed && <span style={{ color: "var(--accent-primary)", display: "inline-flex", alignItems: "center", gap: 4 }}><ShieldCheck width={12} height={12} /> sealed · TEE attestation <code style={{ background: "rgba(0,0,0,.12)", padding: "1px 5px", borderRadius: 5 }}>{result.attestationId}</code></span>}
           </div>
           <pre className="code-block" style={{ fontSize: ".74rem", maxHeight: 180, overflow: "auto" }}>{result.response}</pre>

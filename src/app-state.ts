@@ -18,7 +18,7 @@ export type EmitReceiptInput = {
 
 export type AppState = {
   receipts: Receipt[];
-  approvePayment: (service: Service) => void;
+  approvePayment: (service: Service, onchainTxHash?: string) => void;
   emitReceipt: (input: EmitReceiptInput) => Receipt;
   paidServiceIds: Record<string, string>;
   extraServices: Service[];

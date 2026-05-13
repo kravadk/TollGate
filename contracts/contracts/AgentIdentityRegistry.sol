@@ -27,9 +27,15 @@ contract AgentIdentityRegistry is ERC721 {
     mapping(uint256 => uint64) public feedbackCount;
     mapping(uint256 => uint64) public feedbackScoreSum;
 
+    // "Intelligent NFT" brain pointer: the 0G Storage Merkle root of this agent's
+    // latest memory snapshot. Empty (bytes32(0)) until the owner binds one. The blob
+    // itself lives on 0G Storage — this just makes the NFT's state point at it.
+    mapping(uint256 => bytes32) public memoryRoot;
+
     event AgentRegistered(uint256 indexed agentId, string agentDomain, address indexed agentAddress, address indexed owner);
     event AgentUpdated(uint256 indexed agentId, string agentDomain, address indexed agentAddress);
     event FeedbackRecorded(uint256 indexed agentId, address indexed from, uint8 score, bytes32 ref);
+    event MemoryRootUpdated(uint256 indexed agentId, bytes32 indexed root, address indexed by);
 
     error EmptyDomain();
     error ZeroAddress();
@@ -96,6 +102,15 @@ contract AgentIdentityRegistry is ERC721 {
             feedbackScoreSum[agentId] += score;
         }
         emit FeedbackRecorded(agentId, msg.sender, score, ref);
+    }
+
+    /// @notice Bind (or update) this agent's memory-snapshot pointer — the 0G Storage
+    ///         Merkle root of its latest brain dump. Only the NFT owner. Pass bytes32(0) to clear.
+    function setMemoryRoot(uint256 agentId, bytes32 root) external {
+        if (ownerOf(agentId) != msg.sender) revert NotAgentOwner(agentId);
+        memoryRoot[agentId] = root;
+        _info[agentId].updatedAt = uint64(block.timestamp);
+        emit MemoryRootUpdated(agentId, root, msg.sender);
     }
 
     // ── Views ────────────────────────────────────────────────────────────────

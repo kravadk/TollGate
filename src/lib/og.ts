@@ -12,7 +12,7 @@
  *
  * Nothing here breaks the build or the demo when the env is unset.
  */
-import { BrowserProvider, Contract } from "ethers";
+import { BrowserProvider, Contract, verifyMessage } from "ethers";
 import { sha256Hex } from "./util-hash";
 
 function env(key: string): string | undefined {
@@ -200,5 +200,91 @@ export async function uploadToOgStorage(content: string): Promise<StorageResult>
     };
   } catch {
     return fallback;
+  }
+}
+
+export type OgInferenceResult =
+  | { ok: true; content: string; model: string; provider: string; chatID: string; verified: boolean }
+  | { ok: false; reason: "compute_not_configured" | "no_server" | "error"; message?: string };
+
+/**
+ * Run a real inference job on the 0G Compute Network via POST /api/og/compute
+ * (server-side, uses OG_COMPUTE_PRIVATE_KEY). Returns { ok:false, reason } when
+ * the server has no compute key configured / is unreachable — callers fall back
+ * to their local demo path.
+ */
+export async function runOgInference(prompt: string, model?: string): Promise<OgInferenceResult> {
+  if (!API_BASE) return { ok: false, reason: "no_server" };
+  try {
+    const res = await fetch(`${API_BASE}/api/og/compute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, model }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (res.status === 503) return { ok: false, reason: "compute_not_configured" };
+    const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.ok && j["ok"] === true && typeof j["content"] === "string") {
+      return {
+        ok: true,
+        content: j["content"] as string,
+        model: typeof j["model"] === "string" ? j["model"] : "",
+        provider: typeof j["provider"] === "string" ? j["provider"] : "",
+        chatID: typeof j["chatID"] === "string" ? j["chatID"] : "",
+        verified: Boolean(j["verified"]),
+      };
+    }
+    return { ok: false, reason: "error", message: typeof j["message"] === "string" ? (j["message"] as string) : undefined };
+  } catch {
+    return { ok: false, reason: "error", message: "request failed / timed out" };
+  }
+}
+
+// ── Cryptographic receipts (W5: payer signs, anyone verifies) ───────────────
+// A receipt is "cryptographically verified" when (1) an EIP-191 signature over its
+// canonical message recovers to the payer's address, and (2) the same receipt hash
+// is recorded in AgentReceiptRegistry on 0G. Both checks run client-side.
+
+/** The canonical message a payer signs to attest to a receipt. */
+export function receiptSignMessage(receiptId: string): string {
+  return `TollGate receipt attestation\nreceipt: ${receiptId}`;
+}
+
+export type SignReceiptResult = { signature: string; signer: string; message: string };
+
+/** Prompt the connected wallet to EIP-191-sign a receipt's canonical message. Real signature. */
+export async function signReceipt(receiptId: string): Promise<SignReceiptResult> {
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const message = receiptSignMessage(receiptId);
+  const signature = await signer.signMessage(message);
+  const recovered = verifyMessage(message, signature);
+  return { signature, signer: recovered, message };
+}
+
+/** Recover the address that produced `signature` over the receipt's canonical message. */
+export function recoverReceiptSigner(receiptId: string, signature: string): string {
+  return verifyMessage(receiptSignMessage(receiptId), signature);
+}
+
+/** The bytes32 receipt hash used when anchoring a receipt by id (sha256 of the id). */
+export async function receiptHashFor(receiptId: string): Promise<string> {
+  return "0x" + (await sha256Hex(receiptId));
+}
+
+/** Read-only: is this receiptHash recorded in AgentReceiptRegistry on 0G? null = can't check (no registry / no wallet). */
+export async function isReceiptRecorded(receiptHashHex: string): Promise<boolean | null> {
+  const cfg = getOgConfig();
+  if (!cfg.registryAddress) return null;
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) return null;
+  try {
+    const provider = new BrowserProvider(eth as never);
+    const c = new Contract(cfg.registryAddress, REGISTRY_ABI, provider);
+    return Boolean(await c.isRecorded(to0xBytes32(receiptHashHex)));
+  } catch {
+    return null;
   }
 }

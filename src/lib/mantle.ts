@@ -65,6 +65,8 @@ const IDENTITY_ABI = [
   "function register(string agentDomain, address agentAddress) returns (uint256 agentId)",
   "function update(uint256 agentId, string newDomain, address newAgentAddress)",
   "function recordFeedback(uint256 agentId, uint8 score, bytes32 ref)",
+  "function setMemoryRoot(uint256 agentId, bytes32 root)",
+  "function memoryRoot(uint256) view returns (bytes32)",
   "function reputationOf(uint256 agentId) view returns (uint64 count, uint64 scoreSum)",
   "function resolveByAddress(address agentAddress) view returns (uint256)",
   "function resolveByDomain(string agentDomain) view returns (uint256)",
@@ -72,7 +74,14 @@ const IDENTITY_ABI = [
   "function ownerOf(uint256 tokenId) view returns (address)",
   "event AgentRegistered(uint256 indexed agentId, string agentDomain, address indexed agentAddress, address indexed owner)",
   "event FeedbackRecorded(uint256 indexed agentId, address indexed from, uint8 score, bytes32 ref)",
+  "event MemoryRootUpdated(uint256 indexed agentId, bytes32 indexed root, address indexed by)",
 ];
+
+const ZERO_BYTES32 = "0x" + "0".repeat(64);
+/** True for an empty / zero bytes32 (no memory root bound yet). */
+export function isZeroBytes32(v?: string | null): boolean {
+  return !v || /^(0x)?0*$/i.test(v);
+}
 
 const VAULT_ABI = [
   "function deposit() payable",
@@ -156,6 +165,36 @@ export async function recordAgentFeedback(params: { agentId: number; score: numb
   const tx = await c.recordFeedback(params.agentId, params.score, to0xBytes32(params.refHex));
   await tx.wait();
   return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+}
+
+/**
+ * Bind (or update) an agent identity NFT's memory-snapshot pointer — the 0G Storage
+ * Merkle root of the agent's latest brain dump. Makes the NFT "intelligent": its
+ * on-chain state points at a blob living on 0G Storage. Caller must own the NFT. Real tx.
+ */
+export async function bindAgentMemoryRoot(params: { agentId: number; rootHex: string }): Promise<{ txHash: string; explorerUrl: string; root: string }> {
+  const cfg = getMantleConfig();
+  if (!cfg.identityAddress) throw new Error("Mantle identity registry not configured (set VITE_MANTLE_IDENTITY_ADDRESS).");
+  if (!Number.isInteger(params.agentId) || params.agentId < 1) throw new Error("Enter a valid agentId (the NFT token id).");
+  const root = to0xBytes32(params.rootHex); // pads/validates; full 32-byte 0G root is a no-op
+  const signer = await getMantleSigner();
+  const c = new Contract(cfg.identityAddress, IDENTITY_ABI, signer);
+  const tx = await c.setMemoryRoot(params.agentId, root);
+  await tx.wait();
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string), root };
+}
+
+/** Read-only: the currently-bound 0G Storage memory root for an agent (ZERO if none). */
+export async function readAgentMemoryRoot(agentId: number): Promise<string> {
+  const cfg = getMantleConfig();
+  if (!cfg.identityAddress) return ZERO_BYTES32;
+  try {
+    const eth = getEth();
+    const provider = new BrowserProvider(eth as never);
+    const c = new Contract(cfg.identityAddress, IDENTITY_ABI, provider);
+    const v = (await c.memoryRoot(agentId)) as string;
+    return v || ZERO_BYTES32;
+  } catch { return ZERO_BYTES32; }
 }
 
 export type VaultTxResult = { txHash: string; explorerUrl: string; seq?: number | null };

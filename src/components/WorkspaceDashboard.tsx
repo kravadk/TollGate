@@ -35,7 +35,7 @@ import {
 import { ConnectWalletButton, WalletLiveStrip, useWallet, sendErc20Transfer, parseUnits } from "../wallet";
 import { useAppState } from "../app-state";
 import { useLocalStore } from "../lib/storage";
-import { deterministicScore, hashId, sha256Hex } from "../lib/util-hash";
+import { deterministicScore, hashId, sha256Hex, fnv1aHex } from "../lib/util-hash";
 import type { Agent, Receipt, ReceiptStatus, Service, Theme, Workspace, WorkspaceId } from "../types";
 import { serviceById, workspaceMetrics, makeServiceId, services as allCatalogServices, agents as allAgents } from "../data";
 import { BarSpark, WeekBars } from "../charts402";
@@ -73,6 +73,8 @@ import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed } from "./widg
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "./widgets/arbitrum-extra/ArbitrumExtraWidgets";
 import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "./widgets/qie-extra/QieExtraWidgets";
 import * as api from "../lib/api";
+import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl } from "../lib/og";
+import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../lib/mantle";
 
 type WorkspaceDashboardProps = {
   agent: Agent;
@@ -352,6 +354,200 @@ export function CreateServiceModal({
 // OVERVIEW
 // ---------------------------------------------------------------------------
 
+// The 0G "money shot": a guided 4-step walkthrough an agent goes through to pay
+// for a real 0G Compute inference and have the receipt anchored on 0G mainnet.
+// Step 3 calls the real `POST /api/og/compute`; if the server has no compute key
+// it falls back to a deterministic demo result (clearly labelled). Step 4 sends a
+// real AgentReceiptRegistry.record(...) tx when VITE_0G_REGISTRY_ADDRESS is set.
+const OG_DEMO_PROMPT =
+  "Score wallet 0x9f3c…ba1 for mixer adjacency over the last 30 days. Return a compact JSON risk verdict.";
+
+const OG_DEMO_STEPS: { title: string; body: string }[] = [
+  {
+    title: "An agent needs an inference",
+    body: "The Risk Scorer agent wants a wallet-risk verdict it can act on. It holds no API key — under x402 it just pays per call.",
+  },
+  {
+    title: "Pay $0.03 USDC over HTTP 402",
+    body: "The gateway answers 402 Payment Required; the agent signs a single-use payment and retries. Replay-safe, 5-minute expiry — no account, no key.",
+  },
+  {
+    title: "0G Compute runs the job",
+    body: "The paid request reaches the 0G Compute Network — a provider from compute-marketplace.0g.ai runs the model and the response is settled & verified on 0G.",
+  },
+  {
+    title: "Receipt anchored on 0G mainnet",
+    body: "The payment receipt's hash is written to AgentReceiptRegistry on 0G mainnet — a permanent, public proof the job was paid for and ran.",
+  },
+];
+
+function OgDemoFlow({
+  workspace,
+  onGoTab,
+  onGoReceipts,
+}: {
+  workspace: Workspace;
+  onGoTab: (m: string) => boolean;
+  onGoReceipts: () => void;
+}) {
+  const { emitReceipt } = useAppState();
+  const ogCfg = getOgConfig();
+  const registryReady = isOgRegistryConfigured();
+  const liveRegistryAddr = ogCfg.registryAddress ?? "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
+  // cursor = step currently being worked / awaiting action (0..3); -1 before start.
+  const [cursor, setCursor] = useState<number>(-1);
+  const [phase, setPhase] = useState<"idle" | "running" | "await-anchor" | "anchoring" | "done">("idle");
+  const [inf, setInf] = useState<{ live: boolean; content: string; provider: string; chatID: string; verified: boolean; note?: string } | null>(null);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<{ txHash: string; index: number | null } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  async function run() {
+    if (phase === "running" || phase === "anchoring") return;
+    setErr(null); setInf(null); setReceiptId(null); setAnchor(null);
+    setPhase("running");
+    setCursor(0); await sleep(750);
+    setCursor(1); await sleep(950);
+    setCursor(2);
+    const og = await runOgInference(OG_DEMO_PROMPT);
+    let content: string; let live = false; let provider = ""; let chatID = ""; let verified = false; let note: string | undefined;
+    if (og.ok) {
+      live = true; content = og.content; provider = og.provider; chatID = og.chatID; verified = og.verified;
+    } else {
+      note = og.reason === "compute_not_configured"
+        ? "deterministic demo — set OG_COMPUTE_PRIVATE_KEY on the server to run real 0G Compute"
+        : og.reason === "no_server"
+          ? "frontend-only build — point VITE_API_BASE at the gateway for live calls"
+          : "demo result (compute call failed)";
+      content = JSON.stringify({ riskScore: 73, labels: ["mixer-adjacent", "high-velocity"], confidence: "0.91", verdict: "review-before-transfer", note }, null, 2);
+    }
+    setInf({ live, content, provider, chatID, verified, note });
+    const r = emitReceipt({
+      workspaceId: workspace.id,
+      serviceName: live ? "0G Compute · guided demo" : "0G Compute · guided demo (demo)",
+      amount: 0.03,
+      currency: "USDC",
+      network: workspace.networks[0] ?? "0g-testnet",
+      kind: "0g.inference",
+      payload: { demoFlow: true, prompt: OG_DEMO_PROMPT, response: content, ogCompute: live, provider, chatID, verified },
+    });
+    setReceiptId(r.id);
+    await sleep(550);
+    setCursor(3);
+    setPhase("await-anchor");
+  }
+
+  async function anchorIt() {
+    if (!receiptId || !inf) return;
+    if (!registryReady) { setPhase("done"); return; }
+    setPhase("anchoring"); setErr(null);
+    try {
+      const receiptHashHex = await sha256Hex(receiptId + "|0g-demo-flow");
+      const payloadHashHex = await sha256Hex(inf.content);
+      const res = await anchorReceiptOnChain({ receiptHashHex, payloadHashHex });
+      setAnchor({ txHash: res.txHash, index: res.index ?? null });
+      setPhase("done");
+    } catch (e) {
+      setErr((e as { message?: string }).message ?? "Anchor failed");
+      setPhase("await-anchor");
+    }
+  }
+
+  function reset() { setCursor(-1); setPhase("idle"); setInf(null); setReceiptId(null); setAnchor(null); setErr(null); }
+
+  const stepState = (i: number): "done" | "live" | "todo" => {
+    if (i < cursor) return "done";
+    if (i === cursor) return phase === "done" ? "done" : "live";
+    return "todo";
+  };
+  const stepGlyph = (i: number) => {
+    const st = stepState(i);
+    if (st === "done") return <Check width={13} height={13} />;
+    if (st === "live" && phase === "running") return <Loader2 width={13} height={13} className="wallet-spin" />;
+    if (st === "live") return <Check width={13} height={13} />;
+    return i + 1;
+  };
+
+  return (
+    <div className="panel block ogdf mb">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft"><Bolt width={15} height={15} /></span>
+          <div>
+            <h3>Demo flow · an agent pays for a real 0G Compute job</h3>
+            <div className="sub">402 → pay $0.03 USDC → 0G Compute runs it → receipt anchored on 0G mainnet</div>
+          </div>
+        </div>
+        {phase === "idle"
+          ? <button className="btn btn-acc btn-sm" type="button" onClick={run}><Play width={13} height={13} /> Run the demo</button>
+          : <button className="btn btn-ghost btn-sm" type="button" onClick={reset} disabled={phase === "running" || phase === "anchoring"}><RefreshCw width={12} height={12} /> Reset</button>}
+      </div>
+
+      <div className="ogdf-steps">
+        {OG_DEMO_STEPS.map((s, i) => {
+          const st = stepState(i);
+          return (
+            <div key={i} className={`ogdf-step ogdf-step--${st}`}>
+              <div className="ogdf-step__num">{stepGlyph(i)}</div>
+              <div className="ogdf-step__body">
+                <div className="ogdf-step__title">{s.title}</div>
+                <div className="ogdf-step__desc">{s.body}</div>
+
+                {i === 2 && inf && (
+                  <div className="ogdf-out">
+                    <div className="ogdf-out__tag">
+                      <span className={`pill ${inf.live ? "ok" : "warn"}`}>{inf.live ? "Live · 0G Compute" : "Demo"}</span>
+                      {inf.live && inf.provider
+                        ? <span className="muted">provider {inf.provider.slice(0, 6)}…{inf.provider.slice(-4)}{inf.chatID ? ` · ${inf.chatID.slice(0, 10)}` : ""} · {inf.verified ? "✓ verified & settled on 0G" : "settled on 0G"}</span>
+                        : inf.note ? <span className="muted">{inf.note}</span> : null}
+                    </div>
+                    <pre className="code-block" style={{ fontSize: ".72rem", maxHeight: 130, overflow: "auto", marginTop: 6, marginBottom: 0 }}>{inf.content}</pre>
+                  </div>
+                )}
+
+                {i === 3 && (phase === "await-anchor" || phase === "anchoring" || phase === "done") && (
+                  <div className="ogdf-out">
+                    {receiptId && (
+                      <div className="muted" style={{ fontSize: ".74rem", marginBottom: 8 }}>
+                        Receipt <code style={{ background: "rgba(31,181,138,.12)", padding: "1px 5px", borderRadius: 5 }}>{receiptId}</code> · <a href="#" onClick={(e) => { e.preventDefault(); onGoReceipts(); }}>open in ledger →</a>
+                      </div>
+                    )}
+                    {anchor ? (
+                      <a href={ogExplorerTxUrl(anchor.txHash)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#1fb58a", fontWeight: 700, fontSize: ".78rem" }}>
+                        <LinkIco width={12} height={12} /> Anchored on 0G mainnet{anchor.index != null ? ` · #${anchor.index}` : ""} <ArrowUpRight width={12} height={12} />
+                      </a>
+                    ) : phase === "done" ? (
+                      <span className="muted" style={{ fontSize: ".74rem" }}>
+                        Receipt recorded locally. Set <code>VITE_0G_REGISTRY_ADDRESS</code> + connect a 0G-mainnet wallet to anchor it on-chain — <a href={ogExplorerAddrUrl(liveRegistryAddr)} target="_blank" rel="noreferrer">live registry on 0G ↗</a>
+                      </span>
+                    ) : (
+                      <button className="btn btn-sm" type="button" onClick={anchorIt} disabled={phase === "anchoring"}>
+                        {phase === "anchoring"
+                          ? <><Loader2 width={12} height={12} className="wallet-spin" /> Anchoring on 0G…</>
+                          : <><LinkIco width={12} height={12} /> {registryReady ? "Anchor receipt on 0G mainnet" : "Finish"}</>}
+                      </button>
+                    )}
+                    {err && <em style={{ color: "var(--red)", fontStyle: "normal", fontWeight: 600, marginLeft: 8, fontSize: ".74rem" }}>{err}</em>}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="ogdf-foot">
+        <span className="muted">
+          {registryReady ? <>Live on 0G mainnet · <a href={ogExplorerAddrUrl(liveRegistryAddr)} target="_blank" rel="noreferrer">AgentReceiptRegistry {liveRegistryAddr.slice(0, 6)}…{liveRegistryAddr.slice(-4)} ↗</a> · </> : null}
+          Same gateway, every chain — <a href="#" onClick={(e) => { e.preventDefault(); onGoTab("compute") || onGoTab("inference"); }}>open the full Compute tab →</a>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function OverviewPage({
   agent,
   receipts,
@@ -489,6 +685,8 @@ export function OverviewPage({
       >
         {workspace.pitch}
       </LedeHead>
+
+      {workspace.id === "0g" && <OgDemoFlow workspace={workspace} onGoTab={onGoTab} onGoReceipts={onGoReceipts} />}
 
       <div className="action-grid mb">
         {cards.map((c, i) => {
@@ -5461,6 +5659,177 @@ function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
 }
 
 // ---------------------------------------------------------------------------
+// 0G — "agents pay agents" loop (Hubble pattern: x402 + on-chain decision log)
+// A Strategist agent hires an Executor agent over HTTP 402; the Executor pulls a
+// trade signal from real 0G Compute, then anchors its decision via AgentVault
+// .recordDecision (real Mantle tx when the vault is configured, else simulated).
+// ---------------------------------------------------------------------------
+type A2AReceiptRow = { id: string; label: string; amount: number; currency: string };
+const A2A_STEPS: { title: string; body: React.ReactNode }[] = [
+  { title: "Strategist agent hires the Executor", body: <>The Strategist needs a trade made but can&apos;t run a model itself. It pays the Executor <b>$0.02 USDC</b> over HTTP&nbsp;402 — agent paying agent, no account, no key.</> },
+  { title: "Executor pulls a signal from 0G Compute", body: <>The hired Executor calls <b>0G Compute</b> for a BUY / SELL / HOLD verdict on mETH&nbsp;/&nbsp;USDY, paying <b>$0.03 USDC</b> per call.</> },
+  { title: "Executor anchors its decision on-chain", body: <>The Executor writes <code>recordDecision(hash(verdict), hash(context))</code> to <code>AgentVault</code> — a permanent benchmarking trail of what it decided and why.</> },
+];
+
+function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const vaultReady = isMantleVaultConfigured();
+  const STRATEGIST = "agid_0g_strategist";
+  const EXECUTOR = "agid_0g_executor";
+  const [cursor, setCursor] = useState(-1);
+  const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
+  const [signal, setSignal] = useState<{ verdict: "BUY" | "SELL" | "HOLD"; confidence: number; live: boolean; provider?: string } | null>(null);
+  const [decision, setDecision] = useState<{ txHash: string; onChain: boolean } | null>(null);
+  const [rows, setRows] = useState<A2AReceiptRow[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  const stepState = (i: number): "done" | "live" | "todo" => (i < cursor ? "done" : i === cursor ? (phase === "done" ? "done" : "live") : "todo");
+  const stepGlyph = (i: number) => {
+    const st = stepState(i);
+    if (st === "done") return <Check width={13} height={13} />;
+    if (st === "live" && phase === "running") return <Loader2 width={13} height={13} className="wallet-spin" />;
+    if (st === "live") return <Check width={13} height={13} />;
+    return i + 1;
+  };
+
+  async function run() {
+    if (phase === "running") return;
+    setErr(null); setSignal(null); setDecision(null); setRows([]);
+    setPhase("running");
+
+    // Step 1 — Strategist hires Executor (x402 micropayment)
+    setCursor(0);
+    let viaGateway = false;
+    if (api.API_ENABLED) {
+      try { await api.gatewayPay("svc_0g_inference", { agentId: STRATEGIST }); viaGateway = true; } catch { viaGateway = false; }
+    }
+    await sleep(viaGateway ? 250 : 650);
+    const r1 = emitReceipt({
+      workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Strategist hires Executor",
+      amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.a2a.hire", agentName: "Strategist agent",
+      payload: { from: STRATEGIST, to: EXECUTOR, via: viaGateway ? "x402-gateway" : "x402-simulated" },
+    });
+    setRows((p) => [...p, { id: r1.id, label: "Strategist → Executor · hire", amount: 0.02, currency: "USDC" }]);
+
+    // Step 2 — Executor fetches a signal from 0G Compute (real call, demo fallback)
+    setCursor(1);
+    const prompt = "Given the current mETH/USDY APY spread and 7-day momentum, answer with BUY, SELL or HOLD and a confidence 0-100. Return compact JSON {verdict, confidence}.";
+    const og = await runOgInference(prompt);
+    let verdict: "BUY" | "SELL" | "HOLD"; let confidence: number; let live = false; let provider: string | undefined;
+    if (og.ok) {
+      live = true; provider = og.provider;
+      const up = og.content.toUpperCase();
+      verdict = up.includes("SELL") ? "SELL" : up.includes("HOLD") ? "HOLD" : "BUY";
+      const cm = og.content.match(/(\d{1,3})/);
+      confidence = cm ? Math.min(100, Math.max(0, parseInt(cm[1], 10))) : 76;
+    } else {
+      const seed = parseInt(fnv1aHex(prompt + Date.now()), 16);
+      verdict = seed % 3 === 0 ? "SELL" : seed % 3 === 1 ? "HOLD" : "BUY";
+      confidence = 60 + (seed % 35);
+      await sleep(600);
+    }
+    setSignal({ verdict, confidence, live, provider });
+    const r2 = emitReceipt({
+      workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Agent-to-agent · 0G Compute signal · ${verdict}`,
+      amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.a2a.signal", agentName: "Executor agent",
+      payload: { from: EXECUTOR, to: "0g-compute", verdict, confidence, ogCompute: live, provider, prompt },
+    });
+    setRows((p) => [...p, { id: r2.id, label: `Executor → 0G Compute · ${verdict} ${confidence}%`, amount: 0.03, currency: "USDC" }]);
+
+    // Step 3 — Executor anchors its decision via AgentVault.recordDecision
+    setCursor(2);
+    const decisionHashHex = await sha256Hex(`${verdict}|${confidence}`);
+    const contextHashHex = await sha256Hex(prompt);
+    let txHash: string; let onChain = false;
+    if (vaultReady) {
+      try { const res = await vaultRecordDecision({ decisionHashHex, contextHashHex }); txHash = res.txHash; onChain = true; }
+      catch (e) { setErr((e as { message?: string }).message ?? "On-chain recordDecision failed — kept off-chain"); txHash = "0x" + decisionHashHex.slice(0, 64); }
+    } else {
+      await sleep(550); txHash = "0x" + decisionHashHex.slice(0, 64);
+    }
+    setDecision({ txHash, onChain });
+    const r3 = emitReceipt({
+      workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Executor records decision",
+      amount: 0, currency: onChain ? "MNT" : "USDC", network: onChain ? "mantle" : (workspace.networks[0] ?? "0g-testnet"), kind: "0g.a2a.execute",
+      agentName: "Executor agent", status: onChain ? "verified" : undefined,
+      payload: { from: EXECUTOR, verdict, confidence, decisionHash: decisionHashHex, contextHash: contextHashHex, txHash, onChain },
+    });
+    setRows((p) => [...p, { id: r3.id, label: onChain ? "Executor · recordDecision on Mantle" : "Executor · decision recorded", amount: 0, currency: onChain ? "MNT" : "USDC" }]);
+
+    setCursor(3);
+    setPhase("done");
+  }
+  function reset() { setCursor(-1); setPhase("idle"); setSignal(null); setDecision(null); setRows([]); setErr(null); }
+
+  const vColor = (v: "BUY" | "SELL" | "HOLD") => (v === "BUY" ? "#1fb58a" : v === "SELL" ? "#e63946" : "var(--muted)");
+
+  return (
+    <div className="panel block ogdf mb">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft"><Robot width={15} height={15} /></span>
+          <div>
+            <h3>Agents pay agents · Strategist hires Executor</h3>
+            <div className="sub">x402 micropayment → 0G Compute signal → decision anchored on-chain (AgentVault). Each hop a receipt.</div>
+          </div>
+        </div>
+        {phase === "idle"
+          ? <button className="btn btn-acc btn-sm" type="button" onClick={run}><Play width={13} height={13} /> Run the loop</button>
+          : <button className="btn btn-ghost btn-sm" type="button" onClick={reset} disabled={phase === "running"}><RefreshCw width={12} height={12} /> Reset</button>}
+      </div>
+
+      <div className="ogdf-steps">
+        {A2A_STEPS.map((s, i) => {
+          const st = stepState(i);
+          return (
+            <div key={i} className={`ogdf-step ogdf-step--${st}`}>
+              <div className="ogdf-step__num">{stepGlyph(i)}</div>
+              <div className="ogdf-step__body">
+                <div className="ogdf-step__title">{s.title}</div>
+                <div className="ogdf-step__desc">{s.body}</div>
+                {i === 1 && signal && (
+                  <div className="ogdf-out">
+                    <div className="ogdf-out__tag">
+                      <span className="pill" style={{ background: `color-mix(in srgb, ${vColor(signal.verdict)} 16%, transparent)`, color: vColor(signal.verdict), fontWeight: 800 }}>{signal.verdict} · {signal.confidence}%</span>
+                      <span className={`pill ${signal.live ? "ok" : "warn"}`}>{signal.live ? "Live · 0G Compute" : "Demo signal"}</span>
+                      {signal.live && signal.provider && <span className="muted">provider {signal.provider.slice(0, 6)}…{signal.provider.slice(-4)}</span>}
+                    </div>
+                  </div>
+                )}
+                {i === 2 && decision && (
+                  <div className="ogdf-out">
+                    {decision.onChain
+                      ? <a href={mantleExplorerTxUrl(decision.txHash)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#1fb58a", fontWeight: 700, fontSize: ".78rem" }}><LinkIco width={12} height={12} /> recordDecision on Mantle <ArrowUpRight width={12} height={12} /></a>
+                      : <span className="muted" style={{ fontSize: ".74rem" }}>Decision recorded (hash <code style={{ background: "rgba(0,0,0,.12)", padding: "1px 5px", borderRadius: 5 }}>{decision.txHash.slice(0, 12)}…</code>). Set <code>VITE_MANTLE_VAULT_ADDRESS</code> to anchor it via <code>AgentVault.recordDecision</code> on Mantle.</span>}
+                    {err && <em style={{ color: "var(--red)", fontStyle: "normal", fontWeight: 600, marginLeft: 8, fontSize: ".74rem" }}>{err}</em>}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {rows.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "4px 0 6px" }}>Receipts from this loop · {rows.length}</div>
+          <div className="svc-hist">
+            {rows.map((r) => (
+              <div className="svc-hist__row" key={r.id}>
+                <span className="svc-hist__dot" style={{ background: "var(--accent-primary)" }} />
+                <div className="svc-hist__main"><b>{r.label}</b><span>receipt <code>{r.id}</code></span></div>
+                <span className="svc-hist__amt">{r.amount > 0 ? `${r.amount.toFixed(2)} ${r.currency}` : "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 0G — Trading Arena (sealed inference for trading decisions, T2 track)
 // ---------------------------------------------------------------------------
 const OG_TRADE_PAIRS = ["mETH / USDY", "0G / ETH", "ETH / USDC", "BTC / ETH", "ARB / USDC"] as const;
@@ -6539,13 +6908,11 @@ export function ServiceTabPage({
       {(t.includes("compute") || t.includes("inference")) && <InferenceJobRunner workspace={workspace} />}
       {workspace.id === "0g" && (t.includes("compute") || t.includes("inference")) && <TeeAttestationVerifier workspace={workspace} />}
 
+      {workspace.id === "0g" && t.includes("trading") && <OgAgentToAgentLoop workspace={workspace} />}
       {workspace.id === "0g" && t.includes("trading") && <OgTradingArenaWidget workspace={workspace} />}
 
       {t.includes("storage") && <StoragePinWidget workspace={workspace} />}
-      {workspace.id === "0g" && t.includes("storage") && <OgStorageEstimator />}
       {workspace.id === "0g" && t.includes("storage") && <DePinBulkPin workspace={workspace} />}
-      {workspace.id === "0g" && t.includes("storage") && <AgentCheckpointWidget workspace={workspace} />}
-      {workspace.id === "0g" && t.includes("storage") && <OgSocialFeedWidget workspace={workspace} />}
 
       {t.includes("checkout") && <><CheckoutLinkBuilder workspace={workspace} /><SettlementSplitConfig workspace={workspace} /></>}
       {workspace.id === "qie" && t.includes("checkout") && <QiePosWidget workspace={workspace} />}
@@ -7230,7 +7597,7 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
             <div className="empty">Select a receipt to inspect it.</div>
           ) : (
             <div className="receipt-paper zig">
-              <div className="spread"><span className="label">AGENTPAY · RECEIPT</span><span className="num muted" style={{ fontSize: 12 }}>{sel.id}</span></div>
+              <div className="spread"><span className="label">TOLLGATE · RECEIPT</span><span className="num muted" style={{ fontSize: 12 }}>{sel.id}</span></div>
               <hr className="line" />
               <div className="kv"><span className="k">Service</span><span className="v">{sel.serviceName}</span></div>
               <div className="kv"><span className="k">Workspace</span><span className="v">{sel.workspaceId}</span></div>
@@ -7238,14 +7605,28 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
               <div className="kv"><span className="k">Payer</span><span className="v">{sel.payerWallet}</span></div>
               <div className="kv"><span className="k">Provider</span><span className="v">{sel.providerWallet}</span></div>
               <div className="kv"><span className="k">Network</span><span className="v">{sel.network}</span></div>
-              {sel.txHash ? <div className="kv"><span className="k">Tx hash</span><span className="v" style={{ color: "var(--blue)" }}>{sel.txHash}</span></div> : null}
+              {(() => {
+                const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
+                const realTx = typeof onchainTx === "string" && onchainTx.startsWith("0x") ? onchainTx : null;
+                return realTx ? (
+                  <div className="kv"><span className="k">Anchor tx</span><a className="v" href={`https://chainscan.0g.ai/tx/${realTx}`} target="_blank" rel="noreferrer" style={{ color: "#2f6bff", textDecoration: "underline" }}>{realTx.slice(0, 10)}…{realTx.slice(-4)} ↗</a></div>
+                ) : sel.txHash ? (
+                  <div className="kv"><span className="k">Tx hash</span><span className="v" style={{ color: "#9a9a9a", fontWeight: 600 }}>{sel.txHash} · demo</span></div>
+                ) : null;
+              })()}
               {sel.errorCode ? <div className="kv"><span className="k">Error</span><span className="v" style={{ color: "var(--red)" }}>{sel.errorCode}</span></div> : null}
               <div className="kv"><span className="k">Created</span><span className="v">{new Date(sel.createdAt).toLocaleString()}</span></div>
               <hr className="line" />
               <div className="spread" style={{ alignItems: "baseline" }}><span className="label">Amount</span><span className="num" style={{ fontSize: 22, fontWeight: 700 }}>{sel.amount.toFixed(2)} <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>{sel.currency}</span></span></div>
               <hr className="line" />
-              <div className="row sm muted" style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".03em" }}>
-                {sel.txHash ? <><Check width={12} height={12} style={{ color: "var(--green)" }} /> SETTLED · PROOF SINGLE-USE</> : <><X width={12} height={12} style={{ color: "var(--red)" }} /> NOT SETTLED</>}
+              <div className="row sm" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".03em", color: "#7a7a7a", lineHeight: 1.5 }}>
+                {(() => {
+                  const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
+                  const realTx = typeof onchainTx === "string" && onchainTx.startsWith("0x");
+                  return realTx
+                    ? <><Check width={12} height={12} style={{ color: "var(--green)" }} /> ANCHORED ON 0G · PROOF SINGLE-USE</>
+                    : <><Check width={12} height={12} style={{ color: "#d98f1c" }} /> DEMO RECEIPT · SIMULATED x402 HANDSHAKE — anchor it on-chain with the “Anchor on 0G” button on the Storage / Compute widgets</>;
+                })()}
               </div>
             </div>
           )}

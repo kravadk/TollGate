@@ -1,0 +1,29 @@
+{
+  "name": "@tollgate/sdk",
+  "version": "0.1.0",
+  "description": "Tiny zero-dependency client for x402 (HTTP 402) paid APIs — one call runs 402 → pay → unlock.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./src": "./index.ts"
+  },
+  "files": ["dist", "index.ts", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["x402", "http-402", "agent-payments", "ai-agents", "stablecoin", "tollgate", "0g"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -7,8 +7,9 @@ import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId, sha256Hex } from "../../../lib/util-hash";
-import { uploadToOgStorage, anchorReceiptOnChain, isOgRegistryConfigured } from "../../../lib/og";
+import { uploadToOgStorage, anchorReceiptOnChain, isOgRegistryConfigured, runOgInference } from "../../../lib/og";
 import { gatewayPay, API_ENABLED } from "../../../lib/api";
+import { WidgetMeta } from "../../ui/Motion";
 
 const hid = (s: string) => hashId("0g", s);
 const now = () => new Date().toLocaleTimeString();
@@ -71,33 +72,49 @@ export function OpenClawSkillConsole({ workspace }: { workspace: Workspace }) {
 
     const seed = tpl.name + prompt + Date.now();
     const jobId = "ocj_" + hid(seed);
-    let result: string;
+    let result: string = "";
     let serverPayload: unknown;
     let gatewayReal = false;
+    let ogReal = false;
 
-    // Attempt real x402 gateway call if API is enabled
-    if (API_ENABLED) {
-      setLog("x402 challenge issued · payment verifying…");
-      try {
-        const unlocked = await gatewayPay("svc_0g_inference", { agentId: "agent_0g_jobs" });
-        serverPayload = unlocked.data;
-        result = JSON.stringify(unlocked.data).slice(0, 120);
+    // Inference skills → try a REAL 0G Compute Network job first.
+    if (tpl.name === "Inference" || tpl.name === "Sealed Inference") {
+      setLog("Routing job to the 0G Compute Network…");
+      const og = await runOgInference(prompt);
+      if (og.ok) {
+        result = og.content.slice(0, 240);
+        serverPayload = { ogCompute: true, provider: og.provider, chatID: og.chatID, verified: og.verified, content: og.content };
         gatewayReal = true;
-        setLog("Gateway response received");
-      } catch {
-        setLog("Gateway unreachable — using simulated result");
+        ogReal = true;
+        setLog(`0G Compute · ${og.provider.slice(0, 10)}…${og.verified ? " · verified" : ""}`);
+      }
+    }
+
+    // Fallback: real x402 gateway call (if the server is up), else deterministic demo.
+    if (!ogReal) {
+      if (API_ENABLED) {
+        setLog("x402 challenge issued · payment verifying…");
+        try {
+          const unlocked = await gatewayPay("svc_0g_inference", { agentId: "agent_0g_jobs" });
+          serverPayload = unlocked.data;
+          result = JSON.stringify(unlocked.data).slice(0, 120);
+          gatewayReal = true;
+          setLog("Gateway response received");
+        } catch {
+          setLog("Gateway unreachable — using simulated result");
+          const score = Math.round(deterministicScore(seed, 30, 95));
+          result = tpl.name === "Storage Pin"
+            ? `{ "blobId": "og_${hid(seed)}", "size": 184 }`
+            : `{ "riskScore": ${score}, "confidence": 0.${Math.round(deterministicScore(seed, 80, 96))} }`;
+        }
+      } else {
+        setLog("x402 challenge issued · payment verifying…");
+        await new Promise((r) => setTimeout(r, 600));
         const score = Math.round(deterministicScore(seed, 30, 95));
         result = tpl.name === "Storage Pin"
           ? `{ "blobId": "og_${hid(seed)}", "size": 184 }`
           : `{ "riskScore": ${score}, "confidence": 0.${Math.round(deterministicScore(seed, 80, 96))} }`;
       }
-    } else {
-      setLog("x402 challenge issued · payment verifying…");
-      await new Promise((r) => setTimeout(r, 600));
-      const score = Math.round(deterministicScore(seed, 30, 95));
-      result = tpl.name === "Storage Pin"
-        ? `{ "blobId": "og_${hid(seed)}", "size": 184 }`
-        : `{ "riskScore": ${score}, "confidence": 0.${Math.round(deterministicScore(seed, 80, 96))} }`;
     }
 
     emitReceipt({
@@ -112,11 +129,11 @@ export function OpenClawSkillConsole({ workspace }: { workspace: Workspace }) {
       network: "0g-testnet",
       status: "verified",
       kind: "0g.openclaw",
-      payload: { skill: tpl.manifest.skill, prompt, result, jobId, gatewayReal },
+      payload: { skill: tpl.manifest.skill, prompt, result, jobId, gatewayReal, ogCompute: ogReal },
     });
 
     setJobs((prev) => [{ id: jobId, skill: tpl.manifest.skill, status: "done", result, ts: now(), serverPayload, gatewayReal }, ...prev.slice(0, 9)]);
-    setLog(`Done · ${jobId}${gatewayReal ? " (real gateway)" : " (simulated)"}`);
+    setLog(`Done · ${jobId}${ogReal ? " (0G Compute)" : gatewayReal ? " (real gateway)" : " (simulated)"}`);
     setBusy(false);
   }
 
@@ -134,6 +151,14 @@ export function OpenClawSkillConsole({ workspace }: { workspace: Workspace }) {
           <div><h3>OpenClaw Skill Console</h3><div className="sub">Register an OpenClaw skill manifest · orchestrate on 0G · pay per call with x402</div></div>
         </div>
       </div>
+
+      <WidgetMeta
+        live={API_ENABLED}
+        what="a result for the chosen skill (risk score / blob id …) plus a settled x402 receipt — find it in the Receipts tab."
+        enter="pick a skill template (left), optionally open & edit its manifest JSON, then type the job prompt / payload."
+        liveText="x402 server reachable — this is a real gateway call"
+        demoText="no x402 server reachable — result is a deterministic demo; run server/ and set VITE_API_BASE for a real gateway response"
+      />
 
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {SKILL_TEMPLATES.map((t, i) => (
@@ -263,6 +288,13 @@ export function TeeAttestationVerifier({ workspace }: { workspace: Workspace }) 
         </div>
       </div>
 
+      <WidgetMeta
+        live={false}
+        what="a pass/fail verdict for the TEE quote + MRENCLAVE + report JSON, and a $0.02 verify receipt in the Receipts tab."
+        enter={<>pick the TEE type, then paste an attestation ID from a sealed-inference receipt (run “Sealed Inference” in the OpenClaw console above) — or leave the demo value <code>att_9f2c1a7be4d03f5a</code>.</>}
+        demoText="no real Intel IAS / PCCS round-trip here — the verdict is derived deterministically from the ID so the demo is reproducible"
+      />
+
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {TEE_TYPES.map((t, i) => (
           <button key={t} className={"pill click" + (teeType === i ? " on" : "")} type="button" onClick={() => setTeeType(i)}>{t}</button>
@@ -270,8 +302,8 @@ export function TeeAttestationVerifier({ workspace }: { workspace: Workspace }) 
       </div>
 
       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "var(--text-secondary)" }}>
-        Attestation ID (from sealed inference receipt)
-        <input value={attId} onChange={(e) => setAttId(e.currentTarget.value)} style={{ fontFamily: "monospace", background: "var(--code-bg)", border: "1px solid var(--border-subtle)", borderRadius: 6, padding: "6px 8px", color: "var(--text-primary)", fontSize: 12 }} />
+        Attestation ID (from a sealed-inference receipt)
+        <input value={attId} onChange={(e) => setAttId(e.currentTarget.value)} placeholder="att_…  (paste from a sealed-inference receipt, or keep the demo value)" style={{ fontFamily: "monospace", background: "var(--code-bg)", border: "1px solid var(--border-subtle)", borderRadius: 6, padding: "6px 8px", color: "var(--text-primary)", fontSize: 12 }} />
       </label>
 
       <button className="btn btn-acc btn-sm" type="button" onClick={verify} disabled={busy} style={{ marginTop: 10 }}>
@@ -398,6 +430,14 @@ export function DePinBulkPin({ workspace }: { workspace: Workspace }) {
           <div><h3>DePIN Bulk Storage Pin</h3><div className="sub">Pin N agent-memory blobs to 0G Storage in one batch · $0.05 / blob</div></div>
         </div>
       </div>
+
+      <WidgetMeta
+        live={isOgRegistryConfigured()}
+        what="N content-hashed blobs pinned to 0G Storage (real Merkle roots if VITE_0G_STORAGE_INDEXER is set, otherwise simulated roots), one batch receipt, and — if a registry is configured — an on-chain anchor tx for the batch."
+        enter="set how many blobs to pin and the size of each (bytes); the blobs themselves are auto-generated stubs."
+        liveText="0G registry configured — the “Anchor batch on 0G” button sends a real tx"
+        demoText="no 0G registry configured — pins still compute real hashes, but anchoring is disabled until VITE_0G_REGISTRY_ADDRESS is set"
+      />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "var(--text-secondary)" }}>
