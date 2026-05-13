@@ -79,7 +79,7 @@ export function NetworkBanner() {
 
   if (dismissed) return null;
   if (!chainHex) return null; // no wallet connected
-  if (!expected) return null; // workspace has no required chain (eazo, berkeley…)
+  if (!expected) return null; // workspace has no required chain (berkeley, sui…)
   if (eqHex(chainHex, expected.hex) && !accountChanged) return null;
 
   const isAccountBanner = accountChanged && eqHex(chainHex, expected.hex);

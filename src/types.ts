@@ -8,7 +8,6 @@ export type WorkspaceId =
   | "qie"
   | "arbitrum"
   | "mantle"
-  | "eazo"
   | "berkeley"
   | "deepsurge"
   | "sui"

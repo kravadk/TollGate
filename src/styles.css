@@ -9819,14 +9819,6 @@ select.twk-field {
   mask-image: radial-gradient(circle at 72% 38%, black, transparent 62%);
   -webkit-mask-image: radial-gradient(circle at 72% 38%, black, transparent 62%);
 }
-
-/* eazo — calm aurora blobs */
-.ws-bg--eazo .ws-bg__pattern { display: none; }
-.ws-bg--eazo .ws-bg__halo { display: none; }
-.ws-bg--eazo .ws-bg__aurora { filter: blur(110px); opacity: .22; border-radius: 42% 58% 55% 45% / 50% 45% 55% 50%; }
-.ws-bg--eazo .ws-bg__aurora--1 { width: 50%; aspect-ratio: 1.4; top: -12%; left: 4%; background: color-mix(in srgb, var(--accent-primary) 32%, transparent); animation: ws-morph 18s ease-in-out infinite; }
-.ws-bg--eazo .ws-bg__aurora--2 { width: 42%; aspect-ratio: 1.2; bottom: -6%; right: 6%; background: color-mix(in srgb, var(--accent-secondary, var(--accent-primary)) 26%, transparent); animation: ws-morph 23s ease-in-out infinite reverse; }
-.ws-bg--eazo .ws-bg__aurora--3 { width: 34%; aspect-ratio: 1; top: 32%; right: 22%; background: color-mix(in srgb, var(--accent-primary) 18%, transparent); animation: ws-morph 27s ease-in-out infinite; }
 @keyframes ws-morph {
   0%, 100% { transform: translate(0, 0) scale(1); border-radius: 42% 58% 55% 45% / 50% 45% 55% 50%; }
   33%      { transform: translate(4%, -3%) scale(1.08); border-radius: 56% 44% 40% 60% / 45% 56% 50% 50%; }

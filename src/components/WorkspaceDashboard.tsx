@@ -699,14 +699,6 @@ export function OverviewPage({
       { ico: Zap, title: "mETH / USDY yield signals", sub: "rotation suggestion · rebalance band", onClick: () => onGoTab("meth") || onGoTab("yield") },
       { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} paid strategy runs`, onClick: () => onGoReceipts() },
     ],
-    eazo: [
-      { light: true, ico: Wallet, title: "Manage your subscriptions", sub: "pause · cancel · weekly budget bar", onClick: () => onGoTab("subscription") },
-      { ico: Robot, title: "Life Companion agent settings", sub: "daily limit $3 · auto-pay on", onClick: () => onGoTab("companion") || onGoTab("agent") },
-      { ico: FileText, title: "Get today's finance brief", sub: "balances · upcoming charges · alerts", onClick: () => def && onOpenPayment(def) },
-      { ico: Shield, title: "Review approval rules", sub: "what the agent may buy · spend caps", onClick: () => onGoTab("approval") },
-      { ico: Code, title: "Life OS automations", sub: "reminders · daily ops · companion triggers", onClick: () => onGoTab("life") || onGoTab("os") },
-      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} companion actions`, onClick: () => onGoReceipts() },
-    ],
     berkeley: [
       { light: true, ico: Play, title: "Run the 402 playground", sub: "watch request → 402 → pay → unlock live", onClick: () => onGoTab("playground") },
       { ico: Bolt, title: "Try a paid tool", sub: `${services.length} tools available · pay per call`, onClick: () => onGoTab("paid tool") || onGoTab("catalog") },
@@ -4161,61 +4153,6 @@ function RouteRiskScorer({ workspace }: { workspace: Workspace }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// EAZO — Subscription manager
-// ---------------------------------------------------------------------------
-type EazoSub = { id: string; name: string; category: string; priceUsd: number; cycle: string; status: "active" | "paused" };
-const INITIAL_SUBS: EazoSub[] = [
-  { id: "sub_01", name: "Spotify Premium", category: "entertainment", priceUsd: 9.99, cycle: "monthly", status: "active" },
-  { id: "sub_02", name: "ChatGPT Plus", category: "ai-tools", priceUsd: 20.00, cycle: "monthly", status: "active" },
-  { id: "sub_03", name: "Figma Professional", category: "design", priceUsd: 15.00, cycle: "monthly", status: "active" },
-  { id: "sub_04", name: "GitHub Copilot", category: "dev-tools", priceUsd: 10.00, cycle: "monthly", status: "paused" },
-  { id: "sub_05", name: "1Password", category: "security", priceUsd: 2.99, cycle: "monthly", status: "active" },
-];
-
-function EazoSubManager({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [subs, setSubs] = useLocalStore<EazoSub[]>("eazo.subs", INITIAL_SUBS);
-  const BUDGET = 80;
-  const weeklyUsed = subs.filter((s) => s.status === "active").reduce((t, s) => t + s.priceUsd / 4.33, 0);
-  const budgetPct = Math.min(100, (weeklyUsed / BUDGET) * 100);
-
-  const toggle = (id: string) => {
-    setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: s.status === "active" ? "paused" : "active" } : s));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Subscription Optimizer API", amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "eazo.sub.toggle", payload: { subId: id } });
-  };
-  const remove = (id: string) => setSubs((prev) => prev.filter((s) => s.id !== id));
-
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head"><div className="ttl"><span className="sq soft"><Wallet width={15} height={15} /></span><div><h3>Subscription manager</h3><div className="sub">companion manages these — pause or cancel within weekly budget</div></div></div></div>
-      <div style={{ padding: "0 16px 10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".72rem", fontWeight: 700, marginBottom: 6 }}>
-          <span style={{ color: "var(--muted)" }}>WEEKLY BUDGET</span>
-          <span>{fmtUsd(weeklyUsed)} <span style={{ color: "var(--muted)" }}>/ {fmtUsd(BUDGET)}</span></span>
-        </div>
-        <div className="pbar"><i style={{ width: `${budgetPct}%`, background: budgetPct > 85 ? "var(--red)" : "var(--acc-grad)" }} /></div>
-      </div>
-      <div className="svc-table__scroll"><table className="svc-table">
-        <thead><tr><th>Subscription</th><th>Category</th><th>Price / wk</th><th>Status</th><th aria-label="actions" /></tr></thead>
-        <tbody>
-          {subs.map((s) => (
-            <tr key={s.id}>
-              <td><b>{s.name}</b></td>
-              <td className="muted">{s.category}</td>
-              <td className="svc-table__num">{fmtUsd(s.priceUsd / 4.33)}</td>
-              <td>{badgeFor(s.status === "active" ? "active" : "paused")}</td>
-              <td><span className="row sm" style={{ gap: 6 }}>
-                <button className="btn btn-sm" type="button" title={s.status === "active" ? "Pause" : "Resume"} onClick={() => toggle(s.id)}>{s.status === "active" ? <Pause size={12} /> : <Play size={12} />}</button>
-                <button className="btn btn-sm" type="button" title="Remove" onClick={() => remove(s.id)} style={{ color: "var(--red)" }}><Trash2 size={12} /></button>
-              </span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table></div>
-    </div>
-  );
-}
 
 type SigBlock = { title: string; sub: string; headers: string[]; rows: (string | number)[][]; accentCol?: number };
 const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
@@ -4268,16 +4205,6 @@ const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
       ["T-BILL 90D", "4.83%", "84 days", "+0.1%"],
       ["RWA basket A-", "6.2%", "120 days", "-0.3%"],
     ], accentCol: 3,
-  },
-  eazo: {
-    title: "Companion this week", sub: "what the agent is managing inside your weekly budget",
-    headers: ["Item", "Value", "Status", "Note"],
-    rows: [
-      ["Managed subscriptions", "7", "2 flagged", "pause suggested"],
-      ["Weekly budget used", "$18.40 / $21.00", "on track", "88%"],
-      ["Actions pending approval", "1", "waiting", "tool purchase $0.05"],
-      ["Estimated saved / mo", "$14.50", "from audits", "3 actions"],
-    ], accentCol: 2,
   },
   berkeley: {
     title: "Toolbox", sub: "the paid tools the playground agent can call",
@@ -5471,84 +5398,6 @@ function AlertSubscriptions({ workspace }: { workspace: Workspace }) {
 }
 
 // ---------------------------------------------------------------------------
-// EAZO — Companion chat (AI Companion tab, conversational surface)
-// ---------------------------------------------------------------------------
-type ChatMsg = { role: "user" | "companion"; text: string; ts: string };
-const COMPANION_RESPONSES: Record<string, { plan: string[]; fee: number }> = {
-  default: { plan: ["Analyse your spending pattern", "Identify inactive subscriptions", "Propose 3 actions to reduce cost"], fee: 0.05 },
-  spend: { plan: ["Pull receipts from last 30d", "Cluster by category (SaaS / DeFi / Household)", "Flag any anomalies above your approval threshold"], fee: 0.05 },
-  sub: { plan: ["List all active subscriptions", "Score each by last-used date", "Draft cancellation for the lowest-value ones"], fee: 0.04 },
-  budget: { plan: ["Read your weekly cap setting", "Project spend for the rest of the month", "Alert if any single category exceeds 40% of cap"], fee: 0.03 },
-  tool: { plan: ["Search available AI tools in the catalog", "Filter by your approval rules", "Purchase the best match and return the access key"], fee: 0.08 },
-  save: { plan: ["Compare current vs cheapest equivalent plans", "Negotiate auto-renew discounts where available", "Show projected savings over 3 months"], fee: 0.05 },
-};
-function matchResponse(goal: string) {
-  const g = goal.toLowerCase();
-  if (g.includes("spend") || g.includes("cost") || g.includes("how much")) return COMPANION_RESPONSES.spend!;
-  if (g.includes("sub") || g.includes("cancel") || g.includes("subscription")) return COMPANION_RESPONSES.sub!;
-  if (g.includes("budget") || g.includes("cap") || g.includes("limit")) return COMPANION_RESPONSES.budget!;
-  if (g.includes("tool") || g.includes("buy") || g.includes("purchase")) return COMPANION_RESPONSES.tool!;
-  if (g.includes("save") || g.includes("cut") || g.includes("reduce") || g.includes("cheaper")) return COMPANION_RESPONSES.save!;
-  return COMPANION_RESPONSES.default!;
-}
-function EazoChatPanel({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
-  const [msgs, setMsgs] = useLocalStore<ChatMsg[]>("eazo.chat.msgs", []);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [pendingPlan, setPendingPlan] = useState<{ plan: string[]; fee: number; goal: string } | null>(null);
-  const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const send = async () => {
-    const goal = input.trim(); if (!goal) return;
-    setInput(""); setBusy(true);
-    const userMsg: ChatMsg = { role: "user", text: goal, ts: now() };
-    setMsgs((m) => [...m, userMsg]);
-    await new Promise((r) => setTimeout(r, 700));
-    const resp = matchResponse(goal);
-    const companionMsg: ChatMsg = { role: "companion", text: `Here's my plan:\n• ${resp.plan.join("\n• ")}`, ts: now() };
-    setMsgs((m) => [...m, companionMsg]);
-    setPendingPlan({ ...resp, goal });
-    setBusy(false);
-  };
-  const execute = () => {
-    if (!pendingPlan) return;
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_eazo_brief", serviceName: "Companion · Execute plan", amount: pendingPlan.fee, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "eazo.companion.approve", payload: { goal: pendingPlan.goal, steps: pendingPlan.plan } });
-    const doneMsg: ChatMsg = { role: "companion", text: `Done ✓ — executed ${pendingPlan.plan.length} steps. Receipt saved.`, ts: now() };
-    setMsgs((m) => [...m, doneMsg]);
-    setPendingPlan(null);
-  };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Robot width={15} height={15} /></span><div><h3>Companion chat</h3><div className="sub">type a goal → companion proposes a plan → approve to execute (receipt issued)</div></div></div>
-        {msgs.length > 0 && <button className="btn btn-ghost btn-sm" type="button" onClick={() => { setMsgs([]); setPendingPlan(null); }}>Clear</button>}
-      </div>
-      <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 8, maxHeight: 280, overflowY: "auto" }}>
-        {msgs.length === 0 && <div className="muted sm" style={{ padding: "8px 0" }}>Say something like "cut my subscription spend 30%" or "find me the best AI coding tool".</div>}
-        {msgs.map((m, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth: "80%", padding: "8px 12px", borderRadius: m.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px", background: m.role === "user" ? "var(--accent-primary)" : "var(--bg-2)", color: m.role === "user" ? "#fff" : "var(--ink)", fontSize: ".82rem", whiteSpace: "pre-wrap", border: "1px solid var(--line-2)" }}>{m.text}</div>
-            <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>{m.ts}</span>
-          </div>
-        ))}
-        {busy && <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)", fontSize: ".8rem" }}><Loader2 size={12} className="wallet-spin" /> Companion is thinking…</div>}
-      </div>
-      {pendingPlan && (
-        <div style={{ margin: "8px 16px", padding: "10px 14px", borderRadius: 12, border: "1px solid var(--line-2)", background: "var(--bg-2)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ flex: 1, fontSize: ".8rem", color: "var(--muted)" }}>Ready to execute · <b>${pendingPlan.fee.toFixed(2)} USDC</b></span>
-          <button className="btn btn-acc btn-sm" type="button" onClick={execute}><Check width={12} height={12} /> Approve &amp; execute</button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setPendingPlan(null)}><X width={12} height={12} /> Dismiss</button>
-        </div>
-      )}
-      <div style={{ padding: "8px 16px 14px", display: "flex", gap: 8 }}>
-        <input value={input} onChange={(e) => setInput(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Enter" && !busy) send(); }} placeholder='e.g. "cut my subscription spend 30%"' style={{ flex: 1, padding: "8px 12px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
-        <button className="btn btn-acc btn-sm" type="button" onClick={send} disabled={busy || !input.trim()}>{busy ? <Loader2 size={13} className="wallet-spin" /> : <Bolt width={13} height={13} />} Send</button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // 0G — Compute Kanban (Queued → Running → Verified job board)
 // ---------------------------------------------------------------------------
 type KanbanJob = { id: string; model: string; promptSnippet: string; cost: number; latencyMs: number; attestationId?: string; status: "queued" | "running" | "verified"; ts: string };
@@ -6370,86 +6219,6 @@ function ArbitrumStylusDeployPanel({ workspace }: { workspace: Workspace }) {
 }
 
 // ---------------------------------------------------------------------------
-// EAZO — Tool Purchase Console (AI Companion tab)
-// ---------------------------------------------------------------------------
-const AI_TOOL_CATALOG = [
-  { id: "tool_copilot", name: "GitHub Copilot Pro", desc: "AI code completion for your agent scripts", category: "dev", priceUsdc: 0.19, planLabel: "daily seat" },
-  { id: "tool_perplexity", name: "Perplexity AI Pro", desc: "Real-time web search & citations for research tasks", category: "search", priceUsdc: 0.08, planLabel: "query bundle" },
-  { id: "tool_midjourney", name: "Midjourney v7 API", desc: "Generate images for reports and presentations", category: "creative", priceUsdc: 0.12, planLabel: "10 images" },
-  { id: "tool_claude_api", name: "Claude API · Haiku", desc: "Fast cheap LLM calls for companion sub-tasks", category: "llm", priceUsdc: 0.04, planLabel: "1K tokens" },
-  { id: "tool_zapier", name: "Zapier AI Actions", desc: "Connect companion to 6 000+ SaaS services", category: "automation", priceUsdc: 0.15, planLabel: "100 zaps" },
-] as const;
-type PurchasedTool = { id: string; toolId: string; name: string; priceUsdc: number; receiptId: string; ts: string };
-function EazoToolConsole({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [purchases, setPurchases] = useLocalStore<PurchasedTool[]>("eazo.tool.purchases", []);
-  const [buying, setBuying] = useState<string | null>(null);
-  const weekAgo = Date.now() - 7 * 24 * 3600e3;
-  const thisWeek = purchases.filter((p) => new Date(p.ts).getTime() > weekAgo);
-  const buy = async (tool: typeof AI_TOOL_CATALOG[number]) => {
-    if (buying) return;
-    setBuying(tool.id);
-    await new Promise((r) => setTimeout(r, 500));
-    const r = emitReceipt({
-      workspaceId: workspace.id, serviceId: "svc_eazo_toolbuy",
-      serviceName: `Tool · ${tool.name}`, amount: tool.priceUsdc,
-      currency: "USDC", network: workspace.networks[0] ?? "base-sepolia",
-      kind: "eazo.tool.purchase", payload: { toolId: tool.id, name: tool.name, plan: tool.planLabel },
-    });
-    const p: PurchasedTool = { id: "pt_" + hashId("ez", tool.id + Date.now(), 8), toolId: tool.id, name: tool.name, priceUsdc: tool.priceUsdc, receiptId: r.id, ts: new Date().toISOString() };
-    setPurchases((prev) => [p, ...prev].slice(0, 50));
-    setBuying(null);
-  };
-  const catColor: Record<string, string> = { dev: "#4F46E5", search: "#0EA5E9", creative: "#EC4899", llm: "#8B5CF6", automation: "#F59E0B" };
-  const spentWeek = thisWeek.reduce((s, p) => s + p.priceUsdc, 0);
-  const toolReceiptsThisWeek = receipts.filter((r) => r.workspaceId === "eazo" && r.kind === "eazo.tool.purchase" && new Date(r.createdAt ?? "").getTime() > weekAgo);
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><ShoppingCart width={15} height={15} /></span><div><h3>AI Tool store</h3><div className="sub">companion buys access to paid AI tools within your budget · every purchase issues a receipt</div></div></div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-          <span style={{ fontSize: ".72rem", fontWeight: 800, color: "var(--accent-primary)" }}>${spentWeek.toFixed(2)}</span>
-          <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>spent this week</span>
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px 12px" }}>
-        {AI_TOOL_CATALOG.map((tool) => {
-          const alreadyBought = purchases.some((p) => p.toolId === tool.id && new Date(p.ts).getTime() > weekAgo);
-          const color = catColor[tool.category] ?? "var(--accent-primary)";
-          return (
-            <div key={tool.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 11, border: "1px solid var(--line-2)", background: "var(--bg-2)" }}>
-              <span className="pill" style={{ background: color + "22", color, fontSize: ".68rem", flex: "none" }}>{tool.category}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: ".84rem", fontWeight: 700 }}>{tool.name}</div>
-                <div style={{ fontSize: ".72rem", color: "var(--muted)", marginTop: 1 }}>{tool.desc} · <em style={{ fontStyle: "normal", color: "var(--muted)", fontSize: ".68rem" }}>{tool.planLabel}</em></div>
-              </div>
-              <span style={{ fontWeight: 800, fontSize: ".84rem", flex: "none" }}>${tool.priceUsdc.toFixed(2)}</span>
-              {alreadyBought ? (
-                <span className="pill ok" style={{ flex: "none", fontSize: ".7rem" }}>Active</span>
-              ) : (
-                <button className="btn btn-acc btn-sm" type="button" onClick={() => buy(tool)} disabled={!!buying} style={{ flex: "none" }}>
-                  {buying === tool.id ? <Loader2 size={12} className="wallet-spin" /> : <Bolt width={12} height={12} />} Buy
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {toolReceiptsThisWeek.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0 8px" }}>Purchased this week · {toolReceiptsThisWeek.length}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {toolReceiptsThisWeek.map((r) => (
-              <span key={r.id} className="pill" style={{ fontSize: ".7rem", background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)" }}>{(r.payload as { name?: string })?.name ?? r.serviceName}</span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // BERKELEY — Build-a-tool wizard (Playground tab)
 // ---------------------------------------------------------------------------
 type PublishedTool = { id: string; name: string; priceUsdc: number; inputSchema: string; desc: string; calls: number; ts: string };
@@ -6746,197 +6515,6 @@ function LiveTickerBoard({ workspace }: { workspace: Workspace }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// EAZO — AI Companion panel (AI Companion tab)
-// ---------------------------------------------------------------------------
-const EAZO_SUGGESTIONS = [
-  { id: "cancel_spotify", text: "Cancel Spotify — $9.99/mo, no plays in 3 months", fee: 0, kindNote: "cancellation" },
-  { id: "renew_claude", text: "Renew Claude Pro — $20/mo, expires tomorrow, used daily", fee: 20, kindNote: "renewal" },
-  { id: "alert_opensea", text: "⚠ Unusual: an unlimited USDC approval to a new OpenSea contract — revoke?", fee: 0, kindNote: "security" },
-  { id: "reorder_coffee", text: "Reorder coffee subscription — runs out in 4 days", fee: 18, kindNote: "household" },
-  { id: "downgrade_icloud", text: "Downgrade iCloud 2TB → 200GB — using 71GB", fee: 0, kindNote: "downsize" },
-] as const;
-function EazoCompanionPanel({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [done, setDone] = useLocalStore<Record<string, "approved" | "dismissed">>("eazo.companion", {});
-  const today = new Date().toDateString();
-  const approvedToday = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "eazo.companion.approve" && new Date(r.createdAt).toDateString() === today).length, [receipts, workspace.id, today]);
-  const recent = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "eazo.companion.approve").slice(0, 6), [receipts, workspace.id]);
-  const pending = EAZO_SUGGESTIONS.filter((s) => !done[s.id]);
-  const approve = (s: typeof EAZO_SUGGESTIONS[number]) => {
-    setDone((d) => ({ ...d, [s.id]: "approved" }));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Eazo Companion · " + s.kindNote, amount: s.fee, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "eazo.companion.approve", payload: { suggestion: s.id, text: s.text, kindNote: s.kindNote } });
-  };
-  const dismiss = (s: typeof EAZO_SUGGESTIONS[number]) => setDone((d) => ({ ...d, [s.id]: "dismissed" }));
-  const reset = () => setDone({});
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Robot width={15} height={15} /></span><div><h3>Your companion wants to…</h3><div className="sub">the AI companion proposes actions inside your budget — approve to execute (with a receipt) or dismiss · {approvedToday} approved today</div></div></div>
-        {Object.keys(done).length > 0 && <button className="btn btn-ghost btn-sm" type="button" onClick={reset}>Reset suggestions</button>}
-      </div>
-      <div style={{ padding: "0 16px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-        {pending.length === 0 && <div className="muted sm" style={{ padding: "8px 0" }}>All caught up — no pending suggestions. Reset to replay them.</div>}
-        {pending.map((s) => (
-          <div key={s.id} className="row sm" style={{ gap: 10, padding: "9px 12px", borderRadius: 11, border: "1px solid var(--line-2)", background: "var(--bg-2)" }}>
-            <span style={{ flex: 1, fontSize: ".82rem" }}>{s.text}</span>
-            {s.fee > 0 && <span className="pill" style={{ background: "color-mix(in srgb, var(--accent-primary) 12%, transparent)", color: "var(--accent-primary)", flex: "none" }}>${s.fee.toFixed(2)}</span>}
-            <button className="btn btn-acc btn-sm" type="button" onClick={() => approve(s)}><Check width={12} height={12} /> Approve</button>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => dismiss(s)}><X width={12} height={12} /> Dismiss</button>
-          </div>
-        ))}
-      </div>
-      {recent.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recently approved · {recent.length}</div>
-          <div className="svc-hist">{recent.map((r) => { const p = (r.payload ?? {}) as { text?: string }; return (
-            <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: "#1fb58a" }} /><div className="svc-hist__main"><b>{p.text}</b><span>{new Date(r.createdAt).toLocaleTimeString()}</span></div>{r.amount > 0 ? <span className="svc-hist__amt">{r.amount.toFixed(2)}</span> : <span className="pill ok">done</span>}</div>
-          ); })}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// EAZO — Budget tracker (Personal Budget tab)
-// ---------------------------------------------------------------------------
-function EazoBudgetTracker({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [budget, setBudget] = useLocalStore<{ capUsd: number }>("eazo.budget", { capUsd: 50 });
-  const [saved, setSaved] = useState(false);
-  const wsReceipts = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id), [receipts, workspace.id]);
-  const weekData = SVC_WEEK.map((label, i) => ({ label, value: Math.round((hashPct(`${workspace.id}|spend|${i}`, 0.05, 1) * (budget.capUsd / 7) + (wsReceipts.length ? wsReceipts.filter((_, j) => j % 7 === i).reduce((s, r) => s + r.amount, 0) : 0)) * 100) / 100 }));
-  const spentWeek = weekData.reduce((s, x) => s + x.value, 0);
-  const over = spentWeek > budget.capUsd;
-  const save = () => { emitReceipt({ workspaceId: workspace.id, serviceName: "Eazo Budget · Cap", amount: 0, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "eazo.budget.cap", payload: { capUsd: budget.capUsd } }); setSaved(true); setTimeout(() => setSaved(false), 1600); };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head"><div className="ttl"><span className="sq soft"><Wallet width={15} height={15} /></span><div><h3>Weekly budget</h3><div className="sub">set the cap your companion can never cross · spend this week is reconstructed from receipts</div></div></div></div>
-      <div style={{ padding: "0 16px 12px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 220 }}>
-          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Weekly cap: <b style={{ color: "var(--ink)" }}>${budget.capUsd}</b></span>
-          <input type="range" min={10} max={300} step={5} value={budget.capUsd} onChange={(e) => setBudget({ capUsd: Number(e.currentTarget.value) })} style={{ accentColor: "var(--accent-primary)" }} />
-        </label>
-        <button className="btn btn-acc btn-sm" type="button" onClick={save}>{saved ? <><Check width={12} height={12} /> Saved</> : "Save cap"}</button>
-      </div>
-      <div style={{ padding: "0 16px 12px" }}>
-        <WeekBars data={weekData} avgLabel={`${fmtUsd(spentWeek)} this week · cap ${fmtUsd(budget.capUsd)}`} />
-        <div style={{ marginTop: 8, padding: "7px 12px", borderRadius: 10, background: over ? "color-mix(in srgb, var(--red) 12%, transparent)" : "color-mix(in srgb, var(--green) 12%, transparent)", color: over ? "var(--red)" : "var(--green)", fontSize: ".78rem", fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }}>
-          {over ? <><X width={13} height={13} /> Over budget — companion purchases are paused until next week</> : <><Check width={13} height={13} /> Within budget — {fmtUsd(Math.max(0, budget.capUsd - spentWeek))} headroom left</>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// EAZO — Approval rules (Approvals tab)
-// ---------------------------------------------------------------------------
-type EazoApprovals = { mayBuyTools: boolean; mayPaySubs: boolean; mayBuyHousehold: boolean; maxPerPurchase: number; requireApprovalOver: number };
-const EAZO_CATS = ["AI tool", "Subscription", "Household", "Other"] as const;
-function EazoApprovalRules({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [rules, setRules] = useLocalStore<EazoApprovals>("eazo.approvals", { mayBuyTools: true, mayPaySubs: true, mayBuyHousehold: true, maxPerPurchase: 25, requireApprovalOver: 10 });
-  const [testCat, setTestCat] = useState<typeof EAZO_CATS[number]>("AI tool");
-  const [testAmt, setTestAmt] = useState("8");
-  const [testRes, setTestRes] = useState<{ ok: boolean; reason: string } | null>(null);
-  const [published, setPublished] = useState(false);
-  const publishes = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "eazo.approval.publish").slice(0, 5), [receipts, workspace.id]);
-  const set = <K extends keyof EazoApprovals>(k: K, v: EazoApprovals[K]) => setRules((r) => ({ ...r, [k]: v }));
-  const publish = () => { emitReceipt({ workspaceId: workspace.id, serviceName: "Eazo Approval Rules · Publish", amount: 0, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "eazo.approval.publish", payload: { ...rules } }); setPublished(true); setTimeout(() => setPublished(false), 1600); };
-  const test = () => {
-    const amt = parseFloat(testAmt) || 0;
-    let ok = true, reason = "Allowed — companion may execute";
-    if (testCat === "AI tool" && !rules.mayBuyTools) { ok = false; reason = "AI-tool purchases are disabled"; }
-    else if (testCat === "Subscription" && !rules.mayPaySubs) { ok = false; reason = "subscription payments are disabled"; }
-    else if (testCat === "Household" && !rules.mayBuyHousehold) { ok = false; reason = "household purchases are disabled"; }
-    else if (amt > rules.maxPerPurchase) { ok = false; reason = `$${amt} exceeds max-per-purchase $${rules.maxPerPurchase}`; }
-    else if (amt > rules.requireApprovalOver) { ok = false; reason = `$${amt} > $${rules.requireApprovalOver} — needs your explicit approval`; }
-    setTestRes({ ok, reason });
-  };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Approval rules</h3><div className="sub">what the companion may buy, from whom, for how much — published rules are enforced on every purchase</div></div></div>
-        <button className="btn btn-acc btn-sm" type="button" onClick={publish}>{published ? <><Check width={12} height={12} /> Published</> : "Publish rules"}</button>
-      </div>
-      <div style={{ padding: "0 16px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
-        <label className="row sm" style={{ gap: 8, fontSize: ".82rem", cursor: "pointer" }}><input type="checkbox" checked={rules.mayBuyTools} onChange={(e) => set("mayBuyTools", e.currentTarget.checked)} /> Companion may buy AI tools</label>
-        <label className="row sm" style={{ gap: 8, fontSize: ".82rem", cursor: "pointer" }}><input type="checkbox" checked={rules.mayPaySubs} onChange={(e) => set("mayPaySubs", e.currentTarget.checked)} /> Companion may pay subscriptions</label>
-        <label className="row sm" style={{ gap: 8, fontSize: ".82rem", cursor: "pointer" }}><input type="checkbox" checked={rules.mayBuyHousehold} onChange={(e) => set("mayBuyHousehold", e.currentTarget.checked)} /> Companion may buy household items</label>
-        <div className="row sm" style={{ gap: 14, flexWrap: "wrap" }}>
-          <label className="row sm" style={{ gap: 6, fontSize: ".8rem" }}>Max per purchase $ <input value={String(rules.maxPerPurchase)} onChange={(e) => set("maxPerPurchase", parseFloat(e.currentTarget.value) || 0)} inputMode="decimal" style={{ width: 70, padding: "6px 8px", borderRadius: 7, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem" }} /></label>
-          <label className="row sm" style={{ gap: 6, fontSize: ".8rem" }}>Require my approval over $ <input value={String(rules.requireApprovalOver)} onChange={(e) => set("requireApprovalOver", parseFloat(e.currentTarget.value) || 0)} inputMode="decimal" style={{ width: 70, padding: "6px 8px", borderRadius: 7, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem" }} /></label>
-        </div>
-      </div>
-      <div style={{ margin: "0 16px 14px", padding: "10px 14px", borderRadius: 12, border: "1px solid var(--line-2)", background: "var(--field)" }}>
-        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", marginBottom: 8 }}>Test a purchase against the rules</div>
-        <div className="row sm" style={{ gap: 8, flexWrap: "wrap" }}>
-          <select value={testCat} onChange={(e) => setTestCat(e.currentTarget.value as typeof testCat)} style={{ padding: "7px 9px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem" }}>{EAZO_CATS.map((c) => <option key={c}>{c}</option>)}</select>
-          <input value={testAmt} onChange={(e) => setTestAmt(e.currentTarget.value)} inputMode="decimal" placeholder="amount" style={{ width: 80, padding: "7px 9px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".8rem" }} />
-          <button className="btn btn-sm" type="button" onClick={test}>Evaluate</button>
-        </div>
-        {testRes && <div style={{ marginTop: 8, padding: "7px 12px", borderRadius: 10, background: `color-mix(in srgb, ${testRes.ok ? "var(--green)" : "var(--red)"} 12%, transparent)`, color: testRes.ok ? "var(--green)" : "var(--red)", fontSize: ".78rem", fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }}>{testRes.ok ? <Check width={13} height={13} /> : <X width={13} height={13} />} {testRes.ok ? "ALLOWED" : "BLOCKED"} — {testRes.reason}</div>}
-      </div>
-      {publishes.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent rule changes · {publishes.length}</div>
-          <div className="svc-hist">{publishes.map((r) => { const p = (r.payload ?? {}) as EazoApprovals; return (
-            <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: "var(--accent-primary)" }} /><div className="svc-hist__main"><b>max ${p.maxPerPurchase} · approval over ${p.requireApprovalOver}</b><span>tools {p.mayBuyTools ? "✓" : "✗"} · subs {p.mayPaySubs ? "✓" : "✗"} · household {p.mayBuyHousehold ? "✓" : "✗"} · {new Date(r.createdAt).toLocaleTimeString()}</span></div></div>
-          ); })}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// EAZO — Daily ops triggers (Life OS tab)
-// ---------------------------------------------------------------------------
-const EAZO_OPS = [
-  { id: "transit_pass", name: "Renew monthly transit pass", fee: 49, note: "expires in 3 days" },
-  { id: "utility_bill", name: "Pay electricity bill", fee: 38.4, note: "due Friday" },
-  { id: "coffee_reorder", name: "Reorder coffee subscription", fee: 18, note: "runs out in 4 days" },
-  { id: "domain_renew", name: "Renew personal domain", fee: 12, note: "auto-renew off" },
-  { id: "gym_freeze", name: "Freeze gym membership for the month", fee: 0, note: "away on travel" },
-] as const;
-function EazoDailyOps({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt, receipts } = useAppState();
-  const [notice, setNotice] = useState<string | null>(null);
-  const today = new Date().toDateString();
-  const ranToday = useMemo(() => new Set(receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "eazo.lifeops.run" && new Date(r.createdAt).toDateString() === today).map((r) => ((r.payload ?? {}) as { op?: string }).op)), [receipts, workspace.id, today]);
-  const recent = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "eazo.lifeops.run").slice(0, 8), [receipts, workspace.id]);
-  const trigger = (op: typeof EAZO_OPS[number]) => {
-    emitReceipt({ workspaceId: workspace.id, serviceName: "Life OS · " + op.name, amount: op.fee, currency: "USDC", network: workspace.networks[0] ?? "base-sepolia", kind: "eazo.lifeops.run", payload: { op: op.id, name: op.name } });
-    setNotice(`${op.name} — done${op.fee > 0 ? ` ($${op.fee.toFixed(2)})` : ""}`);
-    setTimeout(() => setNotice(null), 2400);
-  };
-  return (
-    <div className="panel block svc-flavor">
-      <div className="block-head"><div className="ttl"><span className="sq soft"><Play width={15} height={15} /></span><div><h3>Daily ops</h3><div className="sub">recurring tasks the companion can run for you — trigger one and it settles + leaves a receipt</div></div></div></div>
-      {notice && <div style={{ margin: "0 16px 10px", padding: "7px 12px", borderRadius: 10, background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)", fontSize: ".78rem", fontWeight: 700 }}><Check width={13} height={13} /> {notice}</div>}
-      <div className="svc-hist" style={{ padding: "4px 16px 12px" }}>
-        {EAZO_OPS.map((op) => (
-          <div key={op.id} className="svc-hist__row">
-            <span className="svc-hist__dot" style={{ background: ranToday.has(op.id) ? "#1fb58a" : "var(--accent-primary)" }} />
-            <div className="svc-hist__main"><b>{op.name}</b><span>{op.note}{op.fee > 0 ? ` · $${op.fee.toFixed(2)}` : " · no charge"}</span></div>
-            <button className={"btn btn-sm" + (ranToday.has(op.id) ? " btn-ghost" : " btn-acc")} type="button" onClick={() => trigger(op)}>{ranToday.has(op.id) ? "Run again" : "Trigger"}</button>
-          </div>
-        ))}
-      </div>
-      {recent.length > 0 && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Recent runs · {recent.length}</div>
-          <div className="svc-hist">{recent.map((r) => { const p = (r.payload ?? {}) as { name?: string }; return (
-            <div className="svc-hist__row" key={r.id}><span className="svc-hist__dot" style={{ background: "#1fb58a" }} /><div className="svc-hist__main"><b>{p.name}</b><span>{new Date(r.createdAt).toLocaleTimeString()}</span></div>{r.amount > 0 ? <span className="svc-hist__amt">{r.amount.toFixed(2)}</span> : <span className="pill ok">done</span>}</div>
-          ); })}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function ServiceTabPage({
   services,
   workspace,
@@ -7020,8 +6598,7 @@ export function ServiceTabPage({
     (workspace.id === "liquify" && (t.includes("tax") || t.includes("wallet") || t.includes("analysis") || t.includes("trading"))) ||
     (workspace.id === "berkeley" && (t.includes("paid tool") || t.includes("catalog") || t.includes("playground"))) ||
     (workspace.id === "deepsurge" && (t.includes("trade") || t.includes("safety") || t.includes("intel") || t.includes("resource"))) ||
-    (workspace.id === "eazo" && (t.includes("companion") || t.includes("subscription") || t.includes("life") || t.includes("os"))) ||
-    (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent"))) ||
+    (workspace.id === "sui" &&(t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
     (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant"))) ||
@@ -7148,11 +6725,6 @@ export function ServiceTabPage({
       {workspace.id === "deepsurge" && (t.includes("trade") || t.includes("safety")) && <><DeepSurgeProfitCalc workspace={workspace} /><FrontierTradeEscrow workspace={workspace} /><RouteRiskScorer workspace={workspace} /></>}
       {workspace.id === "deepsurge" && t.includes("intel") && <><FrontierMarketOracle workspace={workspace} /><FrontierIntelQuery workspace={workspace} /></>}
       {workspace.id === "deepsurge" && t.includes("resource") && <ResourceMapQuery workspace={workspace} />}
-      {workspace.id === "eazo" && t.includes("companion") && <EazoChatPanel workspace={workspace} />}
-      {workspace.id === "eazo" && t.includes("companion") && <EazoToolConsole workspace={workspace} />}
-      {workspace.id === "eazo" && t.includes("subscription") && <EazoSubManager workspace={workspace} />}
-      {workspace.id === "eazo" && (t.includes("life") || t.includes("os")) && <EazoDailyOps workspace={workspace} />}
-
       {workspace.id === "sui" && (t.includes("walrus") || t.includes("storage")) && <WalrusStorageWidget workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("move") || t.includes("contracts")) && <MoveContractViewer workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("nft") || t.includes("market")) && <SuiNftMarket workspace={workspace} />}
@@ -7703,9 +7275,6 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       {workspace.id === "mantle" && <MantleEconomyLoop workspace={workspace} />}
       {workspace.id === "mantle" && <ErrorBoundary label="AgentCreditLine"><AgentCreditLine workspace={workspace} /></ErrorBoundary>}
       {workspace.id === "mantle" && <AgentScoreCard agentId="agent_mantle_strategist" />}
-      {workspace.id === "eazo" && tabLabel.toLowerCase().includes("companion") && <EazoCompanionPanel workspace={workspace} />}
-      {workspace.id === "eazo" && tabLabel.toLowerCase().includes("budget") && <EazoBudgetTracker workspace={workspace} />}
-      {workspace.id === "eazo" && tabLabel.toLowerCase().includes("approval") && <EazoApprovalRules workspace={workspace} />}
       <div className="panel block">
         <div className="block-head"><div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Enforced on every paid request</h3><div className="sub">server-side — frontend is never the source of truth</div></div></div></div>
         <ul style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 10 }}>

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import { MatrixStream } from "./MatrixStream";
 
-const KNOWN = new Set(["liquify", "0g", "qie", "arbitrum", "mantle", "eazo", "berkeley", "deepsurge"]);
+const KNOWN = new Set(["liquify", "0g", "qie", "arbitrum", "mantle", "berkeley", "deepsurge"]);
 
 /** Per-project animated backdrop. The accent (`--accent-primary`) is already set
  *  per-workspace by AppLayout, so each variant tints itself in that project's colour. */
@@ -38,13 +38,6 @@ export function WorkspaceBackdrop({ workspaceId }: { workspaceId: string }) {
       {variant === "mantle" && <div className="ws-bg__mesh" />}
       {variant === "qie" && <div className="ws-bg__rails" />}
       {variant === "berkeley" && <div className="ws-bg__circuit" />}
-      {variant === "eazo" && (
-        <>
-          <div className="ws-bg__aurora ws-bg__aurora--1" />
-          <div className="ws-bg__aurora ws-bg__aurora--2" />
-          <div className="ws-bg__aurora ws-bg__aurora--3" />
-        </>
-      )}
 
       <motion.div style={{ left: sx, top: sy }} className="ws-bg__cursor" />
     </div>

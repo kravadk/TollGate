@@ -80,20 +80,6 @@ export const workspaces: Workspace[] = [
     Icon: QieLogo,
   },
   {
-    id: "eazo",
-    shortName: "Eazo",
-    name: "Eazo AI Subscription OS",
-    route: "/eazo",
-    hackathon: "Eazo AI Hackathon",
-    pitch: "A personal AI companion manages paid tools and subscriptions inside a weekly budget you control.",
-    tracks: ["AI Companion", "Life OS", "Wildcard"],
-    networks: ["base-sepolia"],
-    tabs: ["Overview", "AI Companion", "Subscriptions", "Personal Budget", "Life OS", "Approvals"],
-    accent: "#ff6c3b",
-    darkAccent: "#ff9d78",
-    Icon: Globe2 as LucideIcon,
-  },
-  {
     id: "berkeley",
     shortName: "Berkeley",
     name: "Berkeley Agent Payment Playground",
@@ -254,20 +240,6 @@ const RAW_SERVICES: SRaw[] = [
     priceUsd: 0.15, currency: "USDC", network: "mantle-sepolia", provider: "Strategy Sandbox", providerWallet: W2,
     sampleIn: '{ "spec": { "rule": "…" } }', response: '{ "sharpe": 1.4, "maxDD": "-9.2%", "trades": 184 }', status: "active", calls: 122 },
 
-  // Eazo
-  { id: "svc_eazo_subs", workspaceId: "eazo", name: "Subscription Optimizer API", category: "analytics",
-    description: "Audits the user's recurring tool spend and proposes pauses, downgrades and bundle swaps.",
-    priceUsd: 0.02, currency: "USDC", network: "base-sepolia", provider: "Eazo Companion", providerWallet: W,
-    sampleIn: '{ "userId": "u_…" }', response: '{ "saveMonthlyUsd": 14.5, "actions": 3 }', status: "active", calls: 980 },
-  { id: "svc_eazo_brief", workspaceId: "eazo", name: "Personal Finance Brief", category: "data",
-    description: "A daily plain-language brief of balances, upcoming charges and budget status for the companion.",
-    priceUsd: 0.01, currency: "USDC", network: "base-sepolia", provider: "Eazo Companion", providerWallet: W,
-    sampleIn: '{ "userId": "u_…" }', response: '{ "summary": "On track. $42 in subs due Fri.", "alerts": 0 }', status: "active", calls: 2400 },
-  { id: "svc_eazo_toolbuy", workspaceId: "eazo", name: "Tool Purchase API", category: "payment",
-    description: "Lets the companion buy a one-off paid tool call within the weekly budget, with an approval hook.",
-    priceUsd: 0.05, currency: "USDC", network: "base-sepolia", provider: "Eazo Companion", providerWallet: W2,
-    sampleIn: '{ "tool": "pdf-extract", "args": { … } }', response: '{ "result": "…", "chargedUsd": 0.05 }', status: "active", calls: 510 },
-
   // Berkeley
   { id: "svc_bk_tx", workspaceId: "berkeley", name: "Transaction Explainer Tool", category: "inference",
     description: "Explains what a transaction did in plain English, with token flow, contracts touched and risk notes.",
@@ -346,16 +318,6 @@ const RAW_SERVICES: SRaw[] = [
     description: "Runs a rate / liquidity stress scenario on a tokenised RWA basket and returns the projected drawdown.",
     priceUsd: 0.12, currency: "USDC", network: "mantle-sepolia", provider: "Mantle Alpha Desk", providerWallet: W,
     sampleIn: '{ "basket": "T-BILL-90D", "scenario": "+200bps" }', response: '{ "navDrawdown": "-1.8%", "breachProb": 0.04 }', status: "active", calls: 96 },
-
-  // Eazo
-  { id: "svc_eazo_cal", workspaceId: "eazo", name: "Calendar Digest API", category: "data",
-    description: "A daily digest of the user's calendar the companion uses to schedule and pre-pay for tools.",
-    priceUsd: 0.005, currency: "USDC", network: "base-sepolia", provider: "Eazo Companion", providerWallet: W,
-    sampleIn: '{ "userId": "u_…", "day": "today" }', response: '{ "events": 4, "firstAt": "09:30", "needsPrep": 1 }', status: "active", calls: 1800 },
-  { id: "svc_eazo_anom", workspaceId: "eazo", name: "Spend Anomaly API", category: "analytics",
-    description: "Flags unusual charges against the user's recent pattern so the companion can ask before paying.",
-    priceUsd: 0.01, currency: "USDC", network: "base-sepolia", provider: "Eazo Companion", providerWallet: W2,
-    sampleIn: '{ "userId": "u_…", "charge": "12.00" }', response: '{ "anomaly": false, "z": 0.7, "askUser": false }', status: "active", calls: 920 },
 
   // Berkeley
   { id: "svc_bk_docs", workspaceId: "berkeley", name: "Docs Search Tool", category: "data",
@@ -452,7 +414,6 @@ export const agents: Agent[] = [
   mkAgent({ id: "agent_qie_merchant_bot", workspaceId: "qie", name: "Merchant Bot", wallet: "0xAg3n…44de", autoPay: true, dailyLimitUsd: 6, maxPerRequestUsd: 0.05, spentTodayUsd: 0.18, allowlist: ["svc_qie_checkout", "svc_qie_dex", "svc_qie_payout", "svc_qie_pos"] }),
   mkAgent({ id: "agent_arb_treasury", workspaceId: "arbitrum", name: "Treasury Agent", wallet: "0xAg3n…0b12", autoPay: true, dailyLimitUsd: 12, maxPerRequestUsd: 0.20, spentTodayUsd: 0.88, allowlist: ["svc_arb_invoice", "svc_arb_orbit", "svc_arb_escrow", "svc_arb_bridge", "svc_arb_usdc"] }),
   mkAgent({ id: "agent_mnt_strategist", workspaceId: "mantle", name: "Alpha Strategist", wallet: "0xAg3n…ee71", autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.30, spentTodayUsd: 0.96, allowlist: ["svc_mnt_rwa", "svc_mnt_meth", "svc_mnt_backtest", "svc_mnt_liq", "svc_mnt_stress"] }),
-  mkAgent({ id: "agent_life_companion", workspaceId: "eazo", name: "Life Companion", wallet: "0xAg3n…2a55", autoPay: true, dailyLimitUsd: 3, maxPerRequestUsd: 0.05, spentTodayUsd: 0.27, allowlist: ["svc_eazo_subs", "svc_eazo_brief", "svc_eazo_toolbuy", "svc_eazo_cal", "svc_eazo_anom"] }),
   mkAgent({ id: "agent_bk_sandbox", workspaceId: "berkeley", name: "Sandbox Agent", wallet: "0xAg3n…f0c3", autoPay: true, dailyLimitUsd: 4, maxPerRequestUsd: 0.10, spentTodayUsd: 0.13, allowlist: ["svc_bk_tx", "svc_bk_debug", "svc_bk_research", "svc_bk_docs", "svc_bk_review"] }),
   mkAgent({ id: "agent_ds_scout", workspaceId: "deepsurge", name: "Frontier Scout", wallet: "0xAg3n…77b9", autoPay: true, dailyLimitUsd: 5, maxPerRequestUsd: 0.10, spentTodayUsd: 0.32, allowlist: ["svc_ds_resource", "svc_ds_traderisk", "svc_ds_alert", "svc_ds_oracle", "svc_ds_route"] }),
   mkAgent({ id: "agent_sui_economy", workspaceId: "sui", name: "Sui Economy Agent", wallet: "0xAg3n…4da2", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.15, spentTodayUsd: 0.74, allowlist: ["svc_sui_walrus_pin", "svc_sui_move_exec", "svc_sui_nft_mint", "svc_sui_agent_id", "svc_sui_zkproof"] }),
@@ -524,11 +485,6 @@ const SEED_ROWS: SeedRow[] = [
   { ws: "mantle", svc: "svc_mnt_backtest", agent: "agent_mnt_strategist", mins: 300, status: "verified",
     kind: "mantle.backtest", name: "Strategy Backtest · RWA-rotate 180d", payload: { asset: "T-BILL / USDY", window: "180d", ret: "+27.9%", maxDD: "-14.2%", sharpe: 1.1, runId: "sim_2b07" } },
   { ws: "mantle", svc: "svc_mnt_liq", agent: "agent_mnt_strategist", mins: 360, status: "verified" },
-  { ws: "eazo", svc: "svc_eazo_brief", agent: "agent_life_companion", mins: 22, status: "verified" },
-  { ws: "eazo", svc: "svc_eazo_cal", agent: "agent_life_companion", mins: 48, status: "verified" },
-  { ws: "eazo", svc: "svc_eazo_subs", agent: "agent_life_companion", mins: 90, status: "verified" },
-  { ws: "eazo", svc: "svc_eazo_toolbuy", agent: "agent_life_companion", mins: 150, status: "verified" },
-  { ws: "eazo", svc: "svc_eazo_anom", agent: "agent_life_companion", mins: 210, status: "verified" },
   { ws: "berkeley", svc: "svc_bk_tx", agent: "agent_bk_sandbox", mins: 5, status: "verified" },
   { ws: "berkeley", svc: "svc_bk_docs", agent: "agent_bk_sandbox", mins: 18, status: "verified" },
   { ws: "berkeley", svc: "svc_bk_research", agent: "agent_bk_sandbox", mins: 40, status: "verified" },
