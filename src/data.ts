@@ -280,6 +280,36 @@ const RAW_SERVICES: SRaw[] = [
     priceUsd: 0.08, currency: "USDC", network: "arc-mainnet", provider: "ArcPortfolio AI", providerWallet: W,
     sampleIn: '{ "assets": { "ETH": 0.6, "USDC": 0.4 }, "target": { "ETH": 0.5 } }', response: '{ "action": "sell 0.1 ETH → 310 USDC", "fee": "0.001 USDC", "via": "Paymaster" }', status: "active", calls: 890 },
 
+  // ArcMind — Signal Hub feeds (x402 Nanopayments, sub-cent per query)
+  { id: "svc_arc_signal_hl", workspaceId: "agora", name: "Hyperliquid OI Feed", category: "data",
+    description: "Real-time open interest delta and funding rate from Hyperliquid perps — sub-cent x402 Nanopayment.",
+    priceUsd: 0.002, currency: "USDC", network: "arc-mainnet", provider: "ArcMind Data", providerWallet: W,
+    sampleIn: '{ "asset": "BTC" }', response: '{ "oi": "1241.3M", "fundingRate": "+0.032%/h", "trend": "expanding" }', status: "active", calls: 8740 },
+  { id: "svc_arc_signal_poly", workspaceId: "agora", name: "Polymarket Sentiment Feed", category: "data",
+    description: "YES probability for top macro events on Polymarket — aggregated signal for ArcMind decision engine.",
+    priceUsd: 0.001, currency: "USDC", network: "arc-mainnet", provider: "ArcMind Data", providerWallet: W2,
+    sampleIn: '{ "market": "fed-rate-cut-jun" }', response: '{ "yesPct": 62, "volume24h": "840000", "trend": "rising" }', status: "active", calls: 14200 },
+  { id: "svc_arc_signal_news", workspaceId: "agora", name: "News Sentiment Oracle", category: "data",
+    description: "Aggregated sentiment score from 200+ crypto news sources — paid per-query via Arc Nanopayments.",
+    priceUsd: 0.005, currency: "USDC", network: "arc-mainnet", provider: "ArcMind Intel", providerWallet: W,
+    sampleIn: '{ "asset": "BTC", "window": "1h" }', response: '{ "score": 0.42, "articles": 87, "topSignal": "ETF_inflows" }', status: "active", calls: 5310 },
+  { id: "svc_arc_signal_whale", workspaceId: "agora", name: "On-Chain Whale Tracker", category: "data",
+    description: "Net wallet flows >$100k in the last hour across Arc, Base, and Arbitrum.",
+    priceUsd: 0.003, currency: "USDC", network: "arc-mainnet", provider: "ArcMind Intel", providerWallet: W2,
+    sampleIn: '{ "asset": "ETH", "window": "1h" }', response: '{ "netFlow": "+24.3M", "wallets": 12, "direction": "accumulating" }', status: "active", calls: 3890 },
+
+  // ArcMind — Reasoning Traces marketplace ($0.01 per trace via x402)
+  { id: "svc_arc_reasoning", workspaceId: "agora", name: "Reasoning Trace Marketplace", category: "inference",
+    description: "Buy ArcMind step-by-step decision logs via Arc Nanopayments. Each trace includes signal inputs, Kelly sizing, and outcome.",
+    priceUsd: 0.01, currency: "USDC", network: "arc-mainnet", provider: "ArcMind Core", providerWallet: W,
+    sampleIn: '{ "traceId": "trace-001" }', response: '{ "signal": "RSI(14)=28, OI spike", "decision": "LONG BTC 18%", "rationale": "Kelly f*=0.18, edge=0.62", "outcome": "+14.3%" }', status: "active", calls: 2140 },
+
+  // ArcMind — Copy Trading escrow (ERC-8183)
+  { id: "svc_arc_copytrade", workspaceId: "agora", name: "Copy ArcMind — ERC-8183 Escrow", category: "trading",
+    description: "Open a copy-trade position under ArcMind. Stake USDC into CopyTradeEscrow.sol; agent allocates and settles PnL automatically.",
+    priceUsd: 1.00, currency: "USDC", network: "arc-mainnet", provider: "ArcMind Escrow", providerWallet: W2,
+    sampleIn: '{ "stake": "10.00", "trader": "0x…" }', response: '{ "positionId": "pos_…", "escrow": "0xArcMindEscrow", "killThreshold": "15%", "performanceFee": "5%" }', status: "active", calls: 312 },
+
   // Polygon
   { id: "svc_poly_invoice", workspaceId: "polygon", name: "Invoice Finance API", category: "data",
     description: "Tokenises a trade invoice on Polygon and advances 90% of face value in USDC for UAE SME cash flow.",
@@ -319,7 +349,7 @@ export const agents: Agent[] = [
   mkAgent({ id: "agent_arb_treasury", workspaceId: "arbitrum", name: "Treasury Agent", wallet: "0xAg3n…0b12", autoPay: true, dailyLimitUsd: 12, maxPerRequestUsd: 0.20, spentTodayUsd: 0.88, allowlist: ["svc_arb_invoice", "svc_arb_orbit", "svc_arb_escrow", "svc_arb_bridge", "svc_arb_usdc"] }),
   mkAgent({ id: "agent_mnt_strategist", workspaceId: "mantle", name: "Alpha Strategist", wallet: "0xAg3n…ee71", autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.30, spentTodayUsd: 0.96, allowlist: ["svc_mnt_rwa", "svc_mnt_meth", "svc_mnt_backtest", "svc_mnt_liq", "svc_mnt_stress"] }),
   mkAgent({ id: "agent_sui_economy", workspaceId: "sui", name: "Sui Economy Agent", wallet: "0xAg3n…4da2", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.15, spentTodayUsd: 0.74, allowlist: ["svc_sui_walrus_pin", "svc_sui_move_exec", "svc_sui_nft_mint", "svc_sui_agent_id", "svc_sui_zkproof"] }),
-  mkAgent({ id: "agent_arc_arb", workspaceId: "agora", name: "ArcArb Agent", wallet: "0xAg3n…c1f4", autoPay: true, dailyLimitUsd: 20, maxPerRequestUsd: 0.50, spentTodayUsd: 1.42, allowlist: ["svc_arc_oracle", "svc_arc_arb", "svc_arc_portfolio"] }),
+  mkAgent({ id: "agent_arc_arb", workspaceId: "agora", name: "ArcMind Agent", wallet: "0xAg3n…c1f4", autoPay: true, dailyLimitUsd: 20, maxPerRequestUsd: 1.00, spentTodayUsd: 1.42, allowlist: ["svc_arc_oracle", "svc_arc_arb", "svc_arc_portfolio", "svc_arc_signal_hl", "svc_arc_signal_poly", "svc_arc_signal_news", "svc_arc_signal_whale", "svc_arc_reasoning", "svc_arc_copytrade"] }),
   mkAgent({ id: "agent_poly_merchant", workspaceId: "polygon", name: "Polygon Merchant Agent", wallet: "0xAg3n…9a3b", autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.25, spentTodayUsd: 0.85, allowlist: ["svc_poly_invoice", "svc_poly_merchant", "svc_poly_cross"] }),
 ];
 

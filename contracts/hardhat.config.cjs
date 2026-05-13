@@ -23,11 +23,14 @@ const {
   ORBIT_CHAIN_ID,
   QIE_RPC_URL,
   QIE_PRIVATE_KEY,
+  ARC_RPC_URL,
+  ARC_PRIVATE_KEY,
 } = process.env;
 
 const ogAccounts = OG_PRIVATE_KEY ? [OG_PRIVATE_KEY] : [];
 const mantleAccounts = MANTLE_PRIVATE_KEY ? [MANTLE_PRIVATE_KEY] : [];
 const arbAccounts = ARBITRUM_PRIVATE_KEY ? [ARBITRUM_PRIVATE_KEY] : [];
+const arcAccounts = ARC_PRIVATE_KEY ? [ARC_PRIVATE_KEY] : [];
 const qieAccounts = QIE_PRIVATE_KEY ? [QIE_PRIVATE_KEY] : [];
 
 /** @type {import('hardhat/config').HardhatUserConfig} */
@@ -84,6 +87,13 @@ module.exports = {
       url: QIE_RPC_URL || "https://rpc1testnet.qie.digital/",
       chainId: 1983,
       accounts: qieAccounts,
+    },
+    // Arc L1 testnet (chainId 5042002). USDC is native gas token.
+    // Get RPC key from: arc-node.thecanteenapp.com after running `arc login`
+    arcTestnet: {
+      url: ARC_RPC_URL || "https://rpc.testnet.arc-node.thecanteenapp.com/v1/public",
+      chainId: 5042002,
+      accounts: arcAccounts,
     },
   },
 };

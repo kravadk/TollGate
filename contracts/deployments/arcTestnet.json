@@ -1,0 +1,12 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "registry": "0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
+  "escrow": "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "explorer": "https://testnet.arcscan.app",
+  "deployedAt": "2026-05-13T20:27:23.838Z",
+  "regTxHash": "0xc46822fb5fd76436ccf13fc101a03ae92ca868e338daf2436cb348400889d166",
+  "escrowTxHash": "0x58f416451af896e5737179aa53e5a5b00ba5f38877a36d64a32ac1ba4bba6cb2"
+}

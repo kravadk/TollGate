@@ -54,3 +54,11 @@ export const feedsRouter = Router();
 feedsRouter.get("/mnt-price", forService("svc_mnt_liq"),  withX402(), feedHandler);
 feedsRouter.get("/mnt-yield", forService("svc_mnt_meth"), withX402(), feedHandler);
 feedsRouter.get("/mnt-rwa",   forService("svc_mnt_rwa"),  withX402(), feedHandler);
+
+// Arc L1 / ArcMind feeds — x402-gated Nanopayments on Arc testnet
+feedsRouter.get("/arc-oracle",    forService("svc_arc_oracle"),       withX402(), feedHandler);
+feedsRouter.get("/arc-signal-hl", forService("svc_arc_signal_hl"),    withX402(), feedHandler);
+feedsRouter.get("/arc-signal-pm", forService("svc_arc_signal_poly"),  withX402(), feedHandler);
+feedsRouter.get("/arc-signal-nw", forService("svc_arc_signal_news"),  withX402(), feedHandler);
+feedsRouter.get("/arc-signal-wh", forService("svc_arc_signal_whale"), withX402(), feedHandler);
+feedsRouter.get("/arc-trace/:id", forService("svc_arc_reasoning"),    withX402(), feedHandler);

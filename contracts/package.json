@@ -14,7 +14,8 @@
     "deploy:arb-one": "hardhat run scripts/deploy-arbitrum.cjs --network arbitrumOne",
     "deploy:orbit": "hardhat run scripts/deploy-arbitrum.cjs --network orbit",
     "upload:0g": "node scripts/og-upload.cjs",
-    "deploy:qie": "hardhat run scripts/deploy-qie.cjs --network qieTestnet"
+    "deploy:qie": "hardhat run scripts/deploy-qie.cjs --network qieTestnet",
+    "deploy:arc": "hardhat run scripts/deploy-arc.cjs --network arcTestnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
