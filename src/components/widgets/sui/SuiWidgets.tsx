@@ -684,10 +684,10 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
     setLocking(true);
     await new Promise(r => setTimeout(r, 1800));
     const sel = POOLS.find(p => p.id === pool)!;
-    const id = hashId(`escrow-${Date.now()}`);
+    const id = hid(`escrow-${Date.now()}`);
     const newEscrow = { id, pool: sel.id, amount: parseFloat(amount), yield: 0, status: "active", ts: new Date().toLocaleTimeString() };
     setEscrows(prev => [newEscrow, ...prev]);
-    emitReceipt({ service: "sui_yield_escrow", amount: parseFloat(amount), currency: "SUI", hash: id, status: "locked" });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "DeepBook Yield Escrow", amount: parseFloat(amount), currency: "SUI", network: "sui-mainnet", kind: "sui.yield.lock", payload: { escrowId: id, pool: sel.id } });
     setLocking(false);
   }
 
@@ -695,7 +695,7 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
     setEscrows(prev => prev.map(e => {
       if (e.id !== id) return e;
       const apr = POOLS.find(p => p.id === e.pool)?.apr ?? 14;
-      const yieldEarned = +(e.amount * apr / 100 / 365 * deterministicScore(id, 7)).toFixed(4);
+      const yieldEarned = +(e.amount * apr / 100 / 365 * deterministicScore(id, 0, 7)).toFixed(4);
       return { ...e, yield: yieldEarned, status: "released" };
     }));
   }
@@ -748,7 +748,7 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
 }
 
 // ── AgentNFT Living Reputation ─────────────────────────────────────────────────
-const TIERS = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
+const NFT_TIERS = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 const TIER_COLORS = ["#9ca3af", "#22c55e", "#3b82f6", "#a855f7", "#f59e0b"];
 
 export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
@@ -756,8 +756,8 @@ export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
   const [agents, setAgents] = useLocalStore<{ id: string; name: string; tier: number; level: number; tasks: number; revenue: number; ts: string }[]>(
     `sui-agent-nfts-${workspace.id}`,
     [
-      { id: hashId("agent-alpha"), name: "Alpha-7", tier: 2, level: 14, tasks: 47, revenue: 3.21, ts: "minted" },
-      { id: hashId("agent-beta"), name: "Beta-3", tier: 1, level: 6, tasks: 12, revenue: 0.88, ts: "minted" },
+      { id: hid("agent-alpha"), name: "Alpha-7", tier: 2, level: 14, tasks: 47, revenue: 3.21, ts: "minted" },
+      { id: hid("agent-beta"), name: "Beta-3", tier: 1, level: 6, tasks: 12, revenue: 0.88, ts: "minted" },
     ]
   );
   const [claiming, setClaiming] = useState<string | null>(null);
@@ -767,13 +767,13 @@ export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
     await new Promise(r => setTimeout(r, 1400));
     setAgents(prev => prev.map(a => {
       if (a.id !== id) return a;
-      const newTasks = a.tasks + Math.floor(deterministicScore(id + Date.now(), 5));
-      const newRevenue = +(a.revenue + deterministicScore(id, 3) * 0.1).toFixed(3);
+      const newTasks = a.tasks + Math.floor(deterministicScore(id + Date.now(), 0, 5));
+      const newRevenue = +(a.revenue + deterministicScore(id, 0, 3) * 0.1).toFixed(3);
       const newLevel = a.level + 1;
       const newTier = Math.min(4, newLevel >= 20 ? 4 : newLevel >= 10 ? 3 : newLevel >= 5 ? 2 : newLevel >= 2 ? 1 : 0);
       return { ...a, tasks: newTasks, revenue: newRevenue, level: newLevel, tier: newTier };
     }));
-    emitReceipt({ service: "sui_nft_reputation", amount: 0, currency: "SUI", hash: id, status: "updated" });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "AgentNFT Reputation Update", amount: 0, currency: "SUI", network: "sui-mainnet", kind: "sui.nft.update", payload: { agentId: id } });
     setClaiming(null);
   }
 
@@ -792,7 +792,7 @@ export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13 }}>{a.name}</div>
-                <div style={{ fontSize: 10, color: TIER_COLORS[a.tier], fontWeight: 600 }}>{TIERS[a.tier]} · Lv.{a.level}</div>
+                <div style={{ fontSize: 10, color: TIER_COLORS[a.tier], fontWeight: 600 }}>{NFT_TIERS[a.tier]} · Lv.{a.level}</div>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
@@ -839,8 +839,8 @@ export function SuiPayButtonWidget({ workspace }: { workspace: Workspace }) {
   async function simulatePay() {
     setPaying(true);
     await new Promise(r => setTimeout(r, 1600));
-    const hash = hashId(`pay-${Date.now()}`);
-    emitReceipt({ service: "sui_pay_widget", amount: parseFloat(amount), currency: "SUI", hash, status: "paid" });
+    const hash = hid(`pay-${Date.now()}`);
+    emitReceipt({ workspaceId: workspace.id, serviceName: "Sui Pay Button", amount: parseFloat(amount), currency: "SUI", network: "sui-mainnet", status: "paid", kind: "sui.pay.widget", payload: { hash } });
     setPaying(false);
     setPaid(true);
     setTimeout(() => setPaid(false), 3000);
@@ -890,9 +890,9 @@ export function AgentMemoryNetwork({ workspace }: { workspace: Workspace }) {
     if (!key.trim() || !value.trim()) return;
     setWriting(true);
     await new Promise(r => setTimeout(r, 1500));
-    const id = hashId(`mem-${key}-${Date.now()}`);
+    const id = hid(`mem-${key}-${Date.now()}`);
     setMemories(prev => [{ id, key: key.trim(), preview: value.slice(0, 60) + (value.length > 60 ? "…" : ""), shared, price: parseFloat(price), ts: new Date().toLocaleTimeString() }, ...prev]);
-    emitReceipt({ service: "sui_memory_write", amount: 0.018, currency: "SUI", hash: id, status: "stored" });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "Agent Memory Write", amount: 0.018, currency: "SUI", network: "sui-mainnet", kind: "sui.memory.write", payload: { memoryId: id, memKey: key.trim(), shared } });
     setKey(""); setValue("");
     setWriting(false);
   }
@@ -900,7 +900,7 @@ export function AgentMemoryNetwork({ workspace }: { workspace: Workspace }) {
   async function buyAccess(id: string, p: number) {
     setBuying(id);
     await new Promise(r => setTimeout(r, 1200));
-    emitReceipt({ service: "sui_memory_access", amount: p, currency: "SUI", hash: hashId(`buy-${id}`), status: "unlocked" });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "Agent Memory Access", amount: p, currency: "SUI", network: "sui-mainnet", status: "paid", kind: "sui.memory.access", payload: { memoryId: id } });
     setBuying(null);
   }
 
@@ -966,16 +966,16 @@ export function BattleArenaWidget({ workspace }: { workspace: Workspace }) {
   const [creating, setCreating] = useState(false);
 
   async function placeBet(challengeId: string, side: "a" | "b") {
-    const hash = hashId(`bet-${challengeId}-${side}-${Date.now()}`);
+    const hash = hid(`bet-${challengeId}-${side}-${Date.now()}`);
     setBets(prev => ({ ...prev, [challengeId]: { side, amount: parseFloat(betAmount) } }));
-    emitReceipt({ service: "sui_battle_bet", amount: parseFloat(betAmount), currency: "SUI", hash, status: "placed" });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "Battle Arena Bet", amount: parseFloat(betAmount), currency: "SUI", network: "sui-mainnet", status: "paid", kind: "sui.arena.bet", payload: { challengeId, side, hash } });
   }
 
   async function createChallenge() {
     if (!challengeName.trim()) return;
     setCreating(true);
     await new Promise(r => setTimeout(r, 1400));
-    emitReceipt({ service: "sui_battle_create", amount: parseFloat(challengePrize), currency: "SUI", hash: hashId(`challenge-${Date.now()}`), status: "created" });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "Battle Arena Challenge", amount: parseFloat(challengePrize), currency: "SUI", network: "sui-mainnet", status: "paid", kind: "sui.arena.create", payload: { challengeName, prizePool: hid(`challenge-${Date.now()}`) } });
     setCreating(false);
     setChallengeName("");
   }
@@ -1080,8 +1080,8 @@ export function IntentEngineWidget({ workspace }: { workspace: Workspace }) {
   async function deployWorkflow() {
     setDeploying(true);
     await new Promise(r => setTimeout(r, 2000));
-    const hash = hashId(`workflow-${Date.now()}`);
-    emitReceipt({ service: "sui_intent", amount: 0.04, currency: "SUI", hash, status: "deployed" });
+    const hash = hid(`workflow-${Date.now()}`);
+    emitReceipt({ workspaceId: workspace.id, serviceName: "Intent Engine Deploy", amount: 0.04, currency: "SUI", network: "sui-mainnet", status: "verified", kind: "sui.intent.deploy", payload: { hash } });
     setDeploying(false);
     setDeployed(true);
   }

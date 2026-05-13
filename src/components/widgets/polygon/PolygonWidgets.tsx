@@ -35,7 +35,7 @@ export function PolygonTradeFinanceWidget({ workspace }: { workspace: Workspace 
   async function submitInvoice() {
     setSubmitting(true);
     await new Promise(r => setTimeout(r, 1600));
-    const id = hashId(`inv-${Date.now()}`).slice(0, 12);
+    const id = hashId("inv", `${Date.now()}`).slice(0, 12);
     const amtNum = parseFloat(amount);
     const dueDate = new Date(Date.now() + 30 * 24 * 3600_000).toLocaleDateString();
     setInvoices(prev => [{
@@ -168,7 +168,7 @@ export function PolygonUsdcPaymentsWidget({ workspace }: { workspace: Workspace 
   async function sendPayment() {
     setSending(true);
     await new Promise(r => setTimeout(r, 2200));
-    const hash = hashId(`usdc-${Date.now()}`).slice(0, 18);
+    const hash = hashId("usdc", `${Date.now()}`).slice(0, 18);
     setTransfers(prev => [{ from: sel.from, to: sel.to, amount: amtNum, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 20));
     setSending(false);
   }
@@ -261,8 +261,8 @@ export function PolygonAgentMarketplaceWidget({ workspace }: { workspace: Worksp
 
   async function callAgent(svc: typeof AGENT_SERVICES[0]) {
     setCalling(svc.id);
-    await new Promise(r => setTimeout(r, 900 + deterministicScore(svc.id, 800)));
-    const hash = hashId(`poly-${svc.id}-${Date.now()}`).slice(0, 16);
+    await new Promise(r => setTimeout(r, 900 + deterministicScore(svc.id, 0, 800)));
+    const hash = hashId("poly", `${svc.id}-${Date.now()}`).slice(0, 16);
     setCalls(prev => [{ name: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
     setCalling(null);
   }
@@ -347,12 +347,12 @@ export function PolygonStatsWidget({ workspace: _ }: { workspace: Workspace }) {
   }
 
   const stats = [
-    { label: "TPS",              val: (280 + deterministicScore(`tps-${seed}`, 60)).toFixed(0) },
-    { label: "Avg gas (gwei)",   val: (0.001 + deterministicScore(`gas-${seed}`, 3) * 0.001).toFixed(4) },
+    { label: "TPS",              val: (280 + deterministicScore(`tps-${seed}`, 0, 60)).toFixed(0) },
+    { label: "Avg gas (gwei)",   val: (0.001 + deterministicScore(`gas-${seed}`, 0, 3) * 0.001).toFixed(4) },
     { label: "Finality",         val: "~2s" },
-    { label: "USDC vol 24h",     val: `$${(4.2 + deterministicScore(`vol-${seed}`, 5)).toFixed(1)}M` },
-    { label: "Active merchants", val: (1240 + Math.floor(deterministicScore(`merchants-${seed}`, 200))).toString() },
-    { label: "Agent calls 24h",  val: (28400 + Math.floor(deterministicScore(`calls-${seed}`, 5000))).toLocaleString() },
+    { label: "USDC vol 24h",     val: `$${(4.2 + deterministicScore(`vol-${seed}`, 0, 5)).toFixed(1)}M` },
+    { label: "Active merchants", val: (1240 + Math.floor(deterministicScore(`merchants-${seed}`, 0, 200))).toString() },
+    { label: "Agent calls 24h",  val: (28400 + Math.floor(deterministicScore(`calls-${seed}`, 0, 5000))).toLocaleString() },
   ];
 
   return (
@@ -407,7 +407,7 @@ export function PolygonMerchantOnboardingWidget({ workspace }: { workspace: Work
   async function deploy() {
     setDeploying(true);
     await new Promise(r => setTimeout(r, 2000));
-    const address = `0x${hashId(`merchant-${name}-${Date.now()}`).slice(0, 40)}`;
+    const address = `0x${hashId("merchant", `${name}-${Date.now()}`).slice(0, 40)}`;
     setDeployed({ name, address, endpoint: `/api/${name.toLowerCase().replace(/\s/g, "-")}`, ts: new Date().toLocaleTimeString() });
     setDeploying(false);
     setStep(3);

@@ -40,7 +40,7 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
 
     const seed = Date.now();
     const newWeights = ASSETS.map((a, i) => {
-      const drift = (deterministicScore(`${seed}-${i}`, 8) - 4) * 1.5;
+      const drift = (deterministicScore(`${seed}-${i}`, 0, 8) - 4) * 1.5;
       return Math.max(5, Math.min(60, a.weight + drift));
     });
     const wSum = newWeights.reduce((s, w) => s + w, 0);
@@ -63,7 +63,7 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
           from: delta < 0 ? a.symbol : "USDC",
           to: delta < 0 ? "USDC" : a.symbol,
           amount: +Math.abs(delta).toFixed(2),
-          hash: hashId(`trade-${a.symbol}-${seed}`).slice(0, 18),
+          hash: hashId("trade", `${a.symbol}-${seed}`).slice(0, 18),
           ts: new Date().toLocaleTimeString(),
         });
       }
@@ -153,7 +153,7 @@ const CIRCLE_DEMOS = [
     color: "#1652F0",
     desc: "Native dollar settlement on Arc L1 — 0% fee, instant finality",
     action: "Mint 100 USDC",
-    result: (seed: number) => `Minted 100 USDC · tx 0x${hashId(`usdc-${seed}`).slice(0, 12)}…`,
+    result: (seed: number) => `Minted 100 USDC · tx 0x${hashId("usdc", `${seed}`).slice(0, 12)}…`,
   },
   {
     tool: "CCTP",
@@ -161,7 +161,7 @@ const CIRCLE_DEMOS = [
     color: "#4B7BFF",
     desc: "Cross-Chain Transfer Protocol — Arc → Base → Arbitrum in <500ms",
     action: "Bridge 500 USDC",
-    result: (seed: number) => `Attested · Arc→Base 423ms · tx 0x${hashId(`cctp-${seed}`).slice(0, 12)}…`,
+    result: (seed: number) => `Attested · Arc→Base 423ms · tx 0x${hashId("cctp", `${seed}`).slice(0, 12)}…`,
   },
   {
     tool: "Prog. Wallets",
@@ -169,7 +169,7 @@ const CIRCLE_DEMOS = [
     color: "#7C3AED",
     desc: "Programmable developer-controlled wallets with policy enforcement",
     action: "Create Agent Wallet",
-    result: (seed: number) => `Wallet 0x${hashId(`wallet-${seed}`).slice(0, 14)}… · policy: $20/day`,
+    result: (seed: number) => `Wallet 0x${hashId("wallet", `${seed}`).slice(0, 14)}… · policy: $20/day`,
   },
   {
     tool: "Nanopayments",
@@ -177,7 +177,7 @@ const CIRCLE_DEMOS = [
     color: "#F59E0B",
     desc: "Streaming micropayments — pay per API call, per millisecond",
     action: "Start stream",
-    result: (seed: number) => `Stream open · rate $0.002/call · session ${hashId(`nano-${seed}`).slice(0, 8)}…`,
+    result: (seed: number) => `Stream open · rate $0.002/call · session ${hashId("nano", `${seed}`).slice(0, 8)}…`,
   },
   {
     tool: "Gas Abstraction",
@@ -185,7 +185,7 @@ const CIRCLE_DEMOS = [
     color: "#10B981",
     desc: "Paymaster covers gas — agents pay in USDC, zero ETH required",
     action: "Gasless tx",
-    result: (seed: number) => `Sponsored by Paymaster · gas $0.00 · 0x${hashId(`gas-${seed}`).slice(0, 10)}…`,
+    result: (seed: number) => `Sponsored by Paymaster · gas $0.00 · 0x${hashId("gas", `${seed}`).slice(0, 10)}…`,
   },
 ];
 
@@ -261,7 +261,7 @@ export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
     setCalling(svc.id);
     const ms = svc.latency === "–" ? 600 : parseInt(svc.latency);
     await new Promise(r => setTimeout(r, ms + 400));
-    const hash = hashId(`x402-${svc.id}-${Date.now()}`);
+    const hash = hashId("x402", `${svc.id}-${Date.now()}`);
     setCalls(prev => [{ svc: svc.name, amount: svc.price, hash: hash.slice(0, 16), ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
     setCalling(null);
   }
@@ -393,9 +393,9 @@ export function AgoraCctpWidget({ workspace: _ }: { workspace: Workspace }) {
   async function transfer() {
     setRunning(true);
     setResult(null);
-    const ms = 350 + Math.floor(deterministicScore(`cctp-${from}-${to}-${Date.now()}`, 200));
+    const ms = 350 + Math.floor(deterministicScore(`cctp-${from}-${to}-${Date.now()}`, 0, 200));
     await new Promise(r => setTimeout(r, ms + 600));
-    setResult({ hash: hashId(`cctp-${Date.now()}`).slice(0, 20), time: ms });
+    setResult({ hash: hashId("cctp", `${Date.now()}`).slice(0, 20), time: ms });
     setRunning(false);
   }
 
