@@ -86,53 +86,68 @@ export function AgentIntentWidget() {
   const service   = SERVICES[svcIdx];
   const isBusy    = status !== "idle" && status !== "settled";
 
+  const [runErr, setRunErr] = useState<string | null>(null);
+
   async function run() {
-    setStatus("signing");
+    if (isBusy) return;
+    if (!fromChain || !service) { setRunErr("Pick origin chain and service"); return; }
+    setRunErr(null);
     const t0 = Date.now();
-    await new Promise((r) => setTimeout(r, 800));
-    setStatus("broadcasting");
-    await new Promise((r) => setTimeout(r, 700));
-    setStatus("solver");
-    await new Promise((r) => setTimeout(r, 1_200));
-    setStatus("settling");
-    await new Promise((r) => setTimeout(r, 900));
+    try {
+      setStatus("signing");
+      await new Promise((r) => setTimeout(r, 800));
+      setStatus("broadcasting");
+      await new Promise((r) => setTimeout(r, 700));
+      setStatus("solver");
+      await new Promise((r) => setTimeout(r, 1_200));
+      setStatus("settling");
+      await new Promise((r) => setTimeout(r, 900));
 
-    const elapsed = Date.now() - t0;
-    setElapsedMs(elapsed);
+      const elapsed = Date.now() - t0;
+      setElapsedMs(elapsed);
 
-    const seed       = fromChain.id + service.id + String(Date.now());
-    const intentHash = "0x" + hashId(seed + "intent", 64);
-    const fillTx     = "0x" + hashId(seed + "fill",   64);
+      const seed       = fromChain.id + service.id + String(Date.now());
+      const intentHash = "0x" + hashId(seed + "intent", 64);
+      const fillTx     = "0x" + hashId(seed + "fill",   64);
 
-    const intent: SettledIntent = {
-      id: hashId(seed + "id", 12),
-      fromChain: fromChain.label,
-      toChain: "Arbitrum Sepolia",
-      serviceId: service.id,
-      amountUsd: service.price,
-      intentHash,
-      fillTx,
-      ts: new Date().toISOString(),
-      ms: elapsed,
-    };
+      const intent: SettledIntent = {
+        id: hashId(seed + "id", 12),
+        fromChain: fromChain.label,
+        toChain: "Arbitrum Sepolia",
+        serviceId: service.id,
+        amountUsd: service.price,
+        intentHash,
+        fillTx,
+        ts: new Date().toISOString(),
+        ms: elapsed,
+      };
 
-    setIntents((prev) => [intent, ...prev.slice(0, 7)]);
-    setStatus("settled");
+      setIntents((prev) => [intent, ...prev.slice(0, 7)]);
+      setStatus("settled");
 
-    emitReceipt({
-      workspaceId: "arbitrum",
-      serviceId: service.id,
-      serviceName: service.label,
-      agentName: "ERC-7683 Solver",
-      payerWallet: "0xAgentOg…a1",
-      providerWallet: INTENT_SETTLER,
-      amount: service.price,
-      currency: "USDC",
-      network: "arbitrum-sepolia",
-      status: "verified",
-      kind: "arb.intent",
-      payload: { intentHash, fillTx, fromChain: fromChain.id, settlementMs: elapsed },
-    });
+      try {
+        emitReceipt({
+          workspaceId: "arbitrum",
+          serviceId: service.id,
+          serviceName: service.label,
+          agentName: "ERC-7683 Solver",
+          payerWallet: "0xAgentOg…a1",
+          providerWallet: INTENT_SETTLER,
+          amount: service.price,
+          currency: "USDC",
+          network: "arbitrum-sepolia",
+          status: "verified",
+          kind: "arb.intent",
+          payload: { intentHash, fillTx, fromChain: fromChain.id, settlementMs: elapsed },
+        });
+      } catch {
+        // Receipt emission is best-effort — intent is already in local history.
+      }
+    } catch (e) {
+      const msg = (e as { message?: string }).message ?? "Intent settlement failed";
+      setRunErr(msg);
+      setStatus("idle");
+    }
   }
 
   return (
@@ -220,7 +235,7 @@ export function AgentIntentWidget() {
         type="button"
         onClick={status === "settled" ? () => setStatus("idle") : run}
         disabled={isBusy}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 16 }}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8 }}
       >
         {isBusy
           ? <><Loader2 size={13} className="wallet-spin" /> Processing…</>
@@ -228,6 +243,12 @@ export function AgentIntentWidget() {
             ? "↺ New intent"
             : <><Zap size={13} /> Sign &amp; Settle Intent</>}
       </button>
+
+      {runErr && (
+        <div style={{ marginBottom: 12, padding: "6px 10px", background: "color-mix(in srgb, #f87171 10%, transparent)", border: "1px solid #f8717144", borderRadius: 8, fontSize: ".68rem", color: "#f87171", fontWeight: 600 }}>
+          {runErr}
+        </div>
+      )}
 
       {/* Settlement history */}
       {intents.length > 0 && (

@@ -977,26 +977,44 @@ export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspac
   const tier        = scoreTier(score);
   const tierColor   = TIER_COLOR2[tier]!;
 
+  const [err, setErr] = useState<string | null>(null);
+
   async function borrow() {
+    setErr(null);
+    if (busy) return;
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0 || amt > available) return;
+    if (!Number.isFinite(amt) || amt <= 0) { setErr("Enter a positive amount"); return; }
+    if (amt > available)                    { setErr(`Exceeds available credit ($${available.toFixed(2)})`); return; }
+    if (amt > 1_000_000)                     { setErr("Amount too large"); return; }
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 900));
-    const tx = "0x" + hashId("borrow", String(amt) + String(Date.now()), 64);
-    setBorrowed((prev) => Math.round((prev + amt) * 100) / 100);
-    setLastTx(tx);
-    setAmount("");
-    setBusy(false);
+    try {
+      await new Promise((r) => setTimeout(r, 900));
+      const safeAmt = Math.round(amt * 100) / 100;
+      const tx = "0x" + hashId("borrow", String(safeAmt) + String(Date.now()), 64);
+      setBorrowed((prev) => Math.round((prev + safeAmt) * 100) / 100);
+      setLastTx(tx);
+      setAmount("");
+    } catch (e) {
+      setErr((e as { message?: string }).message ?? "Borrow failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function repay() {
-    if (borrowed <= 0) return;
+    setErr(null);
+    if (busy || borrowed <= 0) return;
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 700));
-    const tx = "0x" + hashId("repay", String(borrowed) + String(Date.now()), 64);
-    setBorrowed(0);
-    setLastTx(tx);
-    setBusy(false);
+    try {
+      await new Promise((r) => setTimeout(r, 700));
+      const tx = "0x" + hashId("repay", String(borrowed) + String(Date.now()), 64);
+      setBorrowed(0);
+      setLastTx(tx);
+    } catch (e) {
+      setErr((e as { message?: string }).message ?? "Repay failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const pct = creditLimit > 0 ? Math.min(100, (borrowed / creditLimit) * 100) : 0;
@@ -1073,11 +1091,16 @@ export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspac
       {mode === "borrow" ? (
         <div style={{ display: "flex", gap: 8 }}>
           <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={available}
+            step={0.01}
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => { setAmount(e.target.value); if (err) setErr(null); }}
             placeholder={`Max $${available.toFixed(2)}`}
             disabled={busy || available <= 0}
-            style={{ flex: 1, padding: "8px 11px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }}
+            style={{ flex: 1, padding: "8px 11px", borderRadius: 9, border: `1px solid ${err ? "#f87171" : "var(--line-2)"}`, background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }}
           />
           <button className="btn btn-acc" type="button" onClick={borrow}
             disabled={busy || !parseFloat(amount) || parseFloat(amount) > available}
@@ -1090,6 +1113,12 @@ export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspac
           disabled={busy || borrowed <= 0} style={{ width: "100%" }}>
           {busy ? <Loader2 size={13} className="wallet-spin" /> : `Repay $${borrowed.toFixed(2)}`}
         </button>
+      )}
+
+      {err && (
+        <div style={{ marginTop: 8, padding: "6px 10px", background: "color-mix(in srgb, #f87171 10%, transparent)", border: "1px solid #f8717144", borderRadius: 8, fontSize: ".68rem", color: "#f87171", fontWeight: 600 }}>
+          {err}
+        </div>
       )}
 
       {lastTx && (

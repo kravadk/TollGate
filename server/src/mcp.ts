@@ -294,28 +294,45 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
     case "create_service": {
       const svcName = String(args["name"] ?? "").trim();
       if (!svcName) return { error: "name_required" };
+      if (svcName.length > 80) return { error: "name_too_long", maxLength: 80 };
+
       const price = Number(args["priceUsd"] ?? 0);
-      if (!price || price <= 0) return { error: "priceUsd_must_be_positive" };
+      if (!Number.isFinite(price) || price <= 0) return { error: "priceUsd_must_be_positive" };
+      if (price > 10_000) return { error: "priceUsd_too_high", maxUsd: 10_000 };
+
       const endpoint = String(args["endpoint"] ?? "").trim();
       if (!endpoint) return { error: "endpoint_required" };
+      try {
+        const u = new URL(endpoint);
+        if (u.protocol !== "https:" && u.protocol !== "http:") return { error: "endpoint_invalid_protocol", expected: "http(s)" };
+      } catch {
+        return { error: "endpoint_invalid_url" };
+      }
+      if (endpoint.length > 500) return { error: "endpoint_too_long", maxLength: 500 };
+
+      const description = typeof args["description"] === "string" ? args["description"].slice(0, 500) : `Custom paid API: ${svcName}`;
+      const category = typeof args["category"] === "string" && /^[a-z0-9_-]{2,40}$/i.test(args["category"]) ? args["category"] : "custom";
+
+      const providerWalletInput = typeof args["providerWallet"] === "string" ? args["providerWallet"].trim() : "";
+      if (providerWalletInput && !/^0x[0-9a-fA-F]{40}$/.test(providerWalletInput)) {
+        return { error: "providerWallet_invalid", expected: "0x-prefixed 40-hex address" };
+      }
+      const providerWallet = providerWalletInput || env.x402PayoutAddress;
 
       const ws = asWorkspace(args["workspace"]) ?? "arbitrum";
       const slug = svcName.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24);
       const serviceId = `svc_user_${slug}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
-      const providerWallet = typeof args["providerWallet"] === "string" && args["providerWallet"]
-        ? args["providerWallet"]
-        : env.x402PayoutAddress;
 
       const newSvc: import("./types.js").Service = {
         id: serviceId,
         name: svcName,
         provider: "Agent-registered via MCP",
         providerWallet,
-        category: typeof args["category"] === "string" ? args["category"] : "custom",
-        priceUsd: price,
+        category,
+        priceUsd: Math.round(price * 10000) / 10000,
         currency: env.x402Asset,
         network: ws === "arbitrum" ? "arbitrum-sepolia" : ws === "mantle" ? "mantle-mainnet" : ws === "0g" ? "0g-mainnet" : "arbitrum-sepolia",
-        description: typeof args["description"] === "string" ? args["description"] : `Custom paid API: ${svcName}`,
+        description,
         status: "active",
         workspaceIds: [ws],
         sampleResponse: { status: "ok", source: endpoint.slice(0, 60) },

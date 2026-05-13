@@ -96,10 +96,12 @@ export function A2AMarketplaceWidget() {
   }
 
   async function runDemo() {
+    if (running) return; // prevent double-run
     setRunning(true); setDone(false); setLog([]);
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, status: "idle" as StepStatus, detail: undefined })));
     setReceiptId(null); setStorageRoot(null); setEarned(0); setComputeCost(0);
 
+    try {
     // Step 1: Provider registers
     setStep("register", "running");
     addLog("Provider: ServiceRegistry.register(svc_marketplace_sentiment, $0.02)…");
@@ -132,8 +134,7 @@ export function A2AMarketplaceWidget() {
     if (!budgetResult.ok) {
       setStep("budget", "failed", `Blocked: ${budgetResult.reason}`);
       addLog(`✗ Budget check failed: ${budgetResult.reason}`);
-      setRunning(false);
-      return;
+      return; // try/finally below resets `running` and step state
     }
     setStep("budget", "done", `Approved — $${getRemainingToday(CONSUMER_ID).toFixed(2)} remaining after`);
     addLog("✓ AgentBudget: $0.02 approved, within daily limit");
@@ -241,8 +242,15 @@ export function A2AMarketplaceWidget() {
     if (ps) setProviderScore(ps);
     if (cs) setConsumerScore(cs);
 
-    setRunning(false);
     setDone(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addLog(`✗ Unexpected error: ${msg}`);
+      // Mark whichever step is still running as failed.
+      setSteps((prev) => prev.map((s) => s.status === "running" ? { ...s, status: "failed" as StepStatus, detail: msg.slice(0, 80) } : s));
+    } finally {
+      setRunning(false);
+    }
   }
 
   function reset() {

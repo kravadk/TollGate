@@ -80,6 +80,7 @@ import { DiscoveryWidget } from "./widgets/DiscoveryWidget";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { AgentScoreCard } from "./widgets/AgentScoreBadge";
 import * as api from "../lib/api";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl } from "../lib/og";
 import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../lib/mantle";
 
@@ -7023,7 +7024,7 @@ export function ServiceTabPage({
       {workspace.id === "arbitrum" && (t.includes("agent") || t.includes("marketplace")) && <DiscoveryWidget />}
       {workspace.id === "arbitrum" && t.includes("marketplace") && <MerchantWidget />}
       {workspace.id === "arbitrum" && (t.includes("stylus") || t.includes("rust") || t.includes("agent")) && <StylusSnippetViewer workspace={workspace} />}
-      {workspace.id === "arbitrum" && (t.includes("intent") || t.includes("cross") || t.includes("agent") || t.includes("marketplace")) && <AgentIntentWidget />}
+      {workspace.id === "arbitrum" && (t.includes("intent") || t.includes("cross") || t.includes("agent") || t.includes("marketplace")) && <ErrorBoundary label="AgentIntent (ERC-7683)"><AgentIntentWidget /></ErrorBoundary>}
       {workspace.id === "arbitrum" && t.includes("stylus") && <ArbitrumStylusDeployPanel workspace={workspace} />}
       {workspace.id === "arbitrum" && t.includes("stylus") && <ArbContractPaymentSim workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection")) && <ArbAllowanceManager workspace={workspace} />}
@@ -7582,9 +7583,9 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       </div>
       {workspace.id === "0g" && <AgentIdRegistry workspace={workspace} />}
       {workspace.id === "0g" && <RevenueSplitConsole workspace={workspace} />}
-      {workspace.id === "0g" && <OgIntegrationStatus />}
+      {workspace.id === "0g" && <ErrorBoundary label="0G Integration Status"><OgIntegrationStatus /></ErrorBoundary>}
       {workspace.id === "0g" && <OpenClawSkillConsole workspace={workspace} />}
-      {workspace.id === "0g" && <A2AMarketplaceWidget />}
+      {workspace.id === "0g" && <ErrorBoundary label="A2A Marketplace"><A2AMarketplaceWidget /></ErrorBoundary>}
       {workspace.id === "0g" && <BudgetWidget />}
       {workspace.id === "0g" && <AgentScoreCard agentId="agent_0g_strategist" />}
       {workspace.id === "arbitrum" && <BudgetWidget agentId="agent_arb_worker" />}
@@ -7593,7 +7594,7 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       {workspace.id === "mantle" && <MantleVaultPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleBudgetPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleEconomyLoop workspace={workspace} />}
-      {workspace.id === "mantle" && <AgentCreditLine workspace={workspace} />}
+      {workspace.id === "mantle" && <ErrorBoundary label="AgentCreditLine"><AgentCreditLine workspace={workspace} /></ErrorBoundary>}
       {workspace.id === "mantle" && <AgentScoreCard agentId="agent_mantle_strategist" />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("companion") && <EazoCompanionPanel workspace={workspace} />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("budget") && <EazoBudgetTracker workspace={workspace} />}
