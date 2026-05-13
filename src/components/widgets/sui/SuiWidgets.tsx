@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   ArrowRightLeft, BadgeCheck, Box, Code2, Database, ExternalLink,
   FileCode2, Loader2, Lock, RefreshCw, Shield, Sparkles, Wallet, Waves,
+  Zap, Trophy, Brain, TrendingUp, Swords, Star, Copy, CheckCheck,
+  Play, Clock, Activity, Target, Lightbulb,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
@@ -656,6 +658,470 @@ export function SuiAgentEconomyLoop({ workspace }: { workspace: Workspace }) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DeepBook Yield Escrow ──────────────────────────────────────────────────────
+const POOLS = [
+  { id: "SUI/USDC", apr: 14.2, tvl: "2.4M" },
+  { id: "SUI/DEEP", apr: 22.7, tvl: "830K" },
+  { id: "DEEP/USDC", apr: 18.1, tvl: "1.1M" },
+];
+
+export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [escrows, setEscrows] = useLocalStore<{ id: string; pool: string; amount: number; yield: number; status: string; ts: string }[]>(
+    `sui-yield-escrows-${workspace.id}`, []
+  );
+  const [pool, setPool] = useState(POOLS[0].id);
+  const [amount, setAmount] = useState("1.0");
+  const [locking, setLocking] = useState(false);
+
+  async function lockFunds() {
+    setLocking(true);
+    await new Promise(r => setTimeout(r, 1800));
+    const sel = POOLS.find(p => p.id === pool)!;
+    const id = hashId(`escrow-${Date.now()}`);
+    const newEscrow = { id, pool: sel.id, amount: parseFloat(amount), yield: 0, status: "active", ts: new Date().toLocaleTimeString() };
+    setEscrows(prev => [newEscrow, ...prev]);
+    emitReceipt({ service: "sui_yield_escrow", amount: parseFloat(amount), currency: "SUI", hash: id, status: "locked" });
+    setLocking(false);
+  }
+
+  async function releaseFunds(id: string) {
+    setEscrows(prev => prev.map(e => {
+      if (e.id !== id) return e;
+      const apr = POOLS.find(p => p.id === e.pool)?.apr ?? 14;
+      const yieldEarned = +(e.amount * apr / 100 / 365 * deterministicScore(id, 7)).toFixed(4);
+      return { ...e, yield: yieldEarned, status: "released" };
+    }));
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "var(--accent-primary)" }}><TrendingUp size={15} /></span>
+        <div><h3>DeepBook Yield Escrow</h3><div className="sub">Earn LP yield while agent task runs — escrow + DeFi in one PTB</div></div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: 12 }}>
+        <select className="inp" value={pool} onChange={e => setPool(e.target.value)}>
+          {POOLS.map(p => <option key={p.id} value={p.id}>{p.id} — {p.apr}% APR</option>)}
+        </select>
+        <input className="inp" type="number" min="0.1" step="0.1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="SUI amount" />
+        <button className="btn btn-acc btn-sm" onClick={lockFunds} disabled={locking}>
+          {locking ? <Loader2 size={13} className="wallet-spin" /> : <Lock size={13} />}
+          {locking ? "Locking…" : "Lock + Earn"}
+        </button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 14 }}>
+        {POOLS.map(p => (
+          <div key={p.id} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)" }}>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{p.id}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--accent-primary)" }}>{p.apr}%</div>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>APR · TVL ${p.tvl}</div>
+          </div>
+        ))}
+      </div>
+      {escrows.length > 0 && (
+        <div className="svc-table__scroll">
+          <table className="svc-table">
+            <thead><tr><th>Pool</th><th>Amount</th><th>Yield</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {escrows.map(e => (
+                <tr key={e.id}>
+                  <td style={{ fontSize: 11 }}>{e.pool}</td>
+                  <td className="svc-table__num">{e.amount} SUI</td>
+                  <td className="svc-table__num" style={{ color: "var(--accent-primary)" }}>+{e.yield} SUI</td>
+                  <td><span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: e.status === "active" ? "var(--accent-soft)" : "var(--success-soft)", color: e.status === "active" ? "var(--accent-primary)" : "var(--success)" }}>{e.status}</span></td>
+                  <td>{e.status === "active" && <button className="btn btn-sm" style={{ fontSize: 10 }} onClick={() => releaseFunds(e.id)}>Release</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AgentNFT Living Reputation ─────────────────────────────────────────────────
+const TIERS = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
+const TIER_COLORS = ["#9ca3af", "#22c55e", "#3b82f6", "#a855f7", "#f59e0b"];
+
+export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [agents, setAgents] = useLocalStore<{ id: string; name: string; tier: number; level: number; tasks: number; revenue: number; ts: string }[]>(
+    `sui-agent-nfts-${workspace.id}`,
+    [
+      { id: hashId("agent-alpha"), name: "Alpha-7", tier: 2, level: 14, tasks: 47, revenue: 3.21, ts: "minted" },
+      { id: hashId("agent-beta"), name: "Beta-3", tier: 1, level: 6, tasks: 12, revenue: 0.88, ts: "minted" },
+    ]
+  );
+  const [claiming, setClaiming] = useState<string | null>(null);
+
+  async function claimUpdate(id: string) {
+    setClaiming(id);
+    await new Promise(r => setTimeout(r, 1400));
+    setAgents(prev => prev.map(a => {
+      if (a.id !== id) return a;
+      const newTasks = a.tasks + Math.floor(deterministicScore(id + Date.now(), 5));
+      const newRevenue = +(a.revenue + deterministicScore(id, 3) * 0.1).toFixed(3);
+      const newLevel = a.level + 1;
+      const newTier = Math.min(4, newLevel >= 20 ? 4 : newLevel >= 10 ? 3 : newLevel >= 5 ? 2 : newLevel >= 2 ? 1 : 0);
+      return { ...a, tasks: newTasks, revenue: newRevenue, level: newLevel, tier: newTier };
+    }));
+    emitReceipt({ service: "sui_nft_reputation", amount: 0, currency: "SUI", hash: id, status: "updated" });
+    setClaiming(null);
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Star size={15} /></span>
+        <div><h3>AgentNFT Living Reputation</h3><div className="sub">Each agent = on-chain NFT that levels up as it completes tasks</div></div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginTop: 4 }}>
+        {agents.map(a => (
+          <div key={a.id} style={{ padding: "14px 16px", borderRadius: 10, border: `2px solid ${TIER_COLORS[a.tier]}33`, background: "var(--card-bg)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: `${TIER_COLORS[a.tier]}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Trophy size={18} style={{ color: TIER_COLORS[a.tier] }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{a.name}</div>
+                <div style={{ fontSize: 10, color: TIER_COLORS[a.tier], fontWeight: 600 }}>{TIERS[a.tier]} · Lv.{a.level}</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>Tasks: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{a.tasks}</span></div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>Revenue: <span style={{ color: "var(--accent-primary)", fontWeight: 600 }}>{a.revenue} SUI</span></div>
+            </div>
+            <div style={{ height: 4, borderRadius: 4, background: "var(--border-subtle)", marginBottom: 10 }}>
+              <div style={{ height: "100%", borderRadius: 4, background: TIER_COLORS[a.tier], width: `${(a.level % 10) * 10}%`, transition: "width 0.4s" }} />
+            </div>
+            <button className="btn btn-sm btn-acc" style={{ width: "100%", fontSize: 11 }} onClick={() => claimUpdate(a.id)} disabled={claiming === a.id}>
+              {claiming === a.id ? <><Loader2 size={11} className="wallet-spin" /> Updating…</> : <>Claim Reputation Update</>}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Sui Pay Button Widget ──────────────────────────────────────────────────────
+export function SuiPayButtonWidget({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [label, setLabel] = useState("Pay with Sui AI");
+  const [amount, setAmount] = useState("0.01");
+  const [recipient, setRecipient] = useState("0xagent…");
+  const [copied, setCopied] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [paid, setPaid] = useState(false);
+
+  const snippet = `<script src="https://cdn.suiagent.os/pay.js"></script>
+<sui-pay
+  label="${label}"
+  amount="${amount}"
+  currency="SUI"
+  recipient="${recipient}"
+></sui-pay>`;
+
+  async function copySnippet() {
+    await navigator.clipboard.writeText(snippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function simulatePay() {
+    setPaying(true);
+    await new Promise(r => setTimeout(r, 1600));
+    const hash = hashId(`pay-${Date.now()}`);
+    emitReceipt({ service: "sui_pay_widget", amount: parseFloat(amount), currency: "SUI", hash, status: "paid" });
+    setPaying(false);
+    setPaid(true);
+    setTimeout(() => setPaid(false), 3000);
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Zap size={15} /></span>
+        <div><h3>Sui Pay Button</h3><div className="sub">One &lt;script&gt; tag = Stripe for AI on Sui — drop into any website</div></div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <input className="inp" placeholder="Button label" value={label} onChange={e => setLabel(e.target.value)} />
+        <input className="inp" placeholder="Amount (SUI)" value={amount} onChange={e => setAmount(e.target.value)} />
+        <input className="inp" placeholder="Recipient address" value={recipient} onChange={e => setRecipient(e.target.value)} />
+      </div>
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <pre style={{ margin: 0, padding: "12px 14px", borderRadius: 8, background: "var(--code-bg, var(--card-bg))", border: "1px solid var(--border-subtle)", fontSize: 11, lineHeight: 1.6, overflowX: "auto", color: "var(--text-primary)" }}>{snippet}</pre>
+        <button onClick={copySnippet} style={{ position: "absolute", top: 8, right: 8, background: "var(--card-bg)", border: "1px solid var(--border-subtle)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
+          {copied ? <><CheckCheck size={12} style={{ color: "var(--success)" }} /> Copied</> : <><Copy size={12} /> Copy</>}
+        </button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ flex: 1, fontSize: 11, color: "var(--text-secondary)" }}>Live preview — click the button below to simulate a payment:</div>
+        <button className="btn btn-acc" onClick={simulatePay} disabled={paying || paid} style={{ minWidth: 140 }}>
+          {paying ? <><Loader2 size={13} className="wallet-spin" /> Processing…</> : paid ? <><BadgeCheck size={13} /> Paid!</> : <><Zap size={13} /> {label}</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Agent Memory Network ───────────────────────────────────────────────────────
+export function AgentMemoryNetwork({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [memories, setMemories] = useLocalStore<{ id: string; key: string; preview: string; shared: boolean; price: number; ts: string }[]>(
+    `sui-memories-${workspace.id}`, []
+  );
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const [shared, setShared] = useState(false);
+  const [price, setPrice] = useState("0.005");
+  const [writing, setWriting] = useState(false);
+  const [buying, setBuying] = useState<string | null>(null);
+
+  async function writeMemory() {
+    if (!key.trim() || !value.trim()) return;
+    setWriting(true);
+    await new Promise(r => setTimeout(r, 1500));
+    const id = hashId(`mem-${key}-${Date.now()}`);
+    setMemories(prev => [{ id, key: key.trim(), preview: value.slice(0, 60) + (value.length > 60 ? "…" : ""), shared, price: parseFloat(price), ts: new Date().toLocaleTimeString() }, ...prev]);
+    emitReceipt({ service: "sui_memory_write", amount: 0.018, currency: "SUI", hash: id, status: "stored" });
+    setKey(""); setValue("");
+    setWriting(false);
+  }
+
+  async function buyAccess(id: string, p: number) {
+    setBuying(id);
+    await new Promise(r => setTimeout(r, 1200));
+    emitReceipt({ service: "sui_memory_access", amount: p, currency: "SUI", hash: hashId(`buy-${id}`), status: "unlocked" });
+    setBuying(null);
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Brain size={15} /></span>
+        <div><h3>Agent Memory Network</h3><div className="sub">Walrus-encrypted memory blobs + Seal access control + knowledge marketplace</div></div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+        <input className="inp" placeholder="Memory key (e.g. user-prefs)" value={key} onChange={e => setKey(e.target.value)} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="inp" placeholder="Price if shared (SUI)" value={price} onChange={e => setPrice(e.target.value)} disabled={!shared} style={{ flex: 1 }} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={shared} onChange={e => setShared(e.target.checked)} /> Share
+          </label>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <textarea className="inp" rows={2} placeholder="Memory value (encrypted with Seal before writing to Walrus)" value={value} onChange={e => setValue(e.target.value)} style={{ flex: 1, resize: "vertical" }} />
+        <button className="btn btn-acc btn-sm" onClick={writeMemory} disabled={writing || !key.trim() || !value.trim()} style={{ alignSelf: "flex-end" }}>
+          {writing ? <Loader2 size={13} className="wallet-spin" /> : <Database size={13} />}
+          {writing ? "Writing…" : "Write Memory"}
+        </button>
+      </div>
+      {memories.length > 0 && (
+        <div className="svc-table__scroll">
+          <table className="svc-table">
+            <thead><tr><th>Key</th><th>Preview</th><th>Access</th><th></th></tr></thead>
+            <tbody>
+              {memories.map(m => (
+                <tr key={m.id}>
+                  <td style={{ fontSize: 11, fontWeight: 600 }}>{m.key}</td>
+                  <td style={{ fontSize: 10, color: "var(--text-secondary)" }}>{m.preview}</td>
+                  <td>{m.shared ? <span style={{ fontSize: 10, color: "var(--accent-primary)" }}>{m.price} SUI</span> : <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>Private</span>}</td>
+                  <td>{m.shared && <button className="btn btn-sm" style={{ fontSize: 10 }} onClick={() => buyAccess(m.id, m.price)} disabled={buying === m.id}>{buying === m.id ? "…" : "Buy Access"}</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Battle Arena Widget ────────────────────────────────────────────────────────
+const ARENA_CHALLENGES = [
+  { id: "c1", name: "Alpha-7 vs Beta-3", track: "Sui Agent Payments", prize: 2.0, bets: { a: 1.4, b: 0.9 }, status: "live" },
+  { id: "c2", name: "Gamma-1 vs Delta-9", track: "DeepBook Arb", prize: 5.0, bets: { a: 2.1, b: 3.7 }, status: "live" },
+  { id: "c3", name: "Eta-2 vs Theta-5", track: "Walrus Upload Speed", prize: 1.0, bets: { a: 0.6, b: 0.6 }, status: "upcoming" },
+];
+
+export function BattleArenaWidget({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [tab, setTab] = useState<"spectate" | "compete">("spectate");
+  const [bets, setBets] = useLocalStore<Record<string, { side: "a" | "b"; amount: number }>>(
+    `sui-arena-bets-${workspace.id}`, {}
+  );
+  const [betAmount, setBetAmount] = useState("0.1");
+  const [challengeName, setChallengeName] = useState("");
+  const [challengePrize, setChallengePrize] = useState("1.0");
+  const [creating, setCreating] = useState(false);
+
+  async function placeBet(challengeId: string, side: "a" | "b") {
+    const hash = hashId(`bet-${challengeId}-${side}-${Date.now()}`);
+    setBets(prev => ({ ...prev, [challengeId]: { side, amount: parseFloat(betAmount) } }));
+    emitReceipt({ service: "sui_battle_bet", amount: parseFloat(betAmount), currency: "SUI", hash, status: "placed" });
+  }
+
+  async function createChallenge() {
+    if (!challengeName.trim()) return;
+    setCreating(true);
+    await new Promise(r => setTimeout(r, 1400));
+    emitReceipt({ service: "sui_battle_create", amount: parseFloat(challengePrize), currency: "SUI", hash: hashId(`challenge-${Date.now()}`), status: "created" });
+    setCreating(false);
+    setChallengeName("");
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Swords size={15} /></span>
+        <div><h3>Agent Battle Arena</h3><div className="sub">Agents compete on-chain, spectators bet via DeepBook — ONE Championship track</div></div>
+        <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
+          <button className={`btn btn-sm ${tab === "spectate" ? "btn-acc" : ""}`} onClick={() => setTab("spectate")}>Spectate</button>
+          <button className={`btn btn-sm ${tab === "compete" ? "btn-acc" : ""}`} onClick={() => setTab("compete")}>Compete</button>
+        </div>
+      </div>
+      {tab === "spectate" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+          {ARENA_CHALLENGES.map(c => {
+            const myBet = bets[c.id];
+            const totalPool = c.bets.a + c.bets.b;
+            return (
+              <div key={c.id} style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)", background: "var(--card-bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 12 }}>{c.name}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{c.track}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 12, color: "var(--accent-primary)", fontWeight: 700 }}>{c.prize} SUI Prize</div>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{totalPool.toFixed(1)} SUI pool</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", height: 6, borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+                  <div style={{ flex: c.bets.a, background: "var(--accent-primary)" }} />
+                  <div style={{ flex: c.bets.b, background: "#f59e0b" }} />
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                    <input className="inp" type="number" min="0.01" step="0.01" value={betAmount} onChange={e => setBetAmount(e.target.value)} style={{ width: 70, fontSize: 11 }} />
+                    <button className="btn btn-sm btn-acc" style={{ flex: 1, fontSize: 11 }} onClick={() => placeBet(c.id, "a")} disabled={c.status !== "live" || !!myBet}>
+                      {myBet?.side === "a" ? `Bet placed (${myBet.amount} SUI)` : `Bet A (${(c.bets.a / totalPool * 100).toFixed(0)}%)`}
+                    </button>
+                    <button className="btn btn-sm" style={{ flex: 1, fontSize: 11, borderColor: "#f59e0b", color: "#f59e0b" }} onClick={() => placeBet(c.id, "b")} disabled={c.status !== "live" || !!myBet}>
+                      {myBet?.side === "b" ? `Bet placed (${myBet.amount} SUI)` : `Bet B (${(c.bets.b / totalPool * 100).toFixed(0)}%)`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {tab === "compete" && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>Create a new agent challenge — specify the task and prize pool</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginBottom: 8 }}>
+            <input className="inp" placeholder="Challenge name (e.g. Fastest Walrus Upload)" value={challengeName} onChange={e => setChallengeName(e.target.value)} />
+            <input className="inp" placeholder="Prize (SUI)" value={challengePrize} onChange={e => setChallengePrize(e.target.value)} style={{ width: 110 }} />
+          </div>
+          <button className="btn btn-acc" onClick={createChallenge} disabled={creating || !challengeName.trim()} style={{ width: "100%" }}>
+            {creating ? <><Loader2 size={13} className="wallet-spin" /> Creating on-chain…</> : <><Trophy size={13} /> Create Challenge</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Intent Engine Widget ───────────────────────────────────────────────────────
+const INTENT_EXAMPLES = [
+  "Find best yield for 5 SUI, deposit and notify me",
+  "Hire 3 agents to scrape, analyze, and summarize crypto news",
+  "If ETH drops 10%, swap half my SUI to USDC via DeepBook",
+  "Upload my model weights to Walrus, sell access for 0.1 SUI",
+];
+
+function parseIntent(text: string): { agents: string[]; steps: string[]; schedule: string } {
+  const lower = text.toLowerCase();
+  const agents: string[] = [];
+  const steps: string[] = [];
+  if (lower.includes("yield") || lower.includes("deposit")) { agents.push("YieldOptimizer"); steps.push("Scan DeepBook pools for APR"); steps.push("Lock funds in highest-yield escrow"); }
+  if (lower.includes("swap") || lower.includes("usdc") || lower.includes("eth")) { agents.push("SwapExecutor"); steps.push("Watch price feed via DeepBook oracle"); steps.push("Execute PTB swap on trigger"); }
+  if (lower.includes("scrape") || lower.includes("news") || lower.includes("summar")) { agents.push("WebScraper"); agents.push("LLMAnalyst"); steps.push("Scrape sources via x402-gated endpoint"); steps.push("Summarize via Atoma on-chain LLM"); }
+  if (lower.includes("upload") || lower.includes("walrus") || lower.includes("model")) { agents.push("WalrusUploader"); steps.push("Encrypt blob with Seal"); steps.push("Pin to Walrus + register in marketplace"); }
+  if (agents.length === 0) { agents.push("OrchestratorAgent"); steps.push("Parse intent NL → PTB"); steps.push("Route to best available agent"); }
+  const schedule = lower.includes("if ") ? "Conditional trigger" : lower.includes("every") ? "Recurring cron" : "One-shot";
+  return { agents, steps, schedule };
+}
+
+export function IntentEngineWidget({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [intent, setIntent] = useState("");
+  const [parsed, setParsed] = useState<{ agents: string[]; steps: string[]; schedule: string } | null>(null);
+  const [deploying, setDeploying] = useState(false);
+  const [deployed, setDeployed] = useState(false);
+
+  function handleParse() {
+    if (!intent.trim()) return;
+    setParsed(parseIntent(intent));
+    setDeployed(false);
+  }
+
+  async function deployWorkflow() {
+    setDeploying(true);
+    await new Promise(r => setTimeout(r, 2000));
+    const hash = hashId(`workflow-${Date.now()}`);
+    emitReceipt({ service: "sui_intent", amount: 0.04, currency: "SUI", hash, status: "deployed" });
+    setDeploying(false);
+    setDeployed(true);
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Lightbulb size={15} /></span>
+        <div><h3>Intent Engine</h3><div className="sub">Natural language → multi-agent PTB workflow — no code required</div></div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        {INTENT_EXAMPLES.map(ex => (
+          <button key={ex} onClick={() => { setIntent(ex); setParsed(parseIntent(ex)); setDeployed(false); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 20, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", cursor: "pointer", color: "var(--text-secondary)" }}>{ex}</button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <textarea className="inp" rows={2} placeholder="Describe what you want agents to do…" value={intent} onChange={e => { setIntent(e.target.value); setParsed(null); setDeployed(false); }} style={{ flex: 1, resize: "vertical" }} />
+        <button className="btn btn-acc btn-sm" onClick={handleParse} disabled={!intent.trim()} style={{ alignSelf: "flex-end" }}>
+          <Target size={13} /> Parse
+        </button>
+      </div>
+      {parsed && (
+        <div style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>AGENTS ({parsed.agents.length})</div>
+              {parsed.agents.map(a => <div key={a} style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-primary)" }}>· {a}</div>)}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>STEPS</div>
+              {parsed.steps.map((s, i) => <div key={i} style={{ fontSize: 10, color: "var(--text-primary)" }}>{i + 1}. {s}</div>)}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>SCHEDULE</div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{parsed.schedule}</div>
+            </div>
+          </div>
+          <button className="btn btn-acc" onClick={deployWorkflow} disabled={deploying || deployed} style={{ width: "100%" }}>
+            {deploying ? <><Loader2 size={13} className="wallet-spin" /> Deploying workflow…</> : deployed ? <><BadgeCheck size={13} /> Workflow deployed!</> : <><Play size={13} /> Deploy as PTB Workflow</>}
+          </button>
         </div>
       )}
     </div>

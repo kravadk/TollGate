@@ -67,6 +67,12 @@ import {
   ZkLoginPanel,
   SuiAgentWalletPanel,
   SuiAgentEconomyLoop,
+  DeepBookYieldEscrow,
+  AgentNftReputation,
+  SuiPayButtonWidget,
+  AgentMemoryNetwork,
+  BattleArenaWidget,
+  IntentEngineWidget,
 } from "./widgets/sui/SuiWidgets";
 import { OpenClawSkillConsole, TeeAttestationVerifier, DePinBulkPin } from "./widgets/og-extra/OgExtraWidgets";
 import { OgIntegrationStatus } from "./widgets/og-extra/OgIntegrationStatus";
@@ -5186,7 +5192,7 @@ export function ServiceTabPage({
     t.includes("checkout") || t.includes("orbit") || t.includes("monitor") || t.includes("qiedex") || t.includes("dex") ||
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
     (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit"))) ||
-    (workspace.id === "sui" &&(t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent"))) ||
+    (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("widget") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
     (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant"))) ||
@@ -5307,6 +5313,12 @@ export function ServiceTabPage({
       {workspace.id === "sui" && (t.includes("move") || t.includes("contracts")) && <MoveContractViewer workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("nft") || t.includes("market")) && <SuiNftMarket workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("wallet") || t.includes("agent")) && <><SuiAgentWalletPanel workspace={workspace} /><ZkLoginPanel workspace={workspace} /><SuiAgentEconomyLoop workspace={workspace} /></>}
+      {workspace.id === "sui" && (t.includes("yield") || t.includes("escrow")) && <DeepBookYieldEscrow workspace={workspace} />}
+      {workspace.id === "sui" && t.includes("arena") && <BattleArenaWidget workspace={workspace} />}
+      {workspace.id === "sui" && (t.includes("pay widget") || t.includes("pay button") || t.includes("widget")) && <SuiPayButtonWidget workspace={workspace} />}
+      {workspace.id === "sui" && (t.includes("memory") || t.includes("memory network")) && <AgentMemoryNetwork workspace={workspace} />}
+      {workspace.id === "sui" && t.includes("intent") && <IntentEngineWidget workspace={workspace} />}
+      {workspace.id === "sui" && t.includes("receipt") && <AgentNftReputation workspace={workspace} />}
 
       {workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb")) && <AgoraTradingWidget />}
       {workspace.id === "agora" && (t.includes("portfolio") || t.includes("x402") || t.includes("circle")) && <A2AMarketplaceWidget />}
