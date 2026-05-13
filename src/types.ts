@@ -4,7 +4,6 @@ export type Theme = "light" | "dark";
 
 export type WorkspaceId =
   | "0g"
-  | "liquify"
   | "qie"
   | "arbitrum"
   | "mantle"

@@ -23,7 +23,6 @@ type RegistryService = {
 
 const SEED_SERVICES: RegistryService[] = [
   { serviceId: "svc_0g_inference", name: "0G Compute · Inference", priceUsd: 0.03, network: "0g-mainnet", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_0g_inference", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
-  { serviceId: "svc_liq_wallet_risk", name: "Liquify · Wallet Risk", priceUsd: 0.05, network: "arbitrum-sepolia", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_liq_wallet_risk", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
   { serviceId: "svc_arb_gas_oracle", name: "Arbitrum · Gas Oracle", priceUsd: 0.01, network: "arbitrum-sepolia", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_arb_gas_oracle", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
   { serviceId: "svc_mantle_yield", name: "Mantle · Yield Optimizer", priceUsd: 0.08, network: "mantle-mainnet", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_mantle_yield", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
   { serviceId: "svc_qie_sentiment", name: "QIE · Sentiment Analysis", priceUsd: 0.02, network: "qie-mainnet", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_qie_sentiment", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },

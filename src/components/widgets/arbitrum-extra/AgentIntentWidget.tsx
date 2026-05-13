@@ -27,7 +27,6 @@ const CHAINS = [
 
 const SERVICES = [
   { id: "svc_0g_inference",    label: "0G Compute · Inference",  price: 0.05 },
-  { id: "svc_liq_wallet_risk", label: "Liquify · Wallet Risk",    price: 0.03 },
   { id: "svc_arb_gas_oracle",  label: "Arbitrum · Gas Oracle",    price: 0.01 },
 ];
 

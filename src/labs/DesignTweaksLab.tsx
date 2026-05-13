@@ -200,7 +200,7 @@ function InvoicePhone({ onAction }: { onAction: ActionReporter }) {
               <i><ArrowRight size={17} /></i>
               <span>
                 <small>For</small>
-                <b><WalletCards size={15} /> Liquify API</b>
+                <b><WalletCards size={15} /> Analytics API</b>
               </span>
             </div>
             <div className="dt-sheet-amount">

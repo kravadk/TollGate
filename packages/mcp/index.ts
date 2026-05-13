@@ -22,7 +22,7 @@ const TOOLS = [
   {
     name: "tollgate_list_services",
     description:
-      "List paid x402 AI services on TollGate. Optional workspace filter: 0g, liquify, qie, arbitrum, mantle, eazo, berkeley, deepsurge.",
+      "List paid x402 AI services on TollGate. Optional workspace filter: 0g, qie, arbitrum, mantle, berkeley, deepsurge, sui, agora, polygon.",
     inputSchema: {
       type: "object" as const,
       properties: {

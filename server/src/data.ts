@@ -84,14 +84,6 @@ export const services: Service[] = [
     description: "Agent pays per backtest run; returns return / drawdown / Sharpe + a receipt.",
     sampleResponse: { pair: "mETH/USDY", retPct: 12.4, maxDdPct: 6.1, sharpe: 1.3, trades: 42 } }),
 
-  // Eazo
-  svc({ id: "svc_eazo_subopt", workspaceIds: ["eazo"], name: "Eazo · Subscription Optimizer", category: "analytics", priceUsd: 0.02,
-    description: "Reviews recurring spend and proposes pause/cancel actions within a weekly budget.",
-    sampleResponse: { suggestions: [{ name: "Spotify", action: "cancel", reason: "3 months unused" }] } }),
-  svc({ id: "svc_eazo_brief", workspaceIds: ["eazo"], name: "Eazo · Personal Finance Brief", category: "data", priceUsd: 0.03,
-    description: "Daily brief: what the AI spent, risky approvals, upcoming renewals.",
-    sampleResponse: { spentTodayUsd: 1.42, riskyApprovals: 0, renewals: ["Claude Pro · tomorrow"] } }),
-
   // Berkeley
   svc({ id: "svc_bk_tx_explainer", workspaceIds: ["berkeley"], name: "Berkeley · Tx Explainer", category: "inference", priceUsd: 0.03,
     description: "Decode a pending wallet action: what it does, what it touches, safe/caution/danger.",
@@ -110,9 +102,7 @@ export const services: Service[] = [
 ];
 
 export const agents: AgentPolicy[] = [
-  { id: "agent_yield_researcher", workspaceId: "mantle", name: "Yield Researcher", wallet: "0x0E43...3F71", status: "active", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.25, spentTodayUsd: 0.27, allowlist: ["svc_mnt_alpha", "svc_mnt_yield", "svc_mnt_backtest", "svc_liq_signal"] },
-  { id: "agent_wallet_analyst", workspaceId: "liquify", name: "Wallet Analyst", wallet: "0x9aC2...1bE0", status: "active", autoPay: true, dailyLimitUsd: 5, maxPerRequestUsd: 0.1, spentTodayUsd: 0.13, allowlist: ["svc_liq_wallet_risk", "svc_liq_tax"] },
-  { id: "agent_life_companion", workspaceId: "eazo", name: "Life Companion", wallet: "0x4f1D...77aa", status: "active", autoPay: true, dailyLimitUsd: 3, maxPerRequestUsd: 0.05, spentTodayUsd: 0.04, allowlist: ["svc_eazo_subopt", "svc_eazo_brief"] },
+  { id: "agent_yield_researcher", workspaceId: "mantle", name: "Yield Researcher", wallet: "0x0E43...3F71", status: "active", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.25, spentTodayUsd: 0.27, allowlist: ["svc_mnt_alpha", "svc_mnt_yield", "svc_mnt_backtest"] },
   { id: "agent_0g_runner", workspaceId: "0g", name: "0G Job Runner", wallet: "0x2bA9...c011", status: "active", autoPay: true, dailyLimitUsd: 8, maxPerRequestUsd: 0.2, spentTodayUsd: 0.11, allowlist: ["svc_0g_inference", "svc_0g_storage", "svc_0g_private"] },
 ];
 

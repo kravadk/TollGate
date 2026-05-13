@@ -99,7 +99,6 @@ export function nativeSymbolForChain(chainId: string | null): string {
 // ── Preferred mainnet chain per workspace ("відповідно до проекту") ──────────
 export const WORKSPACE_CHAIN: Record<string, { hex: string; name: string; native: string }> = {
   "0g": { hex: "0x4115", name: "0G", native: "0G" },          // 0G mainnet (chainId 16661) — AgentReceiptRegistry is deployed here
-  liquify: { hex: "0x2105", name: "Base", native: "ETH" },
   qie: { hex: "0x7bf", name: "QIE Testnet", native: "QIE" }, // QIE testnet (chainId 1983 = 0x7BF)
   arbitrum: { hex: "0xa4b1", name: "Arbitrum One", native: "ETH" },
   mantle: { hex: "0x1388", name: "Mantle", native: "MNT" },

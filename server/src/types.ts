@@ -2,7 +2,7 @@
 // (kept minimal — only what the gateway needs).
 
 export type WorkspaceId =
-  | "0g" | "liquify" | "qie" | "arbitrum" | "mantle" | "eazo" | "berkeley" | "deepsurge";
+  | "0g" | "qie" | "arbitrum" | "mantle" | "berkeley" | "deepsurge" | "sui" | "agora" | "polygon";
 
 export type ServiceCategory =
   | "data" | "inference" | "storage" | "analytics" | "payment" | "game-intel" | "tax" | "trading";

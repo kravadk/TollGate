@@ -94,20 +94,6 @@ export const workspaces: Workspace[] = [
     Icon: Cable as LucideIcon,
   },
   {
-    id: "liquify",
-    shortName: "Liquify",
-    name: "Liquify x402 Data Terminal",
-    route: "/liquify",
-    hackathon: "DoraHacks × Liquify",
-    pitch: "Agents buy wallet analytics, trading signals and tax classification per call over a native x402 handshake.",
-    tracks: ["Next-Gen Trading + x402", "Wallet Analysis", "DeFi Tax"],
-    networks: ["base-sepolia", "arbitrum-sepolia"],
-    tabs: ["Overview", "Trading Data", "Wallet Analysis", "Tax Reports", "x402 Gateway", "Payments"],
-    accent: "#F2A60C",
-    darkAccent: "#FFC247",
-    Icon: ChartNoAxesCombined as LucideIcon,
-  },
-  {
     id: "deepsurge",
     shortName: "DeepSurge",
     name: "Frontier Intel Market",
@@ -183,20 +169,6 @@ const RAW_SERVICES: SRaw[] = [
     description: "Returns the agent's private working context; metadata is sealed and only the receipt holder can read it.",
     priceUsd: 0.04, currency: "USDC", network: "0g-testnet", provider: "0G Privacy Layer", providerWallet: W,
     sampleIn: '{ "agentId": "agent_…", "scope": "trading" }', response: '{ "context": "🔒 sealed", "unsealedFor": "rcpt_…" }', status: "active", calls: 318 },
-
-  // Liquify
-  { id: "svc_wallet_risk", workspaceId: "liquify", name: "Wallet Risk API", category: "analytics",
-    description: "Scores a wallet on approvals exposure, contract age, mixer proximity and label reputation.",
-    priceUsd: 0.05, currency: "USDC", network: "base-sepolia", provider: "Studio Sphere Labs", providerWallet: W,
-    sampleIn: '{ "address": "0x91…", "chain": "arbitrum" }', response: '{ "riskScore": 82, "summary": "High exposure to new contracts, 2 unlimited approvals." }', status: "active", calls: 3920 },
-  { id: "svc_yield_signal", workspaceId: "liquify", name: "Trading Signal API", category: "trading",
-    description: "Returns a directional signal with confidence + risk band for a given asset and venue.",
-    priceUsd: 0.10, currency: "USDC", network: "base-sepolia", provider: "Studio Sphere Labs", providerWallet: W,
-    sampleIn: '{ "asset": "USDC", "venue": "uni-v3" }', response: '{ "signal": "accumulate", "confidence": 0.71, "riskBand": "mid" }', status: "active", calls: 1740 },
-  { id: "svc_tax_classifier", workspaceId: "liquify", name: "Tax Classification API", category: "tax",
-    description: "Classifies wallet transactions into tax categories (income, swap, transfer, fee) with cost-basis hints.",
-    priceUsd: 0.08, currency: "USDC", network: "base-sepolia", provider: "Dip Inc. Tax", providerWallet: W2,
-    sampleIn: '{ "address": "0x91…", "year": 2025 }', response: '{ "categorized": 412, "income": 31, "swaps": 188, "needsReview": 7 }', status: "active", calls: 980 },
 
   // QIE
   { id: "svc_qie_checkout", workspaceId: "qie", name: "QIE Merchant Checkout API", category: "payment",
@@ -278,16 +250,6 @@ const RAW_SERVICES: SRaw[] = [
     description: "Queues a batch of inference prompts on a 0G Compute node; one receipt covers the whole batch.",
     priceUsd: 0.09, currency: "USDC", network: "0g-testnet", provider: "0G Compute Node", providerWallet: W2,
     sampleIn: '{ "model": "risk-scorer-v2", "prompts": 24 }', response: '{ "batchId": "batch_0g_31a", "done": 24, "avgMs": 612 }', status: "active", calls: 188 },
-
-  // Liquify
-  { id: "svc_liq_cluster", workspaceId: "liquify", name: "Address Cluster API", category: "analytics",
-    description: "Clusters an address with its likely siblings using funding-graph heuristics and shared-counterparty signals.",
-    priceUsd: 0.06, currency: "USDC", network: "base-sepolia", provider: "Studio Sphere Labs", providerWallet: W2,
-    sampleIn: '{ "address": "0x91…", "depth": 2 }', response: '{ "cluster": "cl_4a1", "members": 7, "confidence": 0.78 }', status: "active", calls: 1240 },
-  { id: "svc_liq_orderflow", workspaceId: "liquify", name: "Orderflow Snapshot API", category: "trading",
-    description: "A point-in-time orderflow snapshot for a venue/pair: aggressor split, sweep depth, recent prints.",
-    priceUsd: 0.07, currency: "USDC", network: "base-sepolia", provider: "Studio Sphere Labs", providerWallet: W,
-    sampleIn: '{ "pair": "ETH/USDC", "venue": "uni-v3" }', response: '{ "buyPct": 58, "sweepDepthUsd": 142000, "prints": 31 }', status: "active", calls: 980 },
 
   // QIE
   { id: "svc_qie_payout", workspaceId: "qie", name: "QIE Merchant Payout API", category: "payment",
@@ -409,7 +371,6 @@ const mkAgent = (a: Omit<Agent, "budget" | "spent" | "maxPerRequest" | "status">
 });
 
 export const agents: Agent[] = [
-  mkAgent({ id: "agent_yield_researcher", workspaceId: "liquify", name: "Yield Researcher", wallet: "0xA3f9…7c2D", autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.25, spentTodayUsd: 1.85, allowlist: ["svc_wallet_risk", "svc_yield_signal", "svc_tax_classifier", "svc_liq_cluster", "svc_liq_orderflow"] }),
   mkAgent({ id: "agent_0g_worker", workspaceId: "0g", name: "0G Job Worker", wallet: "0xAg3n…91aa", autoPay: true, dailyLimitUsd: 8, maxPerRequestUsd: 0.10, spentTodayUsd: 0.62, allowlist: ["svc_0g_inference", "svc_0g_storage", "svc_0g_context", "svc_0g_dav", "svc_0g_batch"] }),
   mkAgent({ id: "agent_qie_merchant_bot", workspaceId: "qie", name: "Merchant Bot", wallet: "0xAg3n…44de", autoPay: true, dailyLimitUsd: 6, maxPerRequestUsd: 0.05, spentTodayUsd: 0.18, allowlist: ["svc_qie_checkout", "svc_qie_dex", "svc_qie_payout", "svc_qie_pos"] }),
   mkAgent({ id: "agent_arb_treasury", workspaceId: "arbitrum", name: "Treasury Agent", wallet: "0xAg3n…0b12", autoPay: true, dailyLimitUsd: 12, maxPerRequestUsd: 0.20, spentTodayUsd: 0.88, allowlist: ["svc_arb_invoice", "svc_arb_orbit", "svc_arb_escrow", "svc_arb_bridge", "svc_arb_usdc"] }),
@@ -440,14 +401,6 @@ type SeedRow = {
   kind?: string; payload?: Record<string, unknown>; name?: string;
 };
 const SEED_ROWS: SeedRow[] = [
-  { ws: "liquify", svc: "svc_wallet_risk", agent: "agent_yield_researcher", mins: 3, status: "verified" },
-  { ws: "liquify", svc: "svc_yield_signal", agent: "agent_yield_researcher", mins: 11, status: "verified" },
-  { ws: "liquify", svc: "svc_tax_classifier", agent: "agent_yield_researcher", mins: 26, status: "paid" },
-  { ws: "liquify", svc: "svc_liq_cluster", agent: "agent_yield_researcher", mins: 33, status: "verified" },
-  { ws: "liquify", svc: "svc_wallet_risk", agent: "agent_yield_researcher", mins: 41, status: "failed", err: "insufficient_funds" },
-  { ws: "liquify", svc: "svc_liq_orderflow", agent: "agent_yield_researcher", mins: 64, status: "verified" },
-  { ws: "liquify", svc: "svc_yield_signal", agent: "agent_yield_researcher", mins: 95, status: "verified" },
-  { ws: "liquify", svc: "svc_wallet_risk", agent: "agent_yield_researcher", mins: 140, status: "replayed", err: "challenge_reused" },
   { ws: "0g", svc: "svc_0g_inference", agent: "agent_0g_worker", mins: 6, status: "verified",
     kind: "0g.inference", name: "0G Compute · Risk Scorer v2", payload: { model: "risk-scorer-v2", modelName: "Risk Scorer v2", tokens: 2400, prompt: "Score wallet 0x9f3c…ba1 for mixer adjacency over the last 30 days.", response: '{ "riskScore": 73, "labels": ["mixer-adjacent","high-velocity"], "confidence": "0.88" }' } },
   { ws: "0g", svc: "svc_0g_inference", agent: "agent_0g_worker", mins: 28, status: "verified",
