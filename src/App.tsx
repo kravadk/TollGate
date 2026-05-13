@@ -9,6 +9,7 @@ import { AppLayout } from "./layouts/AppLayout";
 import { ReceiptsShowcase } from "./components/ReceiptsShowcase";
 import { Preloader } from "./components/visual/Preloader";
 import { CustomCursor } from "./components/visual/CustomCursor";
+import { Toaster } from "./components/ui/Toast";
 import { agentFor, initialReceipts, makeReceiptId, makeTxHash } from "./data";
 import type { Receipt, Service, Theme } from "./types";
 
@@ -112,6 +113,7 @@ export default function App() {
     <AppStateContext.Provider value={value}>
       <Preloader />
       <CustomCursor />
+      <Toaster />
       <Routes>
         <Route path="/" element={<ProjectLauncher theme={theme} onToggleTheme={toggleTheme} />} />
         <Route path="/app/:wsId" element={<AppLayout />}>

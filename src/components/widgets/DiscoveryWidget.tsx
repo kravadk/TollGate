@@ -2,6 +2,8 @@ import { type CSSProperties, useState } from "react";
 import { ExternalLink, Search, Plus, Database, Zap } from "lucide-react";
 import { useLocalStore } from "../../lib/storage";
 import { ActionPanel } from "./ActionPanel";
+import { EmptyState } from "../ui/EmptyState";
+import { toast } from "../ui/Toast";
 
 const CONTRACTS = [
   { label: "Arbitrum Sepolia", addr: "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9", url: "https://sepolia.arbiscan.io/address/0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9" },
@@ -96,6 +98,7 @@ export function DiscoveryWidget() {
     setServices((prev) => [svc, ...prev.filter((s) => s.serviceId !== svc.serviceId)]);
     setForm({ serviceId: "", name: "", priceUsd: "", network: "arbitrum-sepolia", endpoint: "", provider: "" });
     setRegistered(true);
+    toast.success(`Service '${name}' registered — $${price.toFixed(2)}/call on ${form.network}`);
     setTimeout(() => { setRegistered(false); setShowRegister(false); }, 1800);
   }
 
@@ -140,7 +143,10 @@ export function DiscoveryWidget() {
       {/* Service list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
         {filtered.length === 0 && (
-          <div style={{ textAlign: "center", padding: "18px 0", fontSize: ".8rem", color: "var(--muted)" }}>No services match your filter.</div>
+          <EmptyState
+            title={query || maxPrice ? "No services match your filter" : "No services registered yet"}
+            description={query || maxPrice ? "Try a different keyword or remove the price cap." : "Click \"Register\" above to publish your first paid API."}
+          />
         )}
         {filtered.map((s) => (
           <div key={s.serviceId} style={{ background: "var(--bg-2)", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const }}>

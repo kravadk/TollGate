@@ -6,6 +6,7 @@ import { workspaces, agentFor } from "../data";
 import type { WorkspaceId } from "../types";
 import { AppSidebar } from "../components/ui/AppSidebar";
 import { PaymentModal } from "../components/PaymentModal";
+import { NetworkBanner } from "../components/ui/NetworkBanner";
 import { useAppState } from "../app-state";
 import { WorkspaceBackdrop } from "../components/visual/WorkspaceBackdrop";
 
@@ -90,6 +91,8 @@ export function AppLayout() {
           </button>
           <span className="text-sm font-bold">{workspace.shortName}</span>
         </div>
+
+        <NetworkBanner />
 
         <div className="max-w-6xl mx-auto px-5 py-7 md:px-10 md:py-12">
           <AnimatePresence mode="wait">
