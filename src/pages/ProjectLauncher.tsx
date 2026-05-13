@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Bot } from "lucide-react";
 import { workspaces } from "../data";
 import { ConnectWalletButton } from "../wallet";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -52,6 +52,13 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            to="/fleet"
+            className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-border-default bg-surface-2 text-text-secondary hover:text-text-primary hover:border-border-hover transition-colors"
+          >
+            <Bot className="w-3 h-3" />
+            Fleet
+          </Link>
           <ConnectWalletButton compact />
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>

@@ -7,6 +7,7 @@ import { WorkspacePage } from "./pages/WorkspacePage";
 import { NotFound } from "./pages/NotFound";
 import { AppLayout } from "./layouts/AppLayout";
 import { ReceiptsShowcase } from "./components/ReceiptsShowcase";
+import { FleetView } from "./pages/FleetView";
 import { Preloader } from "./components/visual/Preloader";
 import { CustomCursor } from "./components/visual/CustomCursor";
 import { Toaster, toast } from "./components/ui/Toast";
@@ -150,6 +151,7 @@ export default function App() {
           <Route index element={<WorkspacePage />} />
           <Route path=":tabSlug" element={<WorkspacePage />} />
         </Route>
+        <Route path="/fleet" element={<FleetView />} />
         <Route
           path="/showcase"
           element={<ReceiptsShowcase onBack={() => { window.history.back(); }} />}
