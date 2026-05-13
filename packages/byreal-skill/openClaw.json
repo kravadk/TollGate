@@ -1,0 +1,47 @@
+{
+  "name": "tollgate-x402",
+  "version": "1.0.0",
+  "description": "HTTP 402 payment gateway for AI agents — pay for any API with USDC, no accounts or API keys required. Every payment is cryptographically proven on-chain.",
+  "homepage": "https://toll-gatee.vercel.app",
+  "repository": "https://github.com/kravadk/tollgate",
+  "license": "MIT",
+  "skills": [
+    {
+      "name": "payForService",
+      "description": "Execute an x402 payment for a specific service and receive the response data + on-chain receipt.",
+      "params": ["serviceId", "agentId?"]
+    },
+    {
+      "name": "listServices",
+      "description": "List all available paid services in a given workspace.",
+      "params": ["workspace?"]
+    },
+    {
+      "name": "getReceipt",
+      "description": "Retrieve a payment receipt by ID — proves the payment was made and the service was delivered.",
+      "params": ["receiptId"]
+    }
+  ],
+  "chains": ["mantle", "0g", "arbitrum", "sui"],
+  "contracts": {
+    "mantle": {
+      "AgentIdentityRegistry": "0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB",
+      "AgentVault": "0xCbBcFc657787Fef2702ae6E35CA5a809a68480da"
+    }
+  },
+  "endpoints": {
+    "gateway": "https://tollgate-1.onrender.com/api/gateway/{serviceId}",
+    "services": "https://tollgate-1.onrender.com/api/services",
+    "receipts": "https://tollgate-1.onrender.com/api/receipts",
+    "mcp": "https://tollgate-1.onrender.com/mcp",
+    "feeds": {
+      "mnt-price": "https://tollgate-1.onrender.com/api/feeds/mnt-price",
+      "mnt-yield": "https://tollgate-1.onrender.com/api/feeds/mnt-yield",
+      "mnt-rwa":   "https://tollgate-1.onrender.com/api/feeds/mnt-rwa"
+    }
+  },
+  "install": {
+    "npm": "@tollgate/sdk",
+    "quickstart": "import { createTollGate } from '@tollgate/sdk'; const tg = createTollGate({ agentId: 'my-agent' }); const { data, receiptId } = await tg.fetchPaid('svc_mnt_meth');"
+  }
+}

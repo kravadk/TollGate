@@ -204,7 +204,7 @@ async function unlockedResponse(req: Request, res: Response): Promise<void> {
       serviceId: service.id,
       amount: service.priceUsd,
       currency: service.currency,
-      paidAt: receipt.paidAt,
+      paidAt: receipt.paidAt ?? new Date().toISOString(),
       txHash: x.txHash,
     }).then((r) => {
       if (r.ok) { nftTokenId = r.tokenId; nftTxHash = r.txHash; }
@@ -249,6 +249,24 @@ apiRouter.get("/receipts/:id", (req: Request, res: Response) => {
 
 apiRouter.get("/receipts/stats", (_req: Request, res: Response) => {
   res.json(receiptStats());
+});
+
+// ─── AgentScore (computed from receipt history, mirrors AgentCreditRegistry.sol) ─
+
+function computeAgentScore(agentId: string, receipts: { amount: number }[]) {
+  const count = receipts.length;
+  const volumeUsd = receipts.reduce((s, r) => s + r.amount, 0);
+  const base = Math.min(count * 5, 500);
+  const vol = Math.min(Math.floor(volumeUsd), 300);
+  const score = Math.min(base + vol, 1000);
+  const tier = score >= 850 ? "Platinum" : score >= 700 ? "Gold" : score >= 400 ? "Silver" : "Bronze";
+  return { agentId, score, tier, receiptCount: count, volumeUsd: Math.round(volumeUsd * 100) / 100, breakdown: { base, vol, pen: 0 } };
+}
+
+apiRouter.get("/agent-score/:agentId", (req: Request, res: Response) => {
+  const agentId = String(req.params["agentId"]);
+  const receipts = listReceipts({ agentId });
+  res.json(computeAgentScore(agentId, receipts));
 });
 
 // ─── SSE: live payment stream (Economy Dashboard) ──────────────────────────

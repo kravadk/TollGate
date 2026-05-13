@@ -288,3 +288,37 @@ export async function isReceiptRecorded(receiptHashHex: string): Promise<boolean
     return null;
   }
 }
+
+// ── Proof of Delivery (KF-5) ─────────────────────────────────────────────────
+// The service signs keccak256(requestId ‖ responseHash) via EIP-191.
+// Client verifies the signature and optionally anchors it via DeliveryVerifier.sol.
+
+/** Canonical message a service signs to prove delivery of a specific response. */
+export function deliverySignMessage(requestId: string, responseHash: string): string {
+  return `TollGate proof of delivery\nrequest: ${requestId}\nresponse: ${responseHash}`;
+}
+
+export type SignDeliveryResult = { signature: string; signer: string; message: string };
+
+/** Prompt the connected wallet to sign a delivery attestation (used by the service side). */
+export async function signDelivery(requestId: string, responseHash: string): Promise<SignDeliveryResult> {
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const message = deliverySignMessage(requestId, responseHash);
+  const signature = await signer.signMessage(message);
+  const recovered = verifyMessage(message, signature);
+  return { signature, signer: recovered, message };
+}
+
+/** Verify a delivery attestation. Returns the recovered signer address, or throws if invalid. */
+export function verifyDelivery(requestId: string, responseHash: string, signature: string): string {
+  const message = deliverySignMessage(requestId, responseHash);
+  return verifyMessage(message, signature);
+}
+
+/** Recover the signer without throwing (returns null on malformed sig). */
+export function safeVerifyDelivery(requestId: string, responseHash: string, signature: string): string | null {
+  try { return verifyDelivery(requestId, responseHash, signature); } catch { return null; }
+}

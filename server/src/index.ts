@@ -6,6 +6,7 @@ import cors from "cors";
 import { env } from "./env.js";
 import { apiRouter, statusRouter } from "./routes.js";
 import { mcpRouter } from "./mcp.js";
+import { feedsRouter } from "./feeds.js";
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use(express.json({ limit: "1mb" }));
 
 app.use("/api", apiRouter);
 app.use("/api/status", statusRouter);
+app.use("/api/feeds", feedsRouter);
 app.use("/mcp", mcpRouter);
 
 app.get("/", (_req, res) => {

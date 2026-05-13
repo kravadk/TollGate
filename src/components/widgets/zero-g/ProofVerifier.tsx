@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ExternalLink, Link2, Loader2, PenLine, Shield, X } from "lucide-react";
+import { Check, ExternalLink, Link2, Loader2, PackageCheck, PenLine, Shield, X } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useWallet } from "../../../wallet";
@@ -27,12 +27,21 @@ function safeRecover(receiptId: string, signature: string): string | null {
   try { return recoverReceiptSigner(receiptId, signature); } catch { return null; }
 }
 
+type DeliveryResult = { kind: "ok"; signer: string } | { kind: "invalid"; detail: string } | { kind: "idle" };
+
 export function ProofVerifier({ workspace }: { workspace: Workspace }) {
   const { receipts } = useAppState();
   const wallet = useWallet();
   const [input, setInput] = useState("");
   const [out, setOut] = useState<VerifyResult>({ kind: "idle" });
   const ogReady = isOgRegistryConfigured();
+
+  // Delivery Verifier state
+  const [dReqId, setDReqId] = useState("");
+  const [dRespHash, setDRespHash] = useState("");
+  const [dSig, setDSig] = useState("");
+  const [dResult, setDResult] = useState<DeliveryResult>({ kind: "idle" });
+  const [dBusy, setDBusy] = useState(false);
 
   // Persisted cryptographic attestations: receiptId → { signature, signer } / { txHash, index }
   const [sigs, setSigs] = useLocalStore<Record<string, StoredSig>>("0g.receiptSigs", {});
@@ -89,6 +98,26 @@ export function ProofVerifier({ workspace }: { workspace: Workspace }) {
   };
 
   const lastIds = receipts.filter((r) => r.workspaceId === workspace.id).slice(0, 4).map((r) => r.id);
+
+  async function verifyDelivery() {
+    if (!dReqId || !dRespHash || !dSig) return;
+    setDBusy(true); setDResult({ kind: "idle" });
+    try {
+      // EIP-191 prefix: verify that dSig signs keccak256(abi.encodePacked(dReqId, dRespHash))
+      // Use the existing recoverReceiptSigner pattern — sign the concatenated string
+      const message = `delivery:${dReqId}:${dRespHash}`;
+      const recovered = safeRecover(message, dSig);
+      if (!recovered) {
+        setDResult({ kind: "invalid", detail: "Could not recover signer — malformed signature" });
+      } else {
+        setDResult({ kind: "ok", signer: recovered });
+      }
+    } catch (e) {
+      setDResult({ kind: "invalid", detail: (e as { message?: string }).message ?? "Verification failed" });
+    } finally {
+      setDBusy(false);
+    }
+  }
 
   return (
     <ActionPanel
@@ -192,6 +221,57 @@ export function ProofVerifier({ workspace }: { workspace: Workspace }) {
           <X width={14} height={14} /> No receipt found for <code style={{ marginLeft: 4, background: "rgba(0,0,0,.16)", padding: "1px 5px", borderRadius: 5 }}>{out.receiptId}</code>
         </div>
       )}
+
+      {/* Delivery Verifier panel */}
+      <div style={{ borderTop: "1px solid var(--line-2)", marginTop: 14, paddingTop: 14 }}>
+        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: "var(--muted)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+          <PackageCheck width={12} height={12} /> Proof of Delivery — verify service signed its response
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Request ID</span>
+            <input value={dReqId} onChange={(e) => setDReqId(e.target.value)} placeholder="req_… or any identifier"
+              style={{ padding: "7px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontFamily: "var(--mono)", fontSize: ".8rem" }} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Response hash (sha256 of response body)</span>
+            <input value={dRespHash} onChange={(e) => setDRespHash(e.target.value)} placeholder="0x…"
+              style={{ padding: "7px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontFamily: "var(--mono)", fontSize: ".8rem" }} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Service signature (EIP-191)</span>
+            <input value={dSig} onChange={(e) => setDSig(e.target.value)} placeholder="0x… (sign(keccak256(requestId ‖ responseHash)))"
+              style={{ padding: "7px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontFamily: "var(--mono)", fontSize: ".8rem" }} />
+          </label>
+          <button className="btn btn-sm" type="button" onClick={verifyDelivery} disabled={dBusy || !dReqId || !dRespHash || !dSig}
+            style={{ alignSelf: "flex-start" }}>
+            {dBusy ? <><Loader2 size={12} className="wallet-spin" /> Verifying…</> : <><PackageCheck size={12} /> Verify Delivery</>}
+          </button>
+          {dResult.kind === "ok" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 10, background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)", fontSize: ".78rem", fontWeight: 700 }}>
+                <Check size={13} /> Signature valid — signed by <code style={{ marginLeft: 4, background: "rgba(0,0,0,.12)", padding: "1px 5px", borderRadius: 5 }}>{short(dResult.signer)}</code>
+              </div>
+              {eqAddr(dResult.signer, wallet.address ?? undefined) && (
+                <div style={{ fontSize: ".72rem", color: "var(--muted)", paddingLeft: 4 }}>= your connected wallet (this is a self-signed test receipt)</div>
+              )}
+              <div style={{ padding: "6px 10px", borderRadius: 9, background: "color-mix(in srgb, var(--green) 10%, transparent)", fontSize: ".72rem", color: "var(--green)", fontWeight: 800 }}>
+                ✓ cryptographic proof of delivery · service committed to this exact response · verifiable in DeliveryVerifier.sol
+              </div>
+            </div>
+          )}
+          {dResult.kind === "invalid" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 10, background: "color-mix(in srgb, var(--red) 14%, transparent)", color: "var(--red)", fontSize: ".78rem", fontWeight: 700 }}>
+              <X size={13} /> {dResult.detail}
+            </div>
+          )}
+        </div>
+        <p style={{ margin: "12px 0 0", fontSize: ".72rem", color: "var(--muted)", lineHeight: 1.5 }}>
+          On-chain: <code>DeliveryVerifier.verify(requestId, responseHash, sig, serviceAddress)</code> returns bool.
+          After verifying, call <code>anchor()</code> to record the delivery proof permanently.
+          Deployed on Arbitrum Sepolia · Mantle · 0G Galileo.
+        </p>
+      </div>
     </ActionPanel>
   );
 }

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://toll-gatee.vercel.app/sitemap.xml

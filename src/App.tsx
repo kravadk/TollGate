@@ -1,9 +1,10 @@
 import { Agentation } from "agentation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { AppStateContext, type AppState, type EmitReceiptInput } from "./app-state";
 import { ProjectLauncher } from "./pages/ProjectLauncher";
 import { WorkspacePage } from "./pages/WorkspacePage";
+import { NotFound } from "./pages/NotFound";
 import { AppLayout } from "./layouts/AppLayout";
 import { ReceiptsShowcase } from "./components/ReceiptsShowcase";
 import { Preloader } from "./components/visual/Preloader";
@@ -121,7 +122,7 @@ export default function App() {
           path="/showcase"
           element={<ReceiptsShowcase onBack={() => { window.history.back(); }} />}
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
 
       {import.meta.env.DEV ? (
