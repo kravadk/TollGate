@@ -69,9 +69,16 @@ import {
   SuiAgentEconomyLoop,
 } from "./widgets/sui/SuiWidgets";
 import { OpenClawSkillConsole, TeeAttestationVerifier, DePinBulkPin } from "./widgets/og-extra/OgExtraWidgets";
-import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed } from "./widgets/mantle-extra/MantleExtraWidgets";
+import { OgIntegrationStatus } from "./widgets/og-extra/OgIntegrationStatus";
+import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget } from "./widgets/mantle-extra/MantleExtraWidgets";
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "./widgets/arbitrum-extra/ArbitrumExtraWidgets";
+import { AgentIntentWidget } from "./widgets/arbitrum-extra/AgentIntentWidget";
 import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "./widgets/qie-extra/QieExtraWidgets";
+import { A2AMarketplaceWidget } from "./widgets/A2AMarketplaceWidget";
+import { MerchantWidget } from "./widgets/MerchantWidget";
+import { DiscoveryWidget } from "./widgets/DiscoveryWidget";
+import { BudgetWidget } from "./widgets/BudgetWidget";
+import { AgentScoreCard } from "./widgets/AgentScoreBadge";
 import * as api from "../lib/api";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl } from "../lib/og";
 import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../lib/mantle";
@@ -6914,7 +6921,7 @@ export function ServiceTabPage({
     isVerifyFlavor || t.includes("compute") || t.includes("inference") || t.includes("storage") ||
     t.includes("checkout") || t.includes("orbit") || t.includes("monitor") || t.includes("qiedex") || t.includes("dex") ||
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
-    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy"))) ||
+    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit"))) ||
     (workspace.id === "liquify" && (t.includes("tax") || t.includes("wallet") || t.includes("analysis") || t.includes("trading"))) ||
     (workspace.id === "berkeley" && (t.includes("paid tool") || t.includes("catalog") || t.includes("playground"))) ||
     (workspace.id === "deepsurge" && (t.includes("trade") || t.includes("safety") || t.includes("intel") || t.includes("resource"))) ||
@@ -6984,6 +6991,8 @@ export function ServiceTabPage({
 
       {workspace.id === "0g" && t.includes("trading") && <OgAgentToAgentLoop workspace={workspace} />}
       {workspace.id === "0g" && t.includes("trading") && <OgTradingArenaWidget workspace={workspace} />}
+      {workspace.id === "0g" && t.includes("agent") && <DiscoveryWidget />}
+      {workspace.id === "0g" && t.includes("agent") && <MerchantWidget />}
 
       {t.includes("storage") && <StoragePinWidget workspace={workspace} />}
       {workspace.id === "0g" && t.includes("storage") && <DePinBulkPin workspace={workspace} />}
@@ -7011,7 +7020,10 @@ export function ServiceTabPage({
       {workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) && <BatchPayoutConsole workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) && <ArbRecurringPayments workspace={workspace} />}
       {workspace.id === "arbitrum" && t.includes("agent") && <AgentServiceRegistry workspace={workspace} onOpenPayment={onOpenPayment} />}
+      {workspace.id === "arbitrum" && (t.includes("agent") || t.includes("marketplace")) && <DiscoveryWidget />}
+      {workspace.id === "arbitrum" && t.includes("marketplace") && <MerchantWidget />}
       {workspace.id === "arbitrum" && (t.includes("stylus") || t.includes("rust") || t.includes("agent")) && <StylusSnippetViewer workspace={workspace} />}
+      {workspace.id === "arbitrum" && (t.includes("intent") || t.includes("cross") || t.includes("agent") || t.includes("marketplace")) && <AgentIntentWidget />}
       {workspace.id === "arbitrum" && t.includes("stylus") && <ArbitrumStylusDeployPanel workspace={workspace} />}
       {workspace.id === "arbitrum" && t.includes("stylus") && <ArbContractPaymentSim workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection")) && <ArbAllowanceManager workspace={workspace} />}
@@ -7027,6 +7039,8 @@ export function ServiceTabPage({
       {workspace.id === "mantle" && t.includes("rwa") && <RwaRegistry workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("devtool") || t.includes("dev tool")) && <MantleGasOptimizer workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("devtool") || t.includes("dev tool")) && <MantleDevToolsPanel workspace={workspace} />}
+      {workspace.id === "mantle" && t.includes("credit") && <CreditScoreMeter workspace={workspace} />}
+      {workspace.id === "mantle" && t.includes("alpha") && <AlphaBotWidget workspace={workspace} />}
       {workspace.id === "liquify" && t.includes("trading") && <><LiveTickerBoard workspace={workspace} /><TradingSignalDesk workspace={workspace} /></>}
       {workspace.id === "liquify" && t.includes("tax") && <><TaxLotCalculator workspace={workspace} receipts={receipts} /><TaxExport workspace={workspace} receipts={receipts} /></>}
       {workspace.id === "liquify" && (t.includes("wallet") || t.includes("analysis")) && <><WalletRiskAnalyzer workspace={workspace} /><ApprovalRevokePlanner workspace={workspace} /></>}
@@ -7566,7 +7580,12 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       </div>
       {workspace.id === "0g" && <AgentIdRegistry workspace={workspace} />}
       {workspace.id === "0g" && <RevenueSplitConsole workspace={workspace} />}
+      {workspace.id === "0g" && <OgIntegrationStatus />}
       {workspace.id === "0g" && <OpenClawSkillConsole workspace={workspace} />}
+      {workspace.id === "0g" && <A2AMarketplaceWidget />}
+      {workspace.id === "0g" && <BudgetWidget />}
+      {workspace.id === "0g" && <AgentScoreCard agentId="agent_0g_strategist" />}
+      {workspace.id === "arbitrum" && <BudgetWidget agentId="agent_arb_worker" />}
       {workspace.id === "qie" && <AgentWalletConsole workspace={workspace} />}
       {workspace.id === "mantle" && <MantleAgentIdentity workspace={workspace} />}
       {workspace.id === "mantle" && <MantleVaultPanel workspace={workspace} />}
