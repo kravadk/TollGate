@@ -9,6 +9,7 @@
 
 import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
+import { JsonRpcProvider, Interface, parseUnits } from "ethers";
 import { env, isProd } from "./env.js";
 import { serviceById } from "./data.js";
 import {
@@ -18,6 +19,43 @@ import {
   recordActivity,
 } from "./store.js";
 import type { Service, X402PaymentProof } from "./types.js";
+
+const BASE_SEPOLIA_RPC = process.env.BASE_SEPOLIA_RPC_URL ?? "";
+const USDC_BASE_SEPOLIA = (process.env.USDC_BASE_SEPOLIA ?? "0x036CbD53842c5426634e7929541eC2318f3dCF7e").toLowerCase();
+const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const ERC20_IFACE = new Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+const USDC_DECIMALS = 6;
+
+async function verifyOnChainUsdcPayment(opts: {
+  txHash: string; payTo: string; amountUsd: number; payer?: string;
+}): Promise<{ verified: boolean; reason?: string; block?: number }> {
+  if (!BASE_SEPOLIA_RPC) return { verified: false, reason: "BASE_SEPOLIA_RPC_URL not configured" };
+  if (!opts.txHash || !/^0x[0-9a-fA-F]{64}$/.test(opts.txHash)) return { verified: false, reason: "invalid_txhash" };
+  try {
+    const provider = new JsonRpcProvider(BASE_SEPOLIA_RPC);
+    const receipt = await provider.getTransactionReceipt(opts.txHash);
+    if (!receipt) return { verified: false, reason: "tx_not_found" };
+    if (receipt.status !== 1) return { verified: false, reason: "tx_reverted" };
+    const minAmount = parseUnits(opts.amountUsd.toFixed(6), USDC_DECIMALS);
+    const payToLower = opts.payTo.toLowerCase();
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== USDC_BASE_SEPOLIA) continue;
+      if (log.topics[0] !== ERC20_TRANSFER_TOPIC) continue;
+      try {
+        const parsed = ERC20_IFACE.parseLog({ topics: [...log.topics], data: log.data });
+        if (!parsed) continue;
+        const to: string = parsed.args[1] as string;
+        const value: bigint = parsed.args[2] as bigint;
+        if (to.toLowerCase() !== payToLower) continue;
+        if (value < minAmount) return { verified: false, reason: "amount_too_low" };
+        return { verified: true, block: receipt.blockNumber };
+      } catch { continue; }
+    }
+    return { verified: false, reason: "no_matching_transfer_log" };
+  } catch (e) {
+    return { verified: false, reason: `rpc_error: ${(e as Error).message?.slice(0, 80)}` };
+  }
+}
 
 if (!isProd()) {
   console.warn('[x402] dev-bypass enabled — set NODE_ENV=production to disable');
@@ -83,7 +121,7 @@ export function resolveService(req: Request): Service | null {
 }
 
 export function withX402() {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const service = resolveService(req);
     if (!service) {
       res.status(404).json({ error: "unknown_service", serviceId: req.params["serviceId"] ?? null });
@@ -160,9 +198,28 @@ export function withX402() {
       return;
     }
 
+    let confirmedOnChain = false;
+    let confirmedBlock: number | undefined;
+    if (proof.txHash && proof.network === "base-sepolia" && BASE_SEPOLIA_RPC) {
+      const onChain = await verifyOnChainUsdcPayment({
+        txHash: proof.txHash,
+        payTo,
+        amountUsd: service.priceUsd,
+        payer: proof.payer,
+      });
+      if (!onChain.verified) {
+        logX402Call({ timestamp: Date.now(), endpoint, serviceId: service.id, caller: proof.payer ?? "unknown", amount: service.priceUsd, asset: currency, status: "rejected", reason: onChain.reason ?? "onchain_verify_failed" });
+        recordActivity("gateway.rejected", service.id);
+        res.status(402).json({ error: "onchain_verification_failed", reason: onChain.reason });
+        return;
+      }
+      confirmedOnChain = true;
+      confirmedBlock = onChain.block;
+    }
+
     logX402Call({ timestamp: Date.now(), endpoint, serviceId: service.id, caller: proof.payer ?? (isValidAddress ? proof.payTo.slice(0, 12) : "unknown"), amount: Number(proof.amount), asset: currency, status: "paid" });
     recordActivity("gateway.paid", service.id);
-    (req as Request & { x402?: unknown }).x402 = { challengeId: proof.challengeId, requestHash: reqHash, payer: proof.payer ?? proof.payTo, txHash: proof.txHash, devBypass: false, service };
+    (req as Request & { x402?: unknown }).x402 = { challengeId: proof.challengeId, requestHash: reqHash, payer: proof.payer ?? proof.payTo, txHash: proof.txHash, confirmedOnChain, confirmedBlock, devBypass: false, service };
     next();
   };
 }

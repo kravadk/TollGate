@@ -58,7 +58,7 @@ import {
 import { InferenceJobRunner } from "./widgets/zero-g/InferenceJobRunner";
 import { StoragePinWidget } from "./widgets/zero-g/StoragePinWidget";
 import { ProofVerifier } from "./widgets/zero-g/ProofVerifier";
-import { MantleAgentIdentity, MantleVaultPanel } from "./widgets/mantle/MantleOnchain";
+import { MantleAgentIdentity, MantleVaultPanel, MantleBudgetPanel } from "./widgets/mantle/MantleOnchain";
 import { ArbitrumEscrowPanel } from "./widgets/arbitrum/ArbitrumEscrowPanel";
 import {
   WalrusStorageWidget,
@@ -381,6 +381,79 @@ const OG_DEMO_STEPS: { title: string; body: string }[] = [
   },
 ];
 
+// ── Economy Dashboard ──────────────────────────────────────────────────────
+type EconStats = { total: number; today: number; uniqueAgents: number; avgAmount: number };
+type EconEvent = { type: "snapshot"; receipts: Receipt[] } | { type: "receipt"; receipt: Receipt };
+
+function EconomyDashboard() {
+  const [stats, setStats] = useState<EconStats | null>(null);
+  const [feed, setFeed] = useState<Receipt[]>([]);
+  const [connected, setConnected] = useState(false);
+  const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+
+  useEffect(() => {
+    let es: EventSource | null = null;
+    fetch(`${BASE}/api/receipts/stats`).then(r => r.ok ? r.json() : null).then(d => { if (d) setStats(d); }).catch(() => {});
+    try {
+      es = new EventSource(`${BASE}/api/events/payments`);
+      es.onopen = () => setConnected(true);
+      es.onerror = () => setConnected(false);
+      es.onmessage = (e) => {
+        try {
+          const ev: EconEvent = JSON.parse(e.data as string);
+          if (ev.type === "snapshot") { setFeed(ev.receipts); }
+          else if (ev.type === "receipt") {
+            setFeed(prev => [ev.receipt, ...prev].slice(0, 10));
+            setStats(prev => prev ? {
+              total: prev.total + 1, today: prev.today + 1, uniqueAgents: prev.uniqueAgents,
+              avgAmount: Math.round(((prev.avgAmount * prev.total + ev.receipt.amount) / (prev.total + 1)) * 10000) / 10000,
+            } : prev);
+          }
+        } catch { /* ignore parse errors */ }
+      };
+    } catch { /* SSE not supported */ }
+    return () => { es?.close(); setConnected(false); };
+  }, [BASE]);
+
+  if (!stats && feed.length === 0) return null;
+
+  const cardStyle: React.CSSProperties = { flex: "1 1 120px", background: "var(--field)", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4 };
+  const valStyle: React.CSSProperties = { fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", lineHeight: 1 };
+  const lblStyle: React.CSSProperties = { fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 };
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <TrendingUp width={13} height={13} style={{ color: "var(--primary)" }} />
+        <span style={{ fontSize: ".65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)" }}>Agent Economy · Live</span>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: connected ? "#22c55e" : "var(--muted)", display: "inline-block", marginLeft: 2 }} />
+      </div>
+      {stats && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          <div style={cardStyle}><span style={valStyle}>{stats.total}</span><span style={lblStyle}>Total payments</span></div>
+          <div style={cardStyle}><span style={valStyle}>{stats.today}</span><span style={lblStyle}>Today</span></div>
+          <div style={cardStyle}><span style={valStyle}>{stats.uniqueAgents}</span><span style={lblStyle}>Unique agents</span></div>
+          <div style={cardStyle}><span style={valStyle}>${stats.avgAmount.toFixed(3)}</span><span style={lblStyle}>Avg price</span></div>
+        </div>
+      )}
+      {feed.length > 0 && (
+        <div style={{ background: "var(--field)", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--line-2)", fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>
+            Live payment feed
+          </div>
+          {feed.slice(0, 6).map((r, i) => (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", borderBottom: i < Math.min(feed.length - 1, 5) ? "1px solid var(--line-2)" : undefined, fontSize: ".74rem" }}>
+              <span style={{ color: "#22c55e", fontWeight: 700, minWidth: 52 }}>${r.amount.toFixed(3)}</span>
+              <span style={{ color: "var(--muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.serviceName}</span>
+              <span style={{ color: "var(--muted)", fontSize: ".65rem" }}>{new Date(r.createdAt).toLocaleTimeString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OgDemoFlow({
   workspace,
   onGoTab,
@@ -686,6 +759,7 @@ export function OverviewPage({
         {workspace.pitch}
       </LedeHead>
 
+      {workspace.id === "0g" && <EconomyDashboard />}
       {workspace.id === "0g" && <OgDemoFlow workspace={workspace} onGoTab={onGoTab} onGoReceipts={onGoReceipts} />}
 
       <div className="action-grid mb">
@@ -7496,6 +7570,7 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       {workspace.id === "qie" && <AgentWalletConsole workspace={workspace} />}
       {workspace.id === "mantle" && <MantleAgentIdentity workspace={workspace} />}
       {workspace.id === "mantle" && <MantleVaultPanel workspace={workspace} />}
+      {workspace.id === "mantle" && <MantleBudgetPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleEconomyLoop workspace={workspace} />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("companion") && <EazoCompanionPanel workspace={workspace} />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("budget") && <EazoBudgetTracker workspace={workspace} />}

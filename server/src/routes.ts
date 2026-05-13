@@ -30,10 +30,13 @@ import {
   appendReceipt,
   listReceipts,
   receiptById,
+  receiptStats,
+  onReceipt,
   recordActivity,
   x402Log,
 } from "./store.js";
 import { withX402 } from "./x402.js";
+import { mintReceiptNFT } from "./receipt-nft.js";
 import type { Service, WorkspaceId } from "./types.js";
 
 const WORKSPACE_IDS: WorkspaceId[] = ["0g", "liquify", "qie", "arbitrum", "mantle", "eazo", "berkeley", "deepsurge"];
@@ -163,7 +166,7 @@ apiRouter.get("/v1/x402-spec", (req: Request, res: Response) => {
 
 // ─── Gateway ────────────────────────────────────────────────────────────────
 
-function unlockedResponse(req: Request, res: Response): void {
+async function unlockedResponse(req: Request, res: Response): Promise<void> {
   // withX402() already verified payment and attached req.x402.
   const x = (req as Request & { x402?: { service: Service; challengeId: string; requestHash: string; payer: string; txHash?: string; devBypass: boolean } }).x402;
   if (!x) {
@@ -190,12 +193,32 @@ function unlockedResponse(req: Request, res: Response): void {
     paidAt: new Date().toISOString(),
     verifiedAt: x.txHash ? new Date().toISOString() : undefined,
   });
+  // Fire-and-forget NFT mint — does not block the response
+  const payerAddr = /^0x[0-9a-fA-F]{40}$/.test(x.payer) ? x.payer : "";
+  let nftTokenId: number | undefined;
+  let nftTxHash: string | undefined;
+  if (payerAddr) {
+    mintReceiptNFT({
+      to: payerAddr,
+      receiptId: receipt.id,
+      serviceId: service.id,
+      amount: service.priceUsd,
+      currency: service.currency,
+      paidAt: receipt.paidAt,
+      txHash: x.txHash,
+    }).then((r) => {
+      if (r.ok) { nftTokenId = r.tokenId; nftTxHash = r.txHash; }
+    }).catch(() => {/* non-critical */});
+  }
+
   res.json({
     serviceId: service.id,
     name: service.name,
     data: service.sampleResponse,
     receiptId: receipt.id,
     receipt,
+    nftTokenId,
+    nftTxHash,
     note: x.devBypass
       ? "dev-bypass: this response simulates a settled x402 payment. Production verifies a real on-chain proof."
       : "x402 payment verified.",
@@ -220,6 +243,31 @@ apiRouter.get("/receipts/:id", (req: Request, res: Response) => {
   const r = receiptById(String(req.params["id"]));
   if (!r) return res.status(404).json({ error: "unknown_receipt" });
   res.json(r);
+});
+
+// ─── Receipt stats (Economy Dashboard) ─────────────────────────────────────
+
+apiRouter.get("/receipts/stats", (_req: Request, res: Response) => {
+  res.json(receiptStats());
+});
+
+// ─── SSE: live payment stream (Economy Dashboard) ──────────────────────────
+
+apiRouter.get("/events/payments", (req: Request, res: Response) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const recentRows = listReceipts().slice(0, 10);
+  res.write(`data: ${JSON.stringify({ type: "snapshot", receipts: recentRows })}\n\n`);
+
+  const unsub = onReceipt((r) => {
+    res.write(`data: ${JSON.stringify({ type: "receipt", receipt: r })}\n\n`);
+  });
+
+  const keepalive = setInterval(() => res.write(": ping\n\n"), 20_000);
+  req.on("close", () => { unsub(); clearInterval(keepalive); });
 });
 
 // ─── Status / observability ────────────────────────────────────────────────

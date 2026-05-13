@@ -1,9 +1,50 @@
 // In-memory stores: activity tracker (ported from kravadk/XSight- server/src/services/activityTracker.ts,
-// generalized), x402 challenge store (replay + expiry), and the receipt ledger.
-// Swap these for a real DB if you outgrow a single process.
+// generalized) and x402 challenge store (replay + expiry).
+// Receipt ledger is persisted to SQLite so history survives server restarts.
 
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
 import type { PaymentChallenge, Receipt, X402CallLogEntry } from "./types.js";
+
+// ─── SQLite setup ────────────────────────────────────────────────────────────
+
+const DB_PATH = process.env.DB_PATH ?? join(dirname(fileURLToPath(import.meta.url)), "../../data/receipts.db");
+mkdirSync(dirname(DB_PATH), { recursive: true });
+const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS receipts (
+    id             TEXT PRIMARY KEY,
+    challengeId    TEXT NOT NULL,
+    workspaceId    TEXT NOT NULL,
+    serviceId      TEXT NOT NULL,
+    serviceName    TEXT NOT NULL,
+    agentId        TEXT NOT NULL,
+    payerWallet    TEXT NOT NULL,
+    providerWallet TEXT NOT NULL,
+    amount         REAL NOT NULL,
+    currency       TEXT NOT NULL,
+    network        TEXT NOT NULL,
+    txHash         TEXT,
+    requestHash    TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    errorCode      TEXT,
+    createdAt      TEXT NOT NULL,
+    paidAt         TEXT,
+    verifiedAt     TEXT
+  );
+`);
+
+// Notify SSE listeners on every new receipt.
+export type ReceiptListener = (r: Receipt) => void;
+const receiptListeners = new Set<ReceiptListener>();
+export function onReceipt(cb: ReceiptListener): () => void {
+  receiptListeners.add(cb);
+  return () => receiptListeners.delete(cb);
+}
 
 // ─── Activity tracker ───────────────────────────────────────────────────────
 
@@ -112,9 +153,18 @@ export function consumeChallenge(id: string, serviceId: string, requestHash: str
   return { ok: true, challenge: c };
 }
 
-// ─── Receipt ledger ─────────────────────────────────────────────────────────
+// ─── Receipt ledger (SQLite) ─────────────────────────────────────────────────
 
-const receipts: Receipt[] = [];
+const _insertReceipt = db.prepare(`
+  INSERT OR IGNORE INTO receipts
+    (id, challengeId, workspaceId, serviceId, serviceName, agentId,
+     payerWallet, providerWallet, amount, currency, network, txHash,
+     requestHash, status, errorCode, createdAt, paidAt, verifiedAt)
+  VALUES
+    (@id, @challengeId, @workspaceId, @serviceId, @serviceName, @agentId,
+     @payerWallet, @providerWallet, @amount, @currency, @network, @txHash,
+     @requestHash, @status, @errorCode, @createdAt, @paidAt, @verifiedAt)
+`);
 
 export function appendReceipt(r: Omit<Receipt, "id" | "createdAt"> & Partial<Pick<Receipt, "id" | "createdAt">>): Receipt {
   const receipt: Receipt = {
@@ -122,19 +172,49 @@ export function appendReceipt(r: Omit<Receipt, "id" | "createdAt"> & Partial<Pic
     createdAt: r.createdAt ?? new Date().toISOString(),
     ...r,
   } as Receipt;
-  receipts.unshift(receipt);
-  if (receipts.length > 1000) receipts.pop();
+  _insertReceipt.run({
+    id: receipt.id,
+    challengeId: receipt.challengeId,
+    workspaceId: receipt.workspaceId,
+    serviceId: receipt.serviceId,
+    serviceName: receipt.serviceName,
+    agentId: receipt.agentId,
+    payerWallet: receipt.payerWallet,
+    providerWallet: receipt.providerWallet,
+    amount: receipt.amount,
+    currency: receipt.currency,
+    network: receipt.network,
+    txHash: receipt.txHash ?? null,
+    requestHash: receipt.requestHash,
+    status: receipt.status,
+    errorCode: receipt.errorCode ?? null,
+    createdAt: receipt.createdAt,
+    paidAt: receipt.paidAt ?? null,
+    verifiedAt: receipt.verifiedAt ?? null,
+  });
+  for (const cb of receiptListeners) { try { cb(receipt); } catch { /* ignore listener errors */ } }
   return receipt;
 }
 
 export function listReceipts(filter?: { workspaceId?: string; serviceId?: string; agentId?: string }): Receipt[] {
-  return receipts.filter((r) =>
-    (!filter?.workspaceId || r.workspaceId === filter.workspaceId) &&
-    (!filter?.serviceId || r.serviceId === filter.serviceId) &&
-    (!filter?.agentId || r.agentId === filter.agentId),
-  );
+  let sql = "SELECT * FROM receipts WHERE 1=1";
+  const params: Record<string, string> = {};
+  if (filter?.workspaceId) { sql += " AND workspaceId = @workspaceId"; params.workspaceId = filter.workspaceId; }
+  if (filter?.serviceId)   { sql += " AND serviceId = @serviceId";     params.serviceId   = filter.serviceId; }
+  if (filter?.agentId)     { sql += " AND agentId = @agentId";         params.agentId     = filter.agentId; }
+  sql += " ORDER BY createdAt DESC LIMIT 500";
+  return db.prepare(sql).all(params) as Receipt[];
 }
 
 export function receiptById(id: string): Receipt | undefined {
-  return receipts.find((r) => r.id === id);
+  return db.prepare("SELECT * FROM receipts WHERE id = ?").get(id) as Receipt | undefined;
+}
+
+export function receiptStats(): { total: number; today: number; uniqueAgents: number; avgAmount: number } {
+  const total      = (db.prepare("SELECT COUNT(*) as n FROM receipts").get() as { n: number }).n;
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const today      = (db.prepare("SELECT COUNT(*) as n FROM receipts WHERE createdAt >= ?").get(todayStart.toISOString()) as { n: number }).n;
+  const agents     = (db.prepare("SELECT COUNT(DISTINCT agentId) as n FROM receipts").get() as { n: number }).n;
+  const avg        = (db.prepare("SELECT AVG(amount) as a FROM receipts").get() as { a: number | null }).a ?? 0;
+  return { total, today, uniqueAgents: agents, avgAmount: Math.round(avg * 10000) / 10000 };
 }

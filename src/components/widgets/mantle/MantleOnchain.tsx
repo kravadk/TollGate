@@ -1,15 +1,17 @@
-import { type CSSProperties, useEffect, useState } from "react";
-import { Badge, BadgeCheck, Bolt, Check, ExternalLink, Fingerprint, Loader2, PiggyBank, Wallet } from "lucide-react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { Badge, BadgeCheck, Bolt, Check, ExternalLink, Fingerprint, Loader2, PiggyBank, ShieldCheck, Wallet } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useWallet } from "../../../wallet";
 import { useLocalStore } from "../../../lib/storage";
 import { sha256Hex, hashId } from "../../../lib/util-hash";
 import {
-  isMantleIdentityConfigured, isMantleVaultConfigured, getMantleConfig,
+  isMantleIdentityConfigured, isMantleVaultConfigured, isBudgetControllerConfigured, getMantleConfig,
   registerAgentIdentity, resolveAgentId, mantleExplorerTxUrl, mantleExplorerAddrUrl, mantleExplorerTokenUrl,
   vaultDeposit, vaultDeployToYield, vaultRecordDecision,
   bindAgentMemoryRoot, readAgentMemoryRoot, isZeroBytes32,
+  setBudget, getBudget,
+  type BudgetState,
 } from "../../../lib/mantle";
 import { ActionPanel } from "../ActionPanel";
 
@@ -292,9 +294,14 @@ export function MantleVaultPanel({ workspace }: { workspace: Workspace }) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: 12, background: "var(--field)" }}>
           <span style={headStyle}>2 · Deploy to yield (mETH)</span>
+          {!import.meta.env.VITE_MANTLE_METH_ADDRESS && (
+            <span style={{ fontSize: ".65rem", color: "#ffb347", background: "rgba(180,80,0,.15)", borderRadius: 4, padding: "2px 7px" }}>
+              Intent mode — no mETH token configured; records strategy intent on-chain only
+            </span>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <input value={deployAmt} onChange={(e) => setDeployAmt(e.currentTarget.value)} style={{ ...inputStyle, flex: 1 }} />
-            <button className="btn btn-acc btn-sm" type="button" onClick={doDeploy} disabled={busy !== null}>{busy === "deploy" ? <Loader2 size={12} className="wallet-spin" /> : <Bolt width={12} height={12} />} Deploy</button>
+            <button className="btn btn-acc btn-sm" type="button" onClick={doDeploy} disabled={busy !== null || !import.meta.env.VITE_MANTLE_METH_ADDRESS} title={!import.meta.env.VITE_MANTLE_METH_ADDRESS ? "Set VITE_MANTLE_METH_ADDRESS to enable real yield" : undefined}>{busy === "deploy" ? <Loader2 size={12} className="wallet-spin" /> : <Bolt width={12} height={12} />} Deploy</button>
           </div>
         </div>
       </div>
@@ -325,6 +332,123 @@ export function MantleVaultPanel({ workspace }: { workspace: Workspace }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </ActionPanel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AgentBudgetController — on-chain AI agent spend limits
+// ---------------------------------------------------------------------------
+export function MantleBudgetPanel({ workspace }: { workspace: Workspace }) {
+  const wallet = useWallet();
+  const [agent, setAgent] = useState("");
+  const [dailyLimit, setDailyLimit] = useState("5.00");
+  const [perRequestMax, setPerRequestMax] = useState("1.00");
+  const [autoPay, setAutoPay] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [last, setLast] = useState<{ txHash: string } | null>(null);
+  const [budgetState, setBudgetState] = useState<BudgetState | null>(null);
+  const [loadingBudget, setLoadingBudget] = useState(false);
+  const { emitReceipt } = useAppState();
+
+  useEffect(() => { if (wallet.address && !agent) setAgent(wallet.address); }, [wallet.address, agent]);
+
+  const refreshBudget = useCallback(async () => {
+    const target = agent.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(target) || !isBudgetControllerConfigured()) return;
+    setLoadingBudget(true);
+    try { setBudgetState(await getBudget(target)); } catch { setBudgetState(null); }
+    finally { setLoadingBudget(false); }
+  }, [agent]);
+
+  if (!isBudgetControllerConfigured()) {
+    return <NotConfigured what="AgentBudgetController — on-chain spend limits" env="VITE_BUDGET_CONTROLLER" deployCmd="npm run deploy:mantle" />;
+  }
+
+  const doSetBudget = async () => {
+    if (busy) return;
+    const target = agent.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(target)) { setErr("Enter a valid agent address."); return; }
+    const daily = parseFloat(dailyLimit);
+    const perReq = parseFloat(perRequestMax);
+    if (isNaN(daily) || daily <= 0) { setErr("Daily limit must be a positive number."); return; }
+    setBusy(true); setErr(null);
+    try {
+      const res = await setBudget({ agent: target, dailyLimitUsd: daily, perRequestMaxUsd: perReq || 0, autoPay });
+      setLast({ txHash: res.txHash });
+      emitReceipt({
+        workspaceId: workspace.id, serviceName: "AgentBudgetController · Set budget", amount: 0, currency: "MNT",
+        network: workspace.networks[0] ?? "mantle", kind: "mantle.budget.set",
+        payload: { agent: target, dailyLimitUsd: daily, perRequestMaxUsd: perReq, autoPay, txHash: res.txHash },
+        status: "verified",
+      });
+      await refreshBudget();
+    } catch (e) { setErr((e as { message?: string }).message ?? "Set budget failed"); }
+    finally { setBusy(false); }
+  };
+
+  const fmtUsd = (v: number) => `$${v.toFixed(2)}`;
+
+  return (
+    <ActionPanel
+      icon={<ShieldCheck width={15} height={15} />}
+      title="AgentBudgetController — on-chain spend limits"
+      sub="Set per-agent daily and per-request spending caps enforced on-chain. TollGate gateway checks budget before unlocking any paid resource."
+      actions={
+        <button className="btn btn-acc btn-sm" type="button" onClick={doSetBudget} disabled={busy}>
+          {busy ? <><Loader2 size={13} className="wallet-spin" /> Setting…</> : <><BadgeCheck width={13} height={13} /> Set budget</>}
+        </button>
+      }
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr auto", gap: 10, marginBottom: 10, alignItems: "end" }}>
+        <label style={labelStyle}><span style={headStyle}>Agent address</span>
+          <input value={agent} onChange={(e) => setAgent(e.currentTarget.value)} placeholder={wallet.address ?? "0x…"} style={{ ...inputStyle, fontFamily: "var(--mono)", fontSize: ".78rem" }} />
+        </label>
+        <label style={labelStyle}><span style={headStyle}>Daily limit ($)</span>
+          <input value={dailyLimit} onChange={(e) => setDailyLimit(e.currentTarget.value)} style={inputStyle} type="number" min="0" step="0.01" />
+        </label>
+        <label style={labelStyle}><span style={headStyle}>Max/request ($)</span>
+          <input value={perRequestMax} onChange={(e) => setPerRequestMax(e.currentTarget.value)} style={inputStyle} type="number" min="0" step="0.01" />
+        </label>
+        <label style={{ ...labelStyle, alignItems: "center" }}>
+          <span style={headStyle}>AutoPay</span>
+          <input type="checkbox" checked={autoPay} onChange={(e) => setAutoPay(e.currentTarget.checked)} style={{ width: 18, height: 18, marginTop: 4 }} />
+        </label>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={refreshBudget} disabled={loadingBudget}>
+          {loadingBudget ? <Loader2 size={12} className="wallet-spin" /> : <Wallet width={12} height={12} />} Read current budget
+        </button>
+        {budgetState && (
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: ".78rem" }}>
+            <span>Daily limit: <b>{fmtUsd(budgetState.dailyLimitUsd)}</b></span>
+            <span>Max/request: <b>{fmtUsd(budgetState.perRequestMaxUsd)}</b></span>
+            <span style={{ color: budgetState.remainingTodayUsd <= 0 ? "var(--red)" : "var(--green)", fontWeight: 700 }}>
+              Spent today: {fmtUsd(budgetState.spentTodayUsd)} / {fmtUsd(budgetState.dailyLimitUsd)}
+              {budgetState.remainingTodayUsd <= 0 && " ⚠ LIMIT REACHED"}
+            </span>
+            <span style={{ color: "var(--muted)" }}>AutoPay: {budgetState.autoPay ? "on" : "off"}</span>
+          </div>
+        )}
+      </div>
+
+      {last && (
+        <div style={{ ...okStrip, marginBottom: 12 }}>
+          <Check width={13} height={13} /> Budget set on-chain ·{" "}
+          <a href={mantleExplorerTxUrl(last.txHash)} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            tx {last.txHash.slice(0, 10)}… <ExternalLink width={11} height={11} />
+          </a>
+        </div>
+      )}
+      {err && <div style={{ marginBottom: 12, color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
+
+      <div style={{ padding: "9px 13px", borderRadius: 10, background: "var(--field)", fontSize: ".76rem", color: "var(--muted)", lineHeight: 1.55 }}>
+        <b style={{ color: "var(--ink)" }}>How it works:</b> The gateway checks <code style={code}>checkAndSpend(agentAddress, amountCents)</code> on-chain before unlocking any x402 resource.
+        If the daily cap is hit, the gateway returns <code style={code}>402 budget_exceeded</code> even with a valid payment proof.
+        Set <code style={code}>VITE_BUDGET_CONTROLLER</code> to the deployed contract address to enable.
       </div>
     </ActionPanel>
   );

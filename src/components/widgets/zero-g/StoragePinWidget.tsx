@@ -275,9 +275,15 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
             </div>
             {/* Secondary — storage status + anchor */}
             <div style={{ background: "var(--field)", padding: "8px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: ".68rem" }}>
-              <span style={{ color: lastPinned.storageSimulated ? "var(--muted)" : "#1fb58a", fontWeight: 600 }}>
-                {lastPinned.storageOnChain ? "on-chain ✓" : lastPinned.storageMerkle ? "Merkle ✓ (pending on-chain)" : "sha256 hash"}
-              </span>
+              {lastPinned.storageSimulated ? (
+                <span style={{ background: "rgba(180,80,0,.18)", color: "#ffb347", fontWeight: 700, borderRadius: 4, padding: "2px 8px", letterSpacing: ".02em" }}>
+                  ⚠ Local SHA-256 — not uploaded to 0G (set OG_STORAGE_INDEXER to enable real Merkle root)
+                </span>
+              ) : (
+                <span style={{ color: "#1fb58a", fontWeight: 700 }}>
+                  {lastPinned.storageOnChain ? "✓ Anchored on 0G Storage — on-chain" : "✓ Anchored on 0G Storage — Merkle root verified"}
+                </span>
+              )}
               {lastPinned.storageRoot && <span style={{ color: "var(--muted)" }}>root: <code style={{ background: "rgba(0,0,0,.1)", borderRadius: 4, padding: "1px 5px" }}>{shortHash(lastPinned.storageRoot.replace(/^0x/, ""))}</code></span>}
               <span style={{ flex: 1 }} />
               {lastPinned.onchainTxHash ? (

@@ -68,6 +68,56 @@ async function main() {
     }
   }
 
+  // ── AgentBudgetController ──────────────────────────────────────────────────
+  let budgetControllerAddress = process.env.MANTLE_BUDGET_CONTROLLER_ADDRESS?.trim() || null;
+  if (budgetControllerAddress) {
+    console.log(`AgentBudgetController: reusing existing ${budgetControllerAddress}`);
+  } else {
+    try {
+      const BudgetController = await hre.ethers.getContractFactory("AgentBudgetController");
+      const budgetController = await BudgetController.deploy();
+      await budgetController.waitForDeployment();
+      budgetControllerAddress = await budgetController.getAddress();
+      console.log(`  ✓ AgentBudgetController: ${budgetControllerAddress}`);
+    } catch (e) {
+      console.warn(`  ⚠ AgentBudgetController NOT deployed: ${(e && (e.shortMessage || e.message)) || e}`);
+    }
+  }
+
+  // ── ServiceRegistry ────────────────────────────────────────────────────────
+  let serviceRegistryAddress = process.env.MANTLE_SERVICE_REGISTRY_ADDRESS?.trim() || null;
+  const treasury = process.env.MANTLE_TREASURY_ADDRESS?.trim() || deployer.address;
+  if (serviceRegistryAddress) {
+    console.log(`ServiceRegistry: reusing existing ${serviceRegistryAddress}`);
+  } else {
+    try {
+      const ServiceRegistry = await hre.ethers.getContractFactory("ServiceRegistry");
+      const serviceRegistry = await ServiceRegistry.deploy(treasury);
+      await serviceRegistry.waitForDeployment();
+      serviceRegistryAddress = await serviceRegistry.getAddress();
+      console.log(`  ✓ ServiceRegistry: ${serviceRegistryAddress} (treasury: ${treasury})`);
+    } catch (e) {
+      console.warn(`  ⚠ ServiceRegistry NOT deployed: ${(e && (e.shortMessage || e.message)) || e}`);
+    }
+  }
+
+  // ── ReceiptNFT ─────────────────────────────────────────────────────────────
+  let receiptNftAddress = process.env.MANTLE_RECEIPT_NFT_ADDRESS?.trim() || null;
+  const gatewayMinter = process.env.MANTLE_GATEWAY_MINTER?.trim() || deployer.address;
+  if (receiptNftAddress) {
+    console.log(`ReceiptNFT: reusing existing ${receiptNftAddress}`);
+  } else {
+    try {
+      const ReceiptNFT = await hre.ethers.getContractFactory("ReceiptNFT");
+      const receiptNft = await ReceiptNFT.deploy(gatewayMinter);
+      await receiptNft.waitForDeployment();
+      receiptNftAddress = await receiptNft.getAddress();
+      console.log(`  ✓ ReceiptNFT: ${receiptNftAddress} (gateway minter: ${gatewayMinter})`);
+    } catch (e) {
+      console.warn(`  ⚠ ReceiptNFT NOT deployed: ${(e && (e.shortMessage || e.message)) || e}`);
+    }
+  }
+
   const explorerBase = (
     process.env.MANTLE_EXPLORER_URL ||
     (net === "mantle" ? "https://explorer.mantle.xyz" : "https://explorer.sepolia.mantle.xyz")
@@ -87,8 +137,14 @@ async function main() {
   console.log("Next: put these in the frontend .env.local —");
   if (identityAddress) console.log(`  VITE_MANTLE_IDENTITY_ADDRESS=${identityAddress}`);
   console.log(`  VITE_MANTLE_VAULT_ADDRESS=${vaultAddress}`);
+  if (budgetControllerAddress) console.log(`  VITE_BUDGET_CONTROLLER=${budgetControllerAddress}`);
+  if (serviceRegistryAddress) console.log(`  VITE_SERVICE_REGISTRY=${serviceRegistryAddress}`);
   console.log(`  VITE_MANTLE_CHAIN_ID=${net === "mantle" ? "0x1388" : "0x138b"}`);
   console.log(`  VITE_MANTLE_EXPLORER=${explorerBase}`);
+  console.log("And in server/.env —");
+  if (receiptNftAddress) console.log(`  RECEIPT_NFT_ADDRESS=${receiptNftAddress}`);
+  console.log(`  MINTER_PRIVATE_KEY=<deployer or dedicated minter key>`);
+  console.log(`  MANTLE_RPC_URL=https://rpc.mantle.xyz`);
 
   const outDir = path.join(__dirname, "..", "deployments");
   fs.mkdirSync(outDir, { recursive: true });
@@ -96,6 +152,9 @@ async function main() {
     network: net,
     identityRegistry: identityAddress,
     agentVault: vaultAddress,
+    budgetController: budgetControllerAddress,
+    serviceRegistry: serviceRegistryAddress,
+    receiptNft: receiptNftAddress,
     yieldToken,
     identityTxHash: idTx ? idTx.hash : null,
     vaultTxHash: vTx ? vTx.hash : null,
