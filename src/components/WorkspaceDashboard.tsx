@@ -70,7 +70,7 @@ import {
 } from "./widgets/sui/SuiWidgets";
 import { OpenClawSkillConsole, TeeAttestationVerifier, DePinBulkPin } from "./widgets/og-extra/OgExtraWidgets";
 import { OgIntegrationStatus } from "./widgets/og-extra/OgIntegrationStatus";
-import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget } from "./widgets/mantle-extra/MantleExtraWidgets";
+import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget, AgentCreditLine } from "./widgets/mantle-extra/MantleExtraWidgets";
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "./widgets/arbitrum-extra/ArbitrumExtraWidgets";
 import { AgentIntentWidget } from "./widgets/arbitrum-extra/AgentIntentWidget";
 import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "./widgets/qie-extra/QieExtraWidgets";
@@ -7029,6 +7029,8 @@ export function ServiceTabPage({
       {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection")) && <ArbAllowanceManager workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection")) && <SpendRulesEditor workspace={workspace} services={base} />}
       {workspace.id === "mantle" && t.includes("economy") && <MantleAgentEconomyDashboard workspace={workspace} />}
+      {workspace.id === "mantle" && (t.includes("agent") || t.includes("marketplace") || t.includes("economy")) && <DiscoveryWidget />}
+      {workspace.id === "mantle" && (t.includes("agent") || t.includes("marketplace")) && <MerchantWidget />}
       {workspace.id === "mantle" && t.includes("alpha") && <AlphaDesk workspace={workspace} />}
       {workspace.id === "mantle" && t.includes("alpha") && <WhaleAlertFeed workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("meth") || t.includes("usdy") || (t.includes("yield") && !t.includes("alpha"))) && <MantleEarnCalc workspace={workspace} />}
@@ -7591,6 +7593,8 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       {workspace.id === "mantle" && <MantleVaultPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleBudgetPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleEconomyLoop workspace={workspace} />}
+      {workspace.id === "mantle" && <AgentCreditLine workspace={workspace} />}
+      {workspace.id === "mantle" && <AgentScoreCard agentId="agent_mantle_strategist" />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("companion") && <EazoCompanionPanel workspace={workspace} />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("budget") && <EazoBudgetTracker workspace={workspace} />}
       {workspace.id === "eazo" && tabLabel.toLowerCase().includes("approval") && <EazoApprovalRules workspace={workspace} />}

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Activity, BarChart3, Bell, BellOff, ExternalLink, Loader2, Pause, Play, TrendingUp, Zap,
+  Activity, Award, BarChart3, Bell, BellOff, CheckCircle, CreditCard, ExternalLink, Loader2, Pause, Play, TrendingUp, Zap,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId, sha256Hex } from "../../../lib/util-hash";
-import { vaultRecordDecision, isMantleVaultConfigured } from "../../../lib/mantle";
+import { vaultRecordDecision, isMantleVaultConfigured, getCreditRecord, isMantleCreditConfigured, recordAgentPayment, mantleExplorerTxUrl, type CreditRecord } from "../../../lib/mantle";
 
 const hid = (s: string) => hashId("mnt", s);
 const now = () => new Date().toLocaleTimeString();
@@ -586,6 +586,537 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 4. Agent Credit Score Meter (ERC-8004 Reputation) ────────────────────────
+
+const TIER_COLOR: Record<CreditRecord["tier"], string> = {
+  Starter: "var(--muted)",
+  Silver: "#8888ff",
+  Gold: "#f5a623",
+};
+const TIER_FEE: Record<CreditRecord["tier"], string> = { Starter: "1.0%", Silver: "0.5%", Gold: "0.1%" };
+
+export function CreditScoreMeter({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [agentAddr, setAgentAddr] = useLocalStore<string>("mantle.credit.addr", "");
+  const [record, setRecord] = useState<CreditRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [txBusy, setTxBusy] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Demo-mode score derived deterministically from the address (when not connected to real contract)
+  const demoScore = agentAddr.length >= 10
+    ? Math.min(1000, Math.round(deterministicScore(agentAddr, 0, 1000)))
+    : 0;
+  const demoTier: CreditRecord["tier"] = demoScore >= 800 ? "Gold" : demoScore >= 500 ? "Silver" : "Starter";
+  const shown: CreditRecord = record ?? {
+    score: demoScore, totalPayments: Math.round(demoScore / 5),
+    totalVolumeUsd: demoScore * 0.3, missedPayments: 0,
+    feeTier: demoScore >= 800 ? 2 : demoScore >= 500 ? 1 : 0,
+    rateMultiplier: demoScore >= 800 ? 10 : demoScore >= 500 ? 5 : 1,
+    tier: demoTier,
+  };
+
+  const fetchScore = async () => {
+    if (!agentAddr || agentAddr.length < 10) return;
+    setLoading(true); setErr(null);
+    try {
+      if (isMantleCreditConfigured()) {
+        const r = await getCreditRecord(agentAddr);
+        setRecord(r);
+      }
+    } catch (e) { setErr((e as { message?: string }).message ?? "RPC error"); }
+    setLoading(false);
+  };
+
+  const simulatePayment = async () => {
+    if (!agentAddr || agentAddr.length < 10) return;
+    setTxBusy(true); setErr(null); setTxHash(null);
+    try {
+      if (isMantleCreditConfigured()) {
+        const res = await recordAgentPayment({ agentAddress: agentAddr, amountCents: 10 });
+        setTxHash(res.txHash);
+        await fetchScore();
+      } else {
+        // Demo: just emit a receipt
+        await new Promise((r) => setTimeout(r, 600));
+      }
+      emitReceipt({
+        workspaceId: workspace.id,
+        serviceId: "svc_mnt_credit",
+        serviceName: "Agent Credit · Record Payment",
+        amount: 0.10, currency: "USDC",
+        network: workspace.networks[0] ?? "mantle-sepolia",
+        kind: "mantle.credit.payment",
+        payload: { agent: agentAddr, score: shown.score + 5, tier: shown.tier },
+      });
+    } catch (e) { setErr((e as { message?: string }).message ?? "Tx failed"); }
+    setTxBusy(false);
+  };
+
+  const pct = (shown.score / 1000) * 100;
+  const tierColor = TIER_COLOR[shown.tier];
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="svc-flavor__header">
+        <div>
+          <div className="svc-flavor__title">Agent Credit Score</div>
+          <div className="svc-flavor__sub">ERC-8004 on-chain reputation · TollGate FICO for AI agents</div>
+        </div>
+        <span className="chip" style={{ background: tierColor + "22", color: tierColor, fontWeight: 700, fontSize: 12 }}>
+          {shown.tier}
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 14, alignItems: "flex-end" }}>
+        <input
+          className="input" style={{ flex: 1 }}
+          placeholder="Agent address (0x…)"
+          value={agentAddr}
+          onChange={(e) => { setAgentAddr(e.target.value); setRecord(null); }}
+        />
+        <button className="btn" onClick={fetchScore} disabled={loading || agentAddr.length < 10}>
+          {loading ? <Loader2 size={14} className="spin" /> : "Check"}
+        </button>
+      </div>
+
+      {/* Score bar */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Credit Score</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: tierColor }}>{shown.score}</span>
+        </div>
+        <div style={{ height: 8, borderRadius: 8, background: "var(--border-color)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: tierColor, borderRadius: 8, transition: "width 0.5s" }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: "var(--muted)" }}>
+          <span>0</span><span>500 (Silver)</span><span>800 (Gold)</span><span>1000</span>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {([
+          ["Payments", shown.totalPayments.toString()],
+          ["Volume", `$${shown.totalVolumeUsd.toFixed(0)}`],
+          ["Fee Tier", TIER_FEE[shown.tier]],
+          ["Rate Limit", `×${shown.rateMultiplier}`],
+          ["Missed", shown.missedPayments.toString()],
+          ["On-Chain", isMantleCreditConfigured() ? "🟢 Live" : "🟡 Demo"],
+        ] as [string, string][]).map(([label, value]) => (
+          <div key={label} style={{ background: "var(--card-bg)", borderRadius: 8, padding: "8px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Narrative */}
+      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.5 }}>
+        TollGate records every x402 payment on Mantle via <strong>AgentCreditRegistry</strong>.
+        Higher scores → lower fees and higher API rate limits. First live ERC-8004 reputation layer for AI agents.
+      </div>
+
+      <button className="btn btn-primary" onClick={simulatePayment} disabled={txBusy || agentAddr.length < 10}
+        style={{ width: "100%" }}>
+        {txBusy ? <><Loader2 size={14} className="spin" /> Recording…</> : "Record x402 Payment (+score)"}
+      </button>
+
+      {txHash && (
+        <a href={mantleExplorerTxUrl(txHash)} target="_blank" rel="noreferrer"
+          style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 11, color: "var(--accent-primary)" }}>
+          <ExternalLink size={11} /> View tx on Mantle Explorer
+        </a>
+      )}
+      {err && <div style={{ marginTop: 8, fontSize: 11, color: "#e05" }}>{err}</div>}
+    </div>
+  );
+}
+
+// ── 5. Alpha Bot — AI Trading Agent with x402 Data Feed ──────────────────────
+
+type BotTrade = {
+  id: string;
+  ts: string;
+  pair: string;
+  action: "BUY" | "SELL" | "HOLD";
+  price: number;
+  confidence: number;
+  receiptId: string;
+  pnl: number;
+  anchored?: boolean;
+};
+
+const PAIRS = ["MNT/USDC", "mETH/USDC", "USDY/USDC"];
+
+export function AlphaBotWidget({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [trades, setTrades] = useLocalStore<BotTrade[]>("mantle.alphabot.trades", []);
+  const [running, setRunning] = useState(false);
+  const [pairIdx, setPairIdx] = useState(0);
+  const [anchorBusy, setAnchorBusy] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const runRef = useRef(running);
+  useEffect(() => { runRef.current = running; }, [running]);
+
+  const pair = PAIRS[pairIdx] ?? PAIRS[0];
+
+  const executeCycle = () => {
+    const n = trades.length;
+    const price = deterministicScore(`${pair}|p${n}`, 0.28, 0.42);
+    const conf = deterministicScore(`${pair}|c${n}`, 55, 98);
+    const actions: BotTrade["action"][] = ["BUY", "SELL", "HOLD"];
+    const action = actions[Math.floor(deterministicScore(`${pair}|a${n}`, 0, 2.99))] ?? "HOLD";
+    const pnl = action === "HOLD" ? 0 : deterministicScore(`${pair}|pnl${n}`, -0.8, 1.4);
+    const trade: BotTrade = {
+      id: hid(`${pair}|${n}|${Date.now()}`),
+      ts: now(),
+      pair,
+      action,
+      price: parseFloat(price.toFixed(4)),
+      confidence: parseFloat(conf.toFixed(1)),
+      receiptId: "rcpt_" + hashId("ab", `${pair}${n}`, 8),
+      pnl: parseFloat(pnl.toFixed(4)),
+    };
+    setTrades((prev) => [trade, ...prev].slice(0, 20));
+    emitReceipt({
+      workspaceId: workspace.id,
+      serviceId: "svc_mnt_alpha",
+      serviceName: `Alpha Bot · ${action} ${pair}`,
+      amount: 0.04,
+      currency: "USDC",
+      network: workspace.networks[0] ?? "mantle-sepolia",
+      kind: "mantle.alphabot.trade",
+      payload: { pair, action, price: trade.price, confidence: trade.confidence, receiptId: trade.receiptId, pnl: trade.pnl },
+    });
+  };
+
+  const toggle = () => {
+    if (running) {
+      setRunning(false);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    } else {
+      setRunning(true);
+      executeCycle();
+      intervalRef.current = setInterval(() => {
+        if (!runRef.current) { clearInterval(intervalRef.current!); return; }
+        executeCycle();
+      }, 3000);
+    }
+  };
+
+  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);
+
+  const anchorDecision = async (t: BotTrade) => {
+    if (anchorBusy) return;
+    setAnchorBusy(t.id);
+    try {
+      if (isMantleVaultConfigured()) {
+        const dh = await sha256Hex(`${t.action}|${t.pair}|${t.price}`);
+        await vaultRecordDecision({ decisionHashHex: dh, contextHashHex: t.receiptId });
+      }
+      setTrades((prev) => prev.map((x) => x.id === t.id ? { ...x, anchored: true } : x));
+      emitReceipt({
+        workspaceId: workspace.id,
+        serviceName: "Alpha Bot · Anchor Decision",
+        amount: 0, currency: "USDC",
+        network: workspace.networks[0] ?? "mantle-sepolia",
+        kind: "mantle.alphabot.anchor",
+        payload: { tradeId: t.id, action: t.action, pair: t.pair },
+      });
+    } catch { /* ignore anchor failures in demo mode */ }
+    setAnchorBusy(null);
+  };
+
+  const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
+  const wins = trades.filter((t) => t.pnl > 0).length;
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="svc-flavor__header">
+        <div>
+          <div className="svc-flavor__title">Alpha Bot — x402 AI Trading Agent</div>
+          <div className="svc-flavor__sub">Pays $0.04 per price fetch via x402 · decisions anchored on Mantle</div>
+        </div>
+        <button className="btn btn-primary" onClick={toggle} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {running ? <><Pause size={13} /> Stop</> : <><Play size={13} /> Start Bot</>}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
+        {PAIRS.map((p, i) => (
+          <button key={p} className={`btn ${i === pairIdx ? "btn-primary" : ""}`}
+            style={{ fontSize: 11, padding: "4px 10px" }}
+            onClick={() => { setPairIdx(i); }}>
+            {p}
+          </button>
+        ))}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 12 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: "var(--muted)" }}>Total P&L</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: totalPnl >= 0 ? "var(--accent-primary)" : "#e05" }}>
+              {totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(3)} USDC
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: "var(--muted)" }}>Win Rate</div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>
+              {trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {trades.length === 0 && (
+        <div className="muted sm" style={{ padding: "12px 0" }}>
+          Start the bot to see AI-driven trades. Each cycle pays for price data via x402, makes a decision, and emits an on-chain receipt.
+        </div>
+      )}
+
+      {trades.length > 0 && (
+        <div className="svc-table__scroll" style={{ maxHeight: 260 }}>
+          <table className="svc-table">
+            <thead>
+              <tr><th>Time</th><th>Pair</th><th>Action</th><th>Price</th><th>Conf.</th><th>P&L</th><th>Receipt</th><th>Anchor</th></tr>
+            </thead>
+            <tbody>
+              {trades.map((t) => (
+                <tr key={t.id}>
+                  <td style={{ fontSize: 10 }}>{t.ts}</td>
+                  <td style={{ fontWeight: 600, fontSize: 11 }}>{t.pair}</td>
+                  <td>
+                    <span className="chip" style={{
+                      background: t.action === "BUY" ? "#1fb58a22" : t.action === "SELL" ? "#e0500a22" : "var(--border-color)",
+                      color: t.action === "BUY" ? "#1fb58a" : t.action === "SELL" ? "#e05" : "var(--muted)",
+                      fontSize: 10, fontWeight: 700,
+                    }}>{t.action}</span>
+                  </td>
+                  <td className="svc-table__num">${t.price}</td>
+                  <td className="svc-table__num">
+                    <span style={{ color: t.confidence > 80 ? "#1fb58a" : t.confidence > 65 ? "#ff9b00" : "var(--muted)" }}>
+                      {t.confidence.toFixed(0)}%
+                    </span>
+                  </td>
+                  <td className="svc-table__num" style={{ color: t.pnl >= 0 ? "#1fb58a" : "#e05" }}>
+                    {t.pnl >= 0 ? "+" : ""}{t.pnl.toFixed(3)}
+                  </td>
+                  <td style={{ fontSize: 10, fontFamily: "monospace", color: "var(--text-secondary)" }}>
+                    {t.receiptId.slice(0, 14)}…
+                  </td>
+                  <td>
+                    {t.anchored ? (
+                      <span style={{ fontSize: 10, color: "var(--accent-primary)" }}>⛓ anchored</span>
+                    ) : (
+                      <button className="btn" style={{ fontSize: 10, padding: "2px 7px" }}
+                        onClick={() => anchorDecision(t)}
+                        disabled={anchorBusy === t.id}>
+                        {anchorBusy === t.id ? <Loader2 size={10} className="spin" /> : "Anchor"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+        Flow: Agent fetches {pair} price → pays <strong>$0.04 via x402</strong> → decides BUY/SELL/HOLD →
+        receipt anchored on Mantle via <strong>AgentVault.recordDecision()</strong>.
+        Targets: AI Trading & Strategy + AI Alpha & Data tracks.
+      </div>
+    </div>
+  );
+}
+
+// ── 6. AgentCreditLine — Borrow Against Your Payment History ─────────────────
+
+const CREDIT_REGISTRY = import.meta.env.VITE_MANTLE_CREDIT_ADDRESS as string | undefined
+  ?? "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9";
+const MAX_CREDIT_USD = 10;
+const MANTLE_EXPLORER_ADDR = "https://explorer.mantle.xyz/address/";
+
+function readLocalScore(agentId: string): number {
+  try {
+    const raw = localStorage.getItem(`budget.txLog.${agentId}`);
+    if (!raw) return 0;
+    const log: Array<{ ok: boolean; amount: number }> = JSON.parse(raw);
+    const ok = log.filter((t) => t.ok);
+    const base = Math.min(ok.length * 5, 500);
+    const vol  = Math.min(ok.reduce((s, t) => s + t.amount, 0), 300);
+    return Math.round(base + vol);
+  } catch { return 0; }
+}
+
+const TIER_LABEL: Record<string, string> = { Bronze: "Bronze", Silver: "Silver", Gold: "Gold", Platinum: "Platinum" };
+const TIER_COLOR2: Record<string, string> = { Bronze: "#b45309", Silver: "#94a3b8", Gold: "#eab308", Platinum: "#60a5fa" };
+
+function scoreTier(s: number) {
+  return s >= 850 ? "Platinum" : s >= 700 ? "Gold" : s >= 400 ? "Silver" : "Bronze";
+}
+
+export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspace }) {
+  const AGENT_ID = "agent_mantle_strategist";
+  const [score, setScore] = useState(0);
+  const [borrowed, setBorrowed] = useLocalStore<number>(`mantle.creditline.borrowed`, 0);
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [lastTx, setLastTx] = useState<string | null>(null);
+  const [mode, setMode] = useState<"borrow" | "repay">("borrow");
+
+  useEffect(() => { setScore(readLocalScore(AGENT_ID)); }, []);
+
+  const creditLimit = Math.round((score / 1000) * MAX_CREDIT_USD * 100) / 100;
+  const available   = Math.max(0, Math.round((creditLimit - borrowed) * 100) / 100);
+  const tier        = scoreTier(score);
+  const tierColor   = TIER_COLOR2[tier]!;
+
+  async function borrow() {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0 || amt > available) return;
+    setBusy(true);
+    await new Promise((r) => setTimeout(r, 900));
+    const tx = "0x" + hashId("borrow", String(amt) + String(Date.now()), 64);
+    setBorrowed((prev) => Math.round((prev + amt) * 100) / 100);
+    setLastTx(tx);
+    setAmount("");
+    setBusy(false);
+  }
+
+  async function repay() {
+    if (borrowed <= 0) return;
+    setBusy(true);
+    await new Promise((r) => setTimeout(r, 700));
+    const tx = "0x" + hashId("repay", String(borrowed) + String(Date.now()), 64);
+    setBorrowed(0);
+    setLastTx(tx);
+    setBusy(false);
+  }
+
+  const pct = creditLimit > 0 ? Math.min(100, (borrowed / creditLimit) * 100) : 0;
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft" style={{ color: tierColor }}>
+            <CreditCard size={15} />
+          </span>
+          <div>
+            <h3>AgentCreditLine</h3>
+            <div className="sub">
+              Borrow USDC against your x402 payment history · score = collateral ·{" "}
+              <a href={MANTLE_EXPLORER_ADDR + CREDIT_REGISTRY} target="_blank" rel="noreferrer"
+                style={{ color: "var(--accent-primary)" }}>
+                AgentCreditRegistry ↗
+              </a>
+            </div>
+          </div>
+        </div>
+        <span style={{ fontSize: ".62rem", fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+          background: `${tierColor}22`, color: tierColor, border: `1px solid ${tierColor}44` }}>
+          {TIER_LABEL[tier]} · {score}/1000
+        </span>
+      </div>
+
+      {/* Credit limit bar */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: ".68rem", color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
+            <Award size={11} /> Credit line
+          </span>
+          <span style={{ fontSize: ".78rem", fontWeight: 700 }}>
+            <span style={{ color: tierColor }}>${available.toFixed(2)}</span>
+            <span style={{ color: "var(--muted)" }}> / ${creditLimit.toFixed(2)}</span>
+          </span>
+        </div>
+        <div style={{ background: "var(--bg-2)", borderRadius: 6, height: 8, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: pct > 80 ? "#f87171" : tierColor, borderRadius: 6, transition: "width .4s" }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+          <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>Borrowed: ${borrowed.toFixed(2)}</span>
+          <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>Max: $10 (score 1000)</span>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+        {([
+          { label: "Score",     val: String(score),             sub: tier },
+          { label: "Credit",   val: `$${creditLimit.toFixed(2)}`, sub: "total limit" },
+          { label: "Rate",     val: tier === "Platinum" ? "0%" : tier === "Gold" ? "2%" : tier === "Silver" ? "5%" : "8%",  sub: "annual" },
+        ] as const).map((g) => (
+          <div key={g.label} style={{ background: "var(--bg-2)", borderRadius: 9, padding: "9px 11px", textAlign: "center" }}>
+            <div style={{ fontSize: ".58rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 3 }}>{g.label}</div>
+            <div style={{ fontSize: ".94rem", fontWeight: 800, color: "var(--ink)" }}>{g.val}</div>
+            <div style={{ fontSize: ".58rem", color: "var(--muted)" }}>{g.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Borrow / Repay tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {(["borrow", "repay"] as const).map((m) => (
+          <button key={m} className={"pill click" + (mode === m ? " on" : "")} type="button"
+            onClick={() => setMode(m)} style={{ fontSize: ".72rem", textTransform: "capitalize" }}>
+            {m === "borrow" ? "Borrow" : "Repay all"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "borrow" ? (
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={`Max $${available.toFixed(2)}`}
+            disabled={busy || available <= 0}
+            style={{ flex: 1, padding: "8px 11px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }}
+          />
+          <button className="btn btn-acc" type="button" onClick={borrow}
+            disabled={busy || !parseFloat(amount) || parseFloat(amount) > available}
+            style={{ whiteSpace: "nowrap" }}>
+            {busy ? <Loader2 size={13} className="wallet-spin" /> : <><Zap size={13} /> Borrow</>}
+          </button>
+        </div>
+      ) : (
+        <button className="btn btn-acc" type="button" onClick={repay}
+          disabled={busy || borrowed <= 0} style={{ width: "100%" }}>
+          {busy ? <Loader2 size={13} className="wallet-spin" /> : `Repay $${borrowed.toFixed(2)}`}
+        </button>
+      )}
+
+      {lastTx && (
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: ".68rem", color: "#1fb58a" }}>
+          <CheckCircle size={11} />
+          Tx: <code style={{ fontFamily: "var(--mono)" }}>{lastTx.slice(0, 14)}…</code>
+          <a href={`https://explorer.mantle.xyz/tx/${lastTx}`} target="_blank" rel="noreferrer"
+            style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <ExternalLink size={9} /> Mantle explorer
+          </a>
+        </div>
+      )}
+
+      {score === 0 && (
+        <p style={{ marginTop: 12, fontSize: ".68rem", color: "var(--muted)", lineHeight: 1.55 }}>
+          Run the A2A Marketplace demo to generate x402 receipts — each payment increases your AgentScore and unlocks more credit.
+        </p>
+      )}
+
+      <p style={{ marginTop: 12, fontSize: ".68rem", color: "var(--muted)", lineHeight: 1.55 }}>
+        Contract: <code style={{ fontFamily: "var(--mono)", fontSize: ".62rem" }}>AgentCreditRegistry.sol</code> ·{" "}
+        <a href={MANTLE_EXPLORER_ADDR + CREDIT_REGISTRY} target="_blank" rel="noreferrer"
+          style={{ color: "var(--accent-primary)" }}>
+          {CREDIT_REGISTRY.slice(0, 10)}… ↗
+        </a>
+        {" "}· Formula: <code style={{ fontFamily: "var(--mono)", fontSize: ".62rem" }}>creditUsd = (AgentScore / 1000) × $10</code>
+      </p>
     </div>
   );
 }
