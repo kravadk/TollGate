@@ -871,6 +871,13 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
 const NFT_TIERS = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 const TIER_COLORS = ["#9ca3af", "#22c55e", "#3b82f6", "#a855f7", "#f59e0b"];
 
+const SUI_REPUTATION_PKG = import.meta.env.VITE_SUI_REPUTATION_PACKAGE_ID as string | undefined;
+const SUI_AGENT_REGISTRY = import.meta.env.VITE_SUI_AGENT_REGISTRY as string | undefined;
+const SUI_TESTNET_RPC = "https://fullnode.testnet.sui.io:443";
+const SUI_TESTNET_EXPLORER = "https://suiscan.xyz/testnet";
+
+type RegistryState = { totalAgents: number; objectId: string } | null;
+
 export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [agents, setAgents] = useLocalStore<{ id: string; name: string; tier: number; level: number; tasks: number; revenue: number; ts: string }[]>(
@@ -881,6 +888,29 @@ export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
     ]
   );
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [registry, setRegistry] = useState<RegistryState>(null);
+  const [fetchingReg, setFetchingReg] = useState(false);
+  const [regErr, setRegErr] = useState<string | null>(null);
+
+  async function fetchRegistry() {
+    if (!SUI_AGENT_REGISTRY) { setRegErr("VITE_SUI_AGENT_REGISTRY not set"); return; }
+    setFetchingReg(true); setRegErr(null);
+    try {
+      const res = await fetch(SUI_TESTNET_RPC, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sui_getObject", params: [SUI_AGENT_REGISTRY, { showContent: true }] }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const json = (await res.json()) as { result?: { data?: { content?: { fields?: { total_agents?: string | number } } } } };
+      const total = json.result?.data?.content?.fields?.total_agents;
+      setRegistry({ totalAgents: total !== undefined ? Number(total) : 0, objectId: SUI_AGENT_REGISTRY });
+    } catch (e) {
+      setRegErr((e as Error).message ?? "fetch failed");
+    } finally {
+      setFetchingReg(false);
+    }
+  }
 
   async function claimUpdate(id: string) {
     setClaiming(id);
@@ -893,7 +923,7 @@ export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
       const newTier = Math.min(4, newLevel >= 20 ? 4 : newLevel >= 10 ? 3 : newLevel >= 5 ? 2 : newLevel >= 2 ? 1 : 0);
       return { ...a, tasks: newTasks, revenue: newRevenue, level: newLevel, tier: newTier };
     }));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "AgentNFT Reputation Update", amount: 0, currency: "SUI", network: "sui-mainnet", kind: "sui.nft.update", payload: { agentId: id } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "AgentNFT Reputation Update", amount: 0, currency: "SUI", network: "sui-testnet", kind: "sui.nft.update", payload: { agentId: id } });
     setClaiming(null);
   }
 
@@ -901,7 +931,42 @@ export function AgentNftReputation({ workspace }: { workspace: Workspace }) {
     <div className="widget-card">
       <div className="widget-header">
         <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Star size={15} /></span>
-        <div><h3>AgentNFT Living Reputation</h3><div className="sub">Each agent = on-chain NFT that levels up as it completes tasks</div></div>
+        <div><h3>AgentNFT Living Reputation</h3><div className="sub">On-chain reputation NFT · agent_reputation.move · Sui testnet</div></div>
+      </div>
+
+      {/* On-chain registry panel */}
+      <div style={{ margin: "0 0 14px", padding: "10px 14px", background: "var(--bg-2)", borderRadius: 10, border: "1px solid var(--line-2)", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800 }}>Deployed contract — Sui testnet</div>
+        {SUI_REPUTATION_PKG && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".7rem" }}>
+            <span style={{ color: "var(--muted)" }}>Package:</span>
+            <a href={`${SUI_TESTNET_EXPLORER}/object/${SUI_REPUTATION_PKG}`} target="_blank" rel="noreferrer"
+              style={{ fontFamily: "monospace", color: "#4DA2FF", fontSize: ".65rem" }}>
+              {SUI_REPUTATION_PKG.slice(0, 10)}…{SUI_REPUTATION_PKG.slice(-6)} ↗
+            </a>
+          </div>
+        )}
+        {SUI_AGENT_REGISTRY && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".7rem" }}>
+            <span style={{ color: "var(--muted)" }}>AgentRegistry:</span>
+            <a href={`${SUI_TESTNET_EXPLORER}/object/${SUI_AGENT_REGISTRY}`} target="_blank" rel="noreferrer"
+              style={{ fontFamily: "monospace", color: "#4DA2FF", fontSize: ".65rem" }}>
+              {SUI_AGENT_REGISTRY.slice(0, 10)}… ↗
+            </a>
+            {registry && (
+              <span style={{ marginLeft: 8, fontSize: ".65rem", color: "var(--green)", fontWeight: 700 }}>
+                {registry.totalAgents} agent{registry.totalAgents !== 1 ? "s" : ""} minted
+              </span>
+            )}
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={fetchRegistry} disabled={fetchingReg}>
+            {fetchingReg ? <Loader2 size={11} className="wallet-spin" /> : null}
+            {fetchingReg ? "Fetching…" : "Fetch registry state"}
+          </button>
+          {regErr && <span style={{ fontSize: ".65rem", color: "#f87171" }}>{regErr}</span>}
+        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginTop: 4 }}>
         {agents.map(a => (
