@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
+import { SuiDemoFlow, SuiLiveContractsPanel } from "./inline-widgets";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Bolt, Code, Star, Robot, Shield, Receipt as RIco } from "../../icons402";
 import {
@@ -76,6 +77,11 @@ export function renderAgentExtra(_workspace: Workspace): ReactNode | null {
   return null;
 }
 
-export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
-  return null;
+export function renderOverviewExtra(workspace: Workspace, onGoTab: (t: string) => boolean, onGoReceipts: () => void): ReactNode | null {
+  return (
+    <>
+      <SuiDemoFlow workspace={workspace} onGoTab={onGoTab} onGoReceipts={onGoReceipts} />
+      <SuiLiveContractsPanel />
+    </>
+  );
 }

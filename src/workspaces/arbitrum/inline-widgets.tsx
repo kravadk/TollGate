@@ -4,7 +4,7 @@
  * WorkspaceDashboard.tsx via the import statement.
  */
 
-import { Fragment, useState, useMemo } from "react";
+import { Fragment, useState, useMemo, useEffect, useCallback } from "react";
 import {
   Code2,
   Loader2,
@@ -19,6 +19,7 @@ import { deterministicScore, hashId } from "../../lib/util-hash";
 import { badgeFor } from "../../lib/ws-helpers";
 import type { Service, Workspace } from "../../types";
 import { sendErc20Transfer, parseUnits, useWallet } from "../../wallet";
+import { getAgentBudget, setAgentBudget, registerService, arbitrumExplorerTxUrl, type AgentBudget } from "../../lib/arbitrum";
 import {
   Bolt,
   CAT_ICON,
@@ -736,22 +737,24 @@ export function ArbitrumStylusDeployPanel({ workspace }: { workspace: Workspace 
   const { emitReceipt } = useAppState();
   const [deploys, setDeploys] = useLocalStore<StylusDeploy[]>("arb.stylus.deploys", []);
   const [contractIdx, setContractIdx] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const contract = STYLUS_CONTRACTS[contractIdx] ?? STYLUS_CONTRACTS[0]!;
-  const deploy = async () => {
-    setBusy(true);
-    await new Promise((r) => setTimeout(r, 900));
+  const cargoCmd = `cargo stylus deploy --private-key $PRIVATE_KEY --endpoint https://sepolia-rollup.arbitrum.io/rpc`;
+
+  const copyCmd = () => {
+    navigator.clipboard?.writeText(cargoCmd);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
     const txHash = "0x" + hashId("arb", contract.id + Date.now(), 64);
-    const d: StylusDeploy = { id: "sdep_" + hashId("arb", txHash, 8), contractId: contract.id, name: contract.name, txHash, network: "Arbitrum Sepolia", ts: new Date().toLocaleTimeString() };
+    const d: StylusDeploy = { id: "sdep_" + hashId("arb", txHash, 8), contractId: contract.id, name: contract.name, txHash, network: "Arbitrum Sepolia (local sim)", ts: new Date().toLocaleTimeString() };
     setDeploys((prev) => [d, ...prev].slice(0, 10));
     emitReceipt({ workspaceId: workspace.id, serviceId: "svc_arb_escrow", serviceName: `Stylus Deploy · ${contract.name}`, amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "arbitrum-sepolia", kind: "arbitrum.stylus.deploy", payload: { contractId: contract.id, name: contract.name, txHash, network: d.network } });
-    setBusy(false);
   };
   return (
     <div className="panel block svc-flavor">
       <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Code2 width={15} height={15} /></span><div><h3>Stylus contracts (Rust)</h3><div className="sub">AgentEscrow and ServiceRegistry in Rust/Stylus for Arbitrum · simulate deploy on Sepolia</div></div></div>
-        <button className="btn btn-acc btn-sm" type="button" onClick={deploy} disabled={busy}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Deploying…</> : <><Zap width={13} height={13} /> Simulate deploy</>}</button>
+        <div className="ttl"><span className="sq soft"><Code2 width={15} height={15} /></span><div><h3>Stylus contracts (Rust)</h3><div className="sub">Rust/Stylus contracts for Arbitrum · copy the <code>cargo stylus deploy</code> command to deploy to Sepolia</div></div></div>
+        <button className="btn btn-acc btn-sm" type="button" onClick={copyCmd}>{copied ? <><Check width={13} height={13} /> Copied!</> : <><Copy width={13} height={13} /> Copy deploy cmd</>}</button>
       </div>
       <div style={{ display: "flex", gap: 8, padding: "0 16px 10px" }}>
         {STYLUS_CONTRACTS.map((c, i) => (
@@ -772,6 +775,352 @@ export function ArbitrumStylusDeployPanel({ workspace }: { workspace: Workspace 
             ))}</tbody>
           </table></div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ARBITRUM — Agent Budget Panel (on-chain AgentBudgetController)
+// ---------------------------------------------------------------------------
+const LS_BUDGET = "arb.budget.ui";
+type LocalBudget = { dailyUsd: string; perReqUsd: string; autoPay: boolean };
+
+export function ArbBudgetPanel({ workspace: _workspace }: { workspace: Workspace }) {
+  const wallet = useWallet();
+  const [saved, setSaved] = useLocalStore<LocalBudget>(LS_BUDGET, { dailyUsd: "12", perReqUsd: "1", autoPay: false });
+  const [dailyUsd, setDailyUsd] = useState(saved.dailyUsd);
+  const [perReqUsd, setPerReqUsd] = useState(saved.perReqUsd);
+  const [autoPay, setAutoPay] = useState(saved.autoPay);
+  const [onChain, setOnChain] = useState<AgentBudget | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!wallet.address) return;
+    const b = await getAgentBudget(wallet.address);
+    setOnChain(b);
+  }, [wallet.address]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const submit = async () => {
+    if (!wallet.address) { setErr("Connect wallet first."); return; }
+    setBusy(true); setErr(null); setOk(null);
+    try {
+      const dailyCents = Math.round(parseFloat(dailyUsd) * 100);
+      const perReqCents = Math.round(parseFloat(perReqUsd) * 100);
+      const res = await setAgentBudget(wallet.address, dailyCents, perReqCents, autoPay);
+      setSaved({ dailyUsd, perReqUsd, autoPay });
+      setOk(res.txHash);
+      await load();
+    } catch (e) { setErr((e as { message?: string }).message ?? "tx failed"); } finally { setBusy(false); }
+  };
+
+  const spentPct = onChain && onChain.dailyLimitCents > 0 ? Math.min(100, (onChain.spentToday / onChain.dailyLimitCents) * 100) : 0;
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl"><span className="sq soft"><ShieldCheck width={15} height={15} /></span><div><h3>Agent Budget Controller</h3><div className="sub">on-chain daily spend limit · per-request cap · AgentBudgetController at Arbitrum One</div></div></div>
+        <button className="btn btn-acc btn-sm" type="button" onClick={submit} disabled={busy || !wallet.address}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Saving…</> : "Set budget"}</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, padding: "0 16px 12px", alignItems: "end" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Daily limit (USD)</span>
+          <input value={dailyUsd} onChange={(e) => setDailyUsd(e.currentTarget.value)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Max per request (USD)</span>
+          <input value={perReqUsd} onChange={(e) => setPerReqUsd(e.currentTarget.value)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 8, cursor: "pointer" }}>
+          <input type="checkbox" checked={autoPay} onChange={(e) => setAutoPay(e.currentTarget.checked)} />
+          <span style={{ fontSize: ".78rem" }}>AutoPay</span>
+        </label>
+      </div>
+      {onChain && (
+        <div style={{ padding: "0 16px 12px" }}>
+          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", marginBottom: 6 }}>On-chain state</div>
+          <div style={{ background: "var(--bg-2)", borderRadius: 10, padding: "10px 14px", border: "1px solid var(--line-2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".76rem", marginBottom: 6 }}>
+              <span>Spent today: <strong>${(onChain.spentToday / 100).toFixed(2)}</strong></span>
+              <span>Limit: <strong>${(onChain.dailyLimitCents / 100).toFixed(2)}</strong></span>
+              <span>Per-req max: <strong>${(onChain.perRequestMaxCents / 100).toFixed(2)}</strong></span>
+            </div>
+            <div style={{ background: "var(--line-2)", borderRadius: 6, height: 8, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${spentPct}%`, background: spentPct > 90 ? "var(--red)" : spentPct > 70 ? "#f59e0b" : "var(--green)", borderRadius: 6, transition: "width .4s" }} />
+            </div>
+          </div>
+        </div>
+      )}
+      {ok && (
+        <div style={{ margin: "0 16px 10px", display: "flex", alignItems: "center", gap: 7, padding: "7px 12px", borderRadius: 9, background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)", fontSize: ".74rem", fontWeight: 700 }}>
+          <Check width={13} height={13} /> Budget saved ·{" "}
+          <a href={arbitrumExplorerTxUrl(ok)} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>{ok.slice(0, 10)}… ↗</a>
+        </div>
+      )}
+      {err && <div style={{ margin: "0 16px 10px", color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ARBITRUM — On-chain Service Registry (ServiceRegistry.sol on Arbitrum One)
+// ---------------------------------------------------------------------------
+type RegEntry = { id: string; name: string; endpoint: string; priceUsdc: number; wallet: string; txHash: string; ts: string };
+
+export function ArbOnChainRegistry({ workspace: _workspace }: { workspace: Workspace }) {
+  const wallet = useWallet();
+  const [entries, setEntries] = useLocalStore<RegEntry[]>("arb.registry.onchain", []);
+  const [svcId, setSvcId] = useState("");
+  const [name, setName] = useState("");
+  const [endpoint, setEndpoint] = useState("https://");
+  const [priceUsdc, setPriceUsdc] = useState("0.01");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!wallet.address) { setErr("Connect wallet first."); return; }
+    if (!svcId.trim() || !name.trim() || !endpoint.startsWith("http")) { setErr("Fill all required fields."); return; }
+    setBusy(true); setErr(null); setOk(null);
+    try {
+      const res = await registerService({ serviceId: svcId.trim(), name: name.trim(), endpointUrl: endpoint.trim(), priceUsdc: parseFloat(priceUsdc), provider: wallet.address });
+      const entry: RegEntry = { id: svcId.trim(), name: name.trim(), endpoint: endpoint.trim(), priceUsdc: parseFloat(priceUsdc), wallet: wallet.address, txHash: res.txHash, ts: new Date().toLocaleTimeString() };
+      setEntries((e) => [entry, ...e].slice(0, 20));
+      setOk(res.txHash);
+      setSvcId(""); setName(""); setEndpoint("https://");
+    } catch (e) { setErr((e as { message?: string }).message ?? "Registration failed"); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl"><span className="sq soft"><Bolt width={15} height={15} /></span><div><h3>Service Registry (on-chain)</h3><div className="sub">register your API as a pay-per-call service · 0.0001 ETH listing fee · ServiceRegistry on Arbitrum One</div></div></div>
+        <button className="btn btn-acc btn-sm" type="button" onClick={submit} disabled={busy || !wallet.address}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Registering…</> : <><Plus width={13} height={13} /> Register service</>}</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "0 16px 10px" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Service ID (unique slug)</span>
+          <input value={svcId} onChange={(e) => setSvcId(e.currentTarget.value)} placeholder="my-ai-service" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Display name</span>
+          <input value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="My AI Service" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Endpoint URL</span>
+          <input value={endpoint} onChange={(e) => setEndpoint(e.currentTarget.value)} placeholder="https://my-api.com/v1" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Price (USDC)</span>
+          <input value={priceUsdc} onChange={(e) => setPriceUsdc(e.currentTarget.value)} style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+      </div>
+      {ok && (
+        <div style={{ margin: "0 16px 10px", display: "flex", alignItems: "center", gap: 7, padding: "7px 12px", borderRadius: 9, background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)", fontSize: ".74rem", fontWeight: 700 }}>
+          <Check width={13} height={13} /> Registered ·{" "}
+          <a href={arbitrumExplorerTxUrl(ok)} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>{ok.slice(0, 10)}… ↗</a>
+        </div>
+      )}
+      {err && <div style={{ margin: "0 16px 10px", color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
+      {entries.length > 0 && (
+        <div style={{ padding: "0 16px 14px" }}>
+          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "4px 0 8px" }}>Registered services · {entries.length}</div>
+          <div className="svc-table__scroll"><table className="svc-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Price</th><th>Wallet</th><th>Tx</th><th>Time</th></tr></thead>
+            <tbody>{entries.map((e) => (
+              <tr key={e.txHash}><td><code style={{ fontSize: ".7rem" }}>{e.id}</code></td><td style={{ fontWeight: 700 }}>{e.name}</td><td className="svc-table__num">${e.priceUsdc.toFixed(4)}</td><td><code style={{ fontSize: ".68rem" }}>{e.wallet.slice(0, 8)}…{e.wallet.slice(-4)}</code></td><td><a href={arbitrumExplorerTxUrl(e.txHash)} target="_blank" rel="noreferrer" style={{ fontSize: ".68rem" }}>{e.txHash.slice(0, 10)}…</a></td><td style={{ fontSize: ".7rem", color: "var(--muted)" }}>{e.ts}</td></tr>
+            ))}</tbody>
+          </table></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ARBITRUM — Escrow Dispute Resolution Panel
+// ---------------------------------------------------------------------------
+type Dispute = { escrowId: number; payee: string; amountEth: string; reason: string; status: "open" | "resolved-release" | "resolved-refund"; at: string; resolvedAt?: string; resolveTx?: string };
+
+export function ArbDisputePanel({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [disputes, setDisputes] = useLocalStore<Dispute[]>("arb.disputes", []);
+  const [escrowId, setEscrowId] = useState("");
+  const [payee, setPayee] = useState("");
+  const [amountEth, setAmountEth] = useState("");
+  const [reason, setReason] = useState("");
+  const [acting, setActing] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const raise = () => {
+    const id = parseInt(escrowId);
+    if (isNaN(id) || id < 0) { setErr("Enter a valid escrow ID."); return; }
+    if (!reason.trim()) { setErr("Describe the dispute reason."); return; }
+    if (disputes.find((d) => d.escrowId === id && d.status === "open")) { setErr("Dispute already open for this escrow."); return; }
+    const newDispute: Dispute = { escrowId: id, payee: payee.trim() || "unknown", amountEth: amountEth.trim() || "?", reason: reason.trim(), status: "open", at: new Date().toLocaleTimeString() };
+    setDisputes((prev) => [newDispute, ...prev].slice(0, 20));
+    setEscrowId(""); setPayee(""); setAmountEth(""); setReason(""); setErr(null);
+  };
+
+  const resolve = async (d: Dispute, kind: "release" | "refund") => {
+    if (acting != null) return;
+    setActing(d.escrowId); setErr(null);
+    try {
+      const { releaseEscrow, refundEscrow } = await import("../../lib/arbitrum");
+      const fn = kind === "release" ? releaseEscrow : refundEscrow;
+      const res = await fn(d.escrowId);
+      setDisputes((prev) => prev.map((x) => x.escrowId === d.escrowId && x.status === "open"
+        ? { ...x, status: kind === "release" ? "resolved-release" : "resolved-refund", resolvedAt: new Date().toLocaleTimeString(), resolveTx: res.txHash }
+        : x));
+      emitReceipt({ workspaceId: workspace.id, serviceName: `Dispute resolved · escrow #${d.escrowId} · ${kind}`, amount: 0, currency: "ETH", network: workspace.networks[0] ?? "arbitrum-sepolia", kind: `arb.dispute.${kind}`, payload: { escrowId: d.escrowId, txHash: res.txHash }, status: "verified" });
+    } catch (e) { setErr((e as { message?: string }).message ?? "Resolution failed"); } finally { setActing(null); }
+  };
+
+  const statusPill = (s: Dispute["status"]) =>
+    s === "open" ? <span className="pill" style={{ background: "#f59e0b18", color: "#f59e0b" }}>⚠ open</span>
+    : s === "resolved-release" ? <span className="pill ok">✓ released</span>
+    : <span className="pill">↩ refunded</span>;
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl"><span className="sq soft"><ShieldCheck width={15} height={15} /></span><div><h3>Escrow Dispute Resolution</h3><div className="sub">raise a dispute on an open escrow · arbitrate release or refund on-chain</div></div></div>
+        <button className="btn btn-acc btn-sm" type="button" onClick={raise}>Raise dispute</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "0 16px 10px" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Escrow ID</span>
+          <input value={escrowId} onChange={(e) => setEscrowId(e.currentTarget.value)} placeholder="42" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Payee (optional)</span>
+          <input value={payee} onChange={(e) => setPayee(e.currentTarget.value)} placeholder="0x…" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Amount (ETH, optional)</span>
+          <input value={amountEth} onChange={(e) => setAmountEth(e.currentTarget.value)} placeholder="0.05" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+        </label>
+      </div>
+      <label style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 16px 12px" }}>
+        <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Reason for dispute</span>
+        <input value={reason} onChange={(e) => setReason(e.currentTarget.value)} placeholder="Service not delivered within deadline" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".84rem" }} />
+      </label>
+      {err && <div style={{ margin: "0 16px 10px", color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
+      <div style={{ padding: "0 16px 4px" }}>
+        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "4px 0 8px" }}>
+          Dispute resolution protocol
+        </div>
+        <div style={{ fontSize: ".74rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: 10, padding: "8px 12px", background: "var(--bg-2)", borderRadius: 9, border: "1px solid var(--line-2)" }}>
+          <strong style={{ color: "var(--ink)" }}>Release</strong> — payer confirms delivery, sends ETH to provider. Callable by the payer only.<br />
+          <strong style={{ color: "var(--ink)" }}>Refund</strong> — payer reclaims ETH after deadline passes. Callable by anyone after deadline.<br />
+          <strong style={{ color: "var(--ink)" }}>Cancel</strong> — provider cancels and returns ETH to payer (use Escrow tab for this).
+        </div>
+      </div>
+      {disputes.length > 0 && (
+        <div style={{ padding: "0 16px 14px" }}>
+          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "4px 0 8px" }}>Open disputes · {disputes.filter((d) => d.status === "open").length}</div>
+          <div className="svc-table__scroll"><table className="svc-table">
+            <thead><tr><th>Escrow</th><th>Amount</th><th>Reason</th><th>Status</th><th>Raised</th><th aria-label="actions" /></tr></thead>
+            <tbody>{disputes.map((d, i) => (
+              <tr key={`${d.escrowId}-${i}`}>
+                <td><span className="pill">#{d.escrowId}</span></td>
+                <td className="svc-table__num">{d.amountEth} ETH</td>
+                <td style={{ fontSize: ".72rem", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.reason}</td>
+                <td>{statusPill(d.status)}</td>
+                <td style={{ fontSize: ".7rem", color: "var(--muted)" }}>{d.at}</td>
+                <td>
+                  {d.status === "open" && (
+                    <span className="row sm" style={{ gap: 6 }}>
+                      <button className="btn btn-ghost btn-sm" type="button" disabled={acting != null} onClick={() => resolve(d, "release")}>{acting === d.escrowId ? <Loader2 size={12} className="wallet-spin" /> : "Release"}</button>
+                      <button className="btn btn-ghost btn-sm" type="button" disabled={acting != null} onClick={() => resolve(d, "refund")}>Refund</button>
+                    </span>
+                  )}
+                  {d.resolveTx && <a href={arbitrumExplorerTxUrl(d.resolveTx)} target="_blank" rel="noreferrer" style={{ fontSize: ".65rem" }}>{d.resolveTx.slice(0, 8)}… ↗</a>}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ARBITRUM — Agent Credit Score / Reputation
+// ---------------------------------------------------------------------------
+type AgentScore = { agentId: string; score: number; tier: string; receiptCount: number; volumeUsd: number; breakdown: { base: number; vol: number; pen: number } };
+
+export function ArbAgentReputation({ workspace: _workspace }: { workspace: Workspace }) {
+  const wallet = useWallet();
+  const [agentId, setAgentId] = useState(wallet.address ?? "");
+  const [score, setScore] = useState<AgentScore | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const fetch = useCallback(async (id: string) => {
+    if (!id.trim()) return;
+    setLoading(true); setErr(null);
+    try {
+      const res = await window.fetch(`/api/agent-score/${encodeURIComponent(id.trim())}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as AgentScore;
+      setScore(data);
+    } catch (e) { setErr((e as { message?: string }).message ?? "Failed to load score"); } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { if (wallet.address) { setAgentId(wallet.address); fetch(wallet.address); } }, [wallet.address, fetch]);
+
+  const tierColor = (tier: string) => ({ Platinum: "#7c3aed", Gold: "#f59e0b", Silver: "#6b7280", Bronze: "#b45309" })[tier] ?? "#6b7280";
+  const scoreBarPct = score ? Math.min(100, (score.score / 1000) * 100) : 0;
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Agent Credit Score</h3><div className="sub">on-chain reputation from payment history · 0–1000 · Platinum/Gold/Silver/Bronze tiers</div></div></div>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => fetch(agentId)} disabled={loading}>{loading ? <Loader2 size={13} className="wallet-spin" /> : <RefreshCw size={13} />}</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, padding: "0 16px 12px", alignItems: "flex-end" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Agent wallet / ID</span>
+          <input value={agentId} onChange={(e) => setAgentId(e.currentTarget.value)} placeholder="0x… or agent_arb_treasury" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".78rem", fontFamily: "var(--mono)" }} />
+        </label>
+        <button className="btn btn-acc btn-sm" type="button" onClick={() => fetch(agentId)} disabled={loading} style={{ paddingBottom: 9 }}>Look up</button>
+      </div>
+      {err && <div style={{ margin: "0 16px 10px", color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
+      {score && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ background: "var(--bg-2)", borderRadius: 12, padding: "14px 16px", border: "1px solid var(--line-2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: "2rem", fontWeight: 900, color: "var(--ink)", lineHeight: 1 }}>{score.score}</div>
+                <div style={{ fontSize: ".7rem", color: "var(--muted)", marginTop: 2 }}>out of 1000</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: ".85rem", fontWeight: 800, color: tierColor(score.tier), background: tierColor(score.tier) + "18", padding: "4px 10px", borderRadius: 8 }}>{score.tier}</div>
+                <div style={{ fontSize: ".65rem", color: "var(--muted)", marginTop: 4 }}>{score.receiptCount} payments · ${score.volumeUsd.toFixed(2)} vol.</div>
+              </div>
+            </div>
+            <div style={{ background: "var(--line-2)", borderRadius: 6, height: 8, overflow: "hidden", marginBottom: 10 }}>
+              <div style={{ height: "100%", width: `${scoreBarPct}%`, background: tierColor(score.tier), borderRadius: 6, transition: "width .5s" }} />
+            </div>
+            <div style={{ display: "flex", gap: 12, fontSize: ".72rem" }}>
+              <div><span style={{ color: "var(--muted)" }}>Payment score: </span><strong>{score.breakdown.base}</strong></div>
+              <div><span style={{ color: "var(--muted)" }}>Volume score: </span><strong>{score.breakdown.vol}</strong></div>
+              {score.breakdown.pen > 0 && <div style={{ color: "var(--red)" }}>Penalties: −{score.breakdown.pen}</div>}
+            </div>
+            <div style={{ marginTop: 8, fontSize: ".65rem", color: "var(--muted)" }}>
+              Thresholds: Bronze &lt;400 · Silver 400+ · Gold 700+ · Platinum 850+
+            </div>
+          </div>
+        </div>
+      )}
+      {!score && !loading && !err && (
+        <div style={{ padding: "0 16px 14px", fontSize: ".78rem", color: "var(--muted)" }}>Connect wallet or enter an agent ID to see their credit score.</div>
       )}
     </div>
   );

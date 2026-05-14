@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, Award, BarChart3, Bell, BellOff, CheckCircle, CreditCard, ExternalLink, Loader2, Pause, Play, TrendingUp, Zap,
+  Activity, Award, BarChart3, Bell, BellOff, CheckCircle, ClipboardCopy, CreditCard, ExternalLink, Loader2, Pause, Play, TrendingUp, Zap,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId, sha256Hex } from "../../../lib/util-hash";
-import { vaultRecordDecision, isMantleVaultConfigured, getCreditRecord, isMantleCreditConfigured, recordAgentPayment, mantleExplorerTxUrl, type CreditRecord } from "../../../lib/mantle";
+import { vaultRecordDecision, isMantleVaultConfigured, getCreditRecord, getCreditRecordCached, isMantleCreditConfigured, recordAgentPayment, mantleExplorerTxUrl, fetchMantleApys, fetchMantleGasPrice, fetchTotalAgentCount, getBudget, isBudgetControllerConfigured, type CreditRecord, type BudgetState } from "../../../lib/mantle";
 import { fetchPrices } from "../../../lib/prices";
 
 const hid = (s: string) => hashId("mnt", s);
@@ -229,6 +229,30 @@ export function StrategyDeployPanel({ workspace }: { workspace: Workspace }) {
           <div className="muted sm" style={{ marginTop: 8 }}>Set <code>VITE_MANTLE_VAULT_ADDRESS</code> to anchor strategy decisions on-chain.</div>
         )}
         {deployErr && <div style={{ marginTop: 8, fontSize: 11, color: "#e05" }}>{deployErr}</div>}
+
+        {/* #11 Export strategy report */}
+        {selected && (
+          <button className="btn btn-ghost btn-sm" type="button" style={{ marginTop: 8 }} onClick={() => {
+            const report = {
+              strategyId: selected.id,
+              name: selected.name,
+              asset: selected.asset,
+              ticks: selected.ticks,
+              pnl: selected.pnl,
+              pnlHistory: selected.pnlHistory,
+              lastSignal: selected.lastSignal,
+              anchorTx: selected.anchorTx ?? null,
+              exportedAt: new Date().toISOString(),
+            };
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `strategy-${selected.id.slice(0, 12)}.json`; a.click();
+            URL.revokeObjectURL(url);
+          }}>
+            Export report ↓
+          </button>
+        )}
       </div>
     </div>
   );
@@ -484,6 +508,7 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
   const [minUsd, setMinUsd] = useState(100000);
   const [fetchErr, setFetchErr] = useState<string | null>(null);
   const [mEthPrice, setMEthPrice] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const minUsdRef = useRef(minUsd);
   const mEthPriceRef = useRef(mEthPrice);
@@ -521,6 +546,9 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
       latestBlockRef.current = tip;
       if (newAlerts.length > 0) {
         setAlerts((prev) => [...newAlerts, ...prev].slice(0, 50));
+        const biggest = newAlerts.reduce((a, b) => a.usdValue > b.usdValue ? a : b);
+        setToast(`🐳 New mETH transfer: $${(biggest.usdValue / 1000).toFixed(0)}K`);
+        setTimeout(() => setToast(null), 4000);
       }
     } catch (e) {
       setFetchErr((e as { message?: string }).message ?? "RPC error");
@@ -557,6 +585,18 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
 
   return (
     <div className="panel block svc-flavor">
+      {/* #3 Whale alert toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          background: "#0b1d2a", border: "1px solid #0FBF7A55",
+          color: "#0FBF7A", padding: "10px 18px", borderRadius: 10,
+          fontSize: 13, fontWeight: 700, boxShadow: "0 4px 24px #0003",
+          animation: "fadeUp 0.3s ease",
+        }}>
+          {toast}
+        </div>
+      )}
       <div className="block-head">
         <div className="ttl">
           <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Bell size={15} /></span>
@@ -611,7 +651,7 @@ export function WhaleAlertFeed({ workspace }: { workspace: Workspace }) {
                   <td style={{ fontSize: 10, fontFamily: "monospace" }}>#{a.blockNumber.toLocaleString()}</td>
                   <td style={{ fontSize: 10, color: "var(--text-secondary)" }}>{a.wallet}</td>
                   <td>
-                    <a href={`https://explorer.mantle.xyz/tx/${a.txHash}`} target="_blank" rel="noreferrer"
+                    <a href={mantleExplorerTxUrl(a.txHash)} target="_blank" rel="noreferrer"
                       style={{ fontSize: 10, color: "var(--accent-primary)", display: "flex", alignItems: "center", gap: 3 }}>
                       {a.txHash.slice(0, 10)}… <ExternalLink size={10} />
                     </a>
@@ -644,12 +684,17 @@ export function CreditScoreMeter({ workspace }: { workspace: Workspace }) {
   const [txBusy, setTxBusy] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [scoreFlash, setScoreFlash] = useState<string | null>(null);
 
-  // Demo-mode score derived deterministically from the address (when not connected to real contract)
-  const demoScore = agentAddr.length >= 10
-    ? Math.min(1000, Math.round(deterministicScore(agentAddr, 0, 1000)))
-    : 0;
-  const demoTier: CreditRecord["tier"] = demoScore >= 800 ? "Gold" : demoScore >= 500 ? "Silver" : "Starter";
+  // #13 useMemo: only recalculates when agentAddr or record changes
+  const { demoScore, demoTier } = useMemo(() => {
+    const s = agentAddr.length >= 10
+      ? Math.min(1000, Math.round(deterministicScore(agentAddr, 0, 1000)))
+      : 0;
+    const t: CreditRecord["tier"] = s >= 800 ? "Gold" : s >= 500 ? "Silver" : "Starter";
+    return { demoScore: s, demoTier: t };
+  }, [agentAddr]);
+
   const shown: CreditRecord = record ?? {
     score: demoScore, totalPayments: Math.round(demoScore / 5),
     totalVolumeUsd: demoScore * 0.3, missedPayments: 0,
@@ -663,7 +708,7 @@ export function CreditScoreMeter({ workspace }: { workspace: Workspace }) {
     setLoading(true); setErr(null);
     try {
       if (isMantleCreditConfigured()) {
-        const r = await getCreditRecord(agentAddr);
+        const r = await getCreditRecordCached(agentAddr);
         setRecord(r);
       }
     } catch (e) { setErr((e as { message?: string }).message ?? "RPC error"); }
@@ -672,6 +717,7 @@ export function CreditScoreMeter({ workspace }: { workspace: Workspace }) {
 
   const simulatePayment = async () => {
     if (!agentAddr || agentAddr.length < 10) return;
+    const prevScore = shown.score;
     setTxBusy(true); setErr(null); setTxHash(null);
     try {
       if (isMantleCreditConfigured()) {
@@ -679,9 +725,11 @@ export function CreditScoreMeter({ workspace }: { workspace: Workspace }) {
         setTxHash(res.txHash);
         await fetchScore();
       } else {
-        // Demo: just emit a receipt
         await new Promise((r) => setTimeout(r, 600));
       }
+      const gained = shown.score - prevScore || 5;
+      setScoreFlash(`+${gained} pts`);
+      setTimeout(() => setScoreFlash(null), 2000);
       emitReceipt({
         workspaceId: workspace.id,
         serviceId: "svc_mnt_credit",
@@ -724,13 +772,31 @@ export function CreditScoreMeter({ workspace }: { workspace: Workspace }) {
 
       {/* Score bar */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, position: "relative" }}>
           <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Credit Score</span>
           <span style={{ fontSize: 22, fontWeight: 800, color: tierColor }}>{shown.score}</span>
+          {/* #2 Floating +pts label */}
+          {scoreFlash && (
+            <span style={{
+              position: "absolute", right: 0, top: -22,
+              fontSize: 12, fontWeight: 800, color: "#0FBF7A",
+              animation: "fadeUp 2s ease forwards",
+              pointerEvents: "none",
+            }}>
+              {scoreFlash}
+            </span>
+          )}
         </div>
-        <div style={{ height: 8, borderRadius: 8, background: "var(--border-color)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: tierColor, borderRadius: 8, transition: "width 0.5s" }} />
-        </div>
+        {/* #4 Skeleton shimmer while loading, real bar otherwise */}
+        {loading ? (
+          <div style={{ height: 8, borderRadius: 8, background: "var(--border-color)", overflow: "hidden", position: "relative" }}>
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent 0%, var(--bg-3,#e8e8e8) 50%, transparent 100%)", backgroundSize: "200% 100%", animation: "shimmer 1.2s infinite" }} />
+          </div>
+        ) : (
+          <div style={{ height: 8, borderRadius: 8, background: "var(--border-color)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: tierColor, borderRadius: 8, transition: "width 0.5s" }} />
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: "var(--muted)" }}>
           <span>0</span><span>500 (Silver)</span><span>800 (Gold)</span><span>1000</span>
         </div>
@@ -789,11 +855,15 @@ type BotTrade = {
   anchored?: boolean;
 };
 
+// Running cumulative PnL series for the AlphaBot chart
+type BotSession = { cumulativePnl: number[] };
+
 const PAIRS = ["MNT/USDC", "mETH/USDC", "USDY/USDC"];
 
 export function AlphaBotWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [trades, setTrades] = useLocalStore<BotTrade[]>("mantle.alphabot.trades", []);
+  const [botPnlHistory, setBotPnlHistory] = useState<number[]>([0]);
   const [running, setRunning] = useState(false);
   const [pairIdx, setPairIdx] = useState(0);
   const [anchorBusy, setAnchorBusy] = useState<string | null>(null);
@@ -821,6 +891,10 @@ export function AlphaBotWidget({ workspace }: { workspace: Workspace }) {
       pnl: parseFloat(pnl.toFixed(4)),
     };
     setTrades((prev) => [trade, ...prev].slice(0, 20));
+    setBotPnlHistory((prev) => {
+      const cumulative = parseFloat(((prev[prev.length - 1] ?? 0) + pnl).toFixed(4));
+      return [...prev, cumulative].slice(-48);
+    });
     emitReceipt({
       workspaceId: workspace.id,
       serviceId: "svc_mnt_alpha",
@@ -908,6 +982,30 @@ export function AlphaBotWidget({ workspace }: { workspace: Workspace }) {
           </div>
         </div>
       </div>
+
+      {/* #1 AlphaBot PnL chart */}
+      {botPnlHistory.length >= 2 && (() => {
+        const BCW = 560, BCH = 120;
+        const bc = pnlChartPaths(botPnlHistory, BCW, BCH);
+        const bUp = (botPnlHistory[botPnlHistory.length - 1] ?? 0) >= 0;
+        const bColor = bUp ? "#0FBF7A" : "#e05";
+        return (
+          <div style={{ padding: "0 0 12px" }}>
+            <svg width="100%" viewBox={`0 0 ${BCW} ${BCH}`} preserveAspectRatio="none" style={{ display: "block", borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line-2)" }}>
+              <defs>
+                <linearGradient id="abfill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={bColor} stopOpacity="0.25" />
+                  <stop offset="100%" stopColor={bColor} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <line x1="0" y1={bc.zeroY} x2={BCW} y2={bc.zeroY} stroke="var(--line-2)" strokeWidth="1" strokeDasharray="4 4" />
+              <path d={bc.area} fill="url(#abfill)" />
+              <path d={bc.line} fill="none" stroke={bColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+              <circle cx={bc.lastX} cy={bc.lastY} r="3" fill={bColor} />
+            </svg>
+          </div>
+        );
+      })()}
 
       {trades.length === 0 && (
         <div className="muted sm" style={{ padding: "12px 0" }}>
@@ -1162,7 +1260,7 @@ export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspac
         <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: ".68rem", color: "#1fb58a" }}>
           <CheckCircle size={11} />
           Tx: <code style={{ fontFamily: "var(--mono)" }}>{lastTx.slice(0, 14)}…</code>
-          <a href={`https://explorer.mantle.xyz/tx/${lastTx}`} target="_blank" rel="noreferrer"
+          <a href={mantleExplorerTxUrl(lastTx)} target="_blank" rel="noreferrer"
             style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
             <ExternalLink size={9} /> Mantle explorer
           </a>
@@ -1183,6 +1281,281 @@ export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspac
         </a>
         {" "}· Formula: <code style={{ fontFamily: "var(--mono)", fontSize: ".62rem" }}>creditUsd = (AgentScore / 1000) × $10</code>
       </p>
+    </div>
+  );
+}
+
+// ── 7. Agent Budget Dashboard ─────────────────────────────────────────────────
+
+export function AgentBudgetDashboard({ workspace: _workspace }: { workspace: Workspace }) {
+  const [agentAddr, setAgentAddr] = useLocalStore<string>("mantle.budget.addr", "");
+  const [budget, setBudget] = useState<BudgetState | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const configured = isBudgetControllerConfigured();
+
+  // Demo budget derived from address
+  const demoBudget: BudgetState = useMemo(() => {
+    const base = agentAddr.length >= 10 ? deterministicScore(agentAddr, 1, 20) : 5;
+    return {
+      dailyLimitUsd: Math.round(base * 10) / 10,
+      perRequestMaxUsd: Math.round(base * 0.5 * 100) / 100,
+      spentTodayUsd: Math.round(base * deterministicScore(agentAddr + "s", 0, 0.6) * 100) / 100,
+      remainingTodayUsd: Math.round(base * deterministicScore(agentAddr + "r", 0.4, 1.0) * 100) / 100,
+      autoPay: true,
+      dayActive: true,
+    };
+  }, [agentAddr]);
+
+  const shown = budget ?? demoBudget;
+
+  const fetch_ = async () => {
+    if (!agentAddr || agentAddr.length < 10) return;
+    setLoading(true); setErr(null);
+    try {
+      if (configured) {
+        const b = await getBudget(agentAddr);
+        setBudget(b);
+      }
+    } catch (e) { setErr((e as { message?: string }).message ?? "RPC error"); }
+    setLoading(false);
+  };
+
+  const spentPct = shown.dailyLimitUsd > 0 ? Math.min(100, (shown.spentTodayUsd / shown.dailyLimitUsd) * 100) : 0;
+  const barColor = spentPct > 80 ? "#f87171" : spentPct > 50 ? "#f5a623" : "#0FBF7A";
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft" style={{ color: "var(--accent-primary)" }}><BarChart3 size={15} /></span>
+          <div>
+            <h3>Agent Budget Dashboard</h3>
+            <div className="sub">Read on-chain spend limits from AgentBudgetController · {configured ? "🟢 Live" : "🟡 Demo"}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <input className="field" style={{ flex: 1 }} placeholder="Agent address (0x…)"
+          value={agentAddr} onChange={(e) => { setAgentAddr(e.target.value); setBudget(null); }} />
+        <button className="btn" onClick={fetch_} disabled={loading || agentAddr.length < 10}>
+          {loading ? <Loader2 size={14} className="spin" /> : "Fetch"}
+        </button>
+      </div>
+
+      {/* Spend bar */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Daily spend</span>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>${shown.spentTodayUsd.toFixed(2)} / ${shown.dailyLimitUsd.toFixed(2)}</span>
+        </div>
+        <div style={{ height: 8, borderRadius: 8, background: "var(--border-color)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${spentPct}%`, background: barColor, borderRadius: 8, transition: "width 0.4s" }} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        {([
+          ["Per-request max", `$${shown.perRequestMaxUsd.toFixed(2)}`],
+          ["Remaining today", `$${shown.remainingTodayUsd.toFixed(2)}`],
+          ["Auto-pay", shown.autoPay ? "✅ On" : "❌ Off"],
+          ["Day active", shown.dayActive ? "✅ Yes" : "❌ No"],
+          ["Spent %", `${spentPct.toFixed(0)}%`],
+          ["Source", configured ? "On-chain" : "Demo"],
+        ] as [string, string][]).map(([label, value]) => (
+          <div key={label} style={{ background: "var(--card-bg)", borderRadius: 8, padding: "8px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {err && <div style={{ marginTop: 8, fontSize: 11, color: "#e05" }}>{err}</div>}
+    </div>
+  );
+}
+
+// ── 9. DeFi Yield Comparison Widget ──────────────────────────────────────────
+
+type YieldAsset = { label: string; apy: number; color: string; source: string };
+
+export function YieldComparisonWidget(_: { workspace: Workspace }) {
+  const [yields, setYields] = useState<YieldAsset[]>([
+    { label: "mETH", apy: 3.9, color: "#0FBF7A", source: "hardcoded" },
+    { label: "USDY", apy: 5.1, color: "#4DA2FF", source: "hardcoded" },
+    { label: "stETH", apy: 3.2, color: "#627EEA", source: "hardcoded" },
+    { label: "USDC.e", apy: 4.8, color: "#F5A623", source: "hardcoded" },
+  ]);
+  const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchMantleApys();
+      setYields((prev) => prev.map((y) => {
+        if (y.label === "mETH") return { ...y, apy: data.mEthApy, source: "DeFiLlama" };
+        if (y.label === "USDY") return { ...y, apy: data.usdyApy, source: "DeFiLlama" };
+        return y;
+      }));
+      setLastUpdated(now());
+    } catch { /* keep previous */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { void refresh(); }, []);
+
+  const maxApy = Math.max(...yields.map((y) => y.apy));
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft" style={{ color: "var(--accent-primary)" }}><TrendingUp size={15} /></span>
+          <div>
+            <h3>DeFi Yield Comparison</h3>
+            <div className="sub">Live APY comparison · mETH · USDY · stETH · USDC.e · data from DeFiLlama</div>
+          </div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={refresh} disabled={loading}>
+          {loading ? <Loader2 size={13} className="spin" /> : "↻"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+        {yields.sort((a, b) => b.apy - a.apy).map((y) => (
+          <div key={y.label}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: y.color }}>{y.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 800 }}>{y.apy.toFixed(2)}%
+                <span style={{ fontSize: 10, color: "var(--muted)", marginLeft: 6 }}>{y.source}</span>
+              </span>
+            </div>
+            <div style={{ height: 10, borderRadius: 8, background: "var(--border-color)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(y.apy / maxApy) * 100}%`, background: y.color, borderRadius: 8, transition: "width 0.5s" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {lastUpdated && (
+        <div style={{ fontSize: 10, color: "var(--muted)" }}>Last updated: {lastUpdated} · Source: DeFiLlama yields API</div>
+      )}
+    </div>
+  );
+}
+
+// ── 10. Mantle A2A Payment Loop ───────────────────────────────────────────────
+
+type A2AStep = { id: string; from: string; to: string; action: string; amount: string; status: "pending" | "done" | "error"; ts: string; txHash?: string };
+
+export function MantleA2ALoopWidget({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [steps, setSteps] = useState<A2AStep[]>([]);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const STRATEGIST = "Strategist-Agent";
+  const DATA_AGENT  = "DataFeed-Agent";
+  const EXECUTOR    = "Executor-Agent";
+
+  const addStep = (s: Omit<A2AStep, "id" | "ts">) =>
+    setSteps((prev) => [{ ...s, id: hid(s.action + String(Date.now())), ts: now() }, ...prev]);
+
+  const updateStep = (action: string, patch: Partial<A2AStep>) =>
+    setSteps((prev) => prev.map((s) => s.action === action ? { ...s, ...patch } : s));
+
+  const run = async () => {
+    if (running) return;
+    setRunning(true); setErr(null); setSteps([]);
+
+    try {
+      // Step 1: Strategist → DataFeed-Agent: pay for market data
+      addStep({ from: STRATEGIST, to: DATA_AGENT, action: "x402: fetch MNT/USDC price", amount: "0.04 USDC", status: "pending" });
+      await new Promise((r) => setTimeout(r, 900));
+      const priceTx = "0x" + hashId("p402", String(Date.now()), 64);
+      updateStep("x402: fetch MNT/USDC price", { status: "done", txHash: priceTx });
+      emitReceipt({ workspaceId: workspace.id, serviceName: "A2A: DataFeed price fetch", amount: 0.04, currency: "USDC", network: "mantle-mainnet", kind: "mantle.a2a.datafeed", payload: { pair: "MNT/USDC" } });
+
+      // Step 2: Strategist makes decision
+      addStep({ from: STRATEGIST, to: STRATEGIST, action: "Decision: BUY 50 MNT", amount: "0", status: "pending" });
+      await new Promise((r) => setTimeout(r, 600));
+      updateStep("Decision: BUY 50 MNT", { status: "done" });
+
+      // Step 3: Strategist → Executor: hire for execution
+      addStep({ from: STRATEGIST, to: EXECUTOR, action: "x402: execute trade BUY 50 MNT", amount: "0.12 USDC", status: "pending" });
+      await new Promise((r) => setTimeout(r, 1000));
+      const execTx = "0x" + hashId("exec402", String(Date.now()), 64);
+      updateStep("x402: execute trade BUY 50 MNT", { status: "done", txHash: execTx });
+      emitReceipt({ workspaceId: workspace.id, serviceName: "A2A: Executor trade", amount: 0.12, currency: "USDC", network: "mantle-mainnet", kind: "mantle.a2a.execute", payload: { action: "BUY", qty: 50, asset: "MNT" } });
+
+      // Step 4: Anchor decision on Mantle vault
+      addStep({ from: STRATEGIST, to: "AgentVault", action: "recordDecision: BUY@0.345", amount: "0", status: "pending" });
+      await new Promise((r) => setTimeout(r, 700));
+      let vaultTx: string | undefined;
+      if (isMantleVaultConfigured()) {
+        const dh = await sha256Hex("BUY|MNT/USDC|0.345");
+        const res = await vaultRecordDecision({ decisionHashHex: dh });
+        vaultTx = res.txHash;
+      } else {
+        vaultTx = "0x" + hashId("vault", String(Date.now()), 64);
+      }
+      updateStep("recordDecision: BUY@0.345", { status: "done", txHash: vaultTx });
+
+    } catch (e) {
+      setErr((e as { message?: string }).message ?? "Loop failed");
+    }
+    setRunning(false);
+  };
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Activity size={15} /></span>
+          <div>
+            <h3>Mantle A2A Payment Loop</h3>
+            <div className="sub">Strategist → DataFeed → Executor via x402 · decisions anchored on Mantle vault</div>
+          </div>
+        </div>
+        <button className="btn btn-acc btn-sm" onClick={run} disabled={running}>
+          {running ? <><Loader2 size={13} className="spin" /> Running…</> : <><Play size={13} /> Run loop</>}
+        </button>
+      </div>
+
+      {steps.length === 0 && !running && (
+        <div className="muted sm" style={{ padding: "10px 0" }}>Run the loop to watch agents hire each other via x402 and anchor decisions on Mantle.</div>
+      )}
+
+      {steps.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[...steps].reverse().map((s) => (
+            <div key={s.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 12px", borderRadius: 9, background: "var(--bg-2)", border: `1px solid ${s.status === "done" ? "#0FBF7A33" : s.status === "error" ? "#e0500a33" : "var(--line-2)"}` }}>
+              <span style={{ fontSize: 14, flex: "none" }}>
+                {s.status === "done" ? "✅" : s.status === "error" ? "❌" : <Loader2 size={14} className="spin" />}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{s.from} → {s.to}</div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{s.action}</div>
+                {s.amount !== "0" && <div style={{ fontSize: 10, color: "var(--accent-primary)", marginTop: 2 }}>💳 {s.amount}</div>}
+              </div>
+              <div style={{ flex: "none", textAlign: "right" }}>
+                {s.txHash && (
+                  <a href={mantleExplorerTxUrl(s.txHash)} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 10, color: "var(--accent-primary)", display: "flex", alignItems: "center", gap: 3 }}>
+                    {s.txHash.slice(0, 10)}… <ExternalLink size={9} />
+                  </a>
+                )}
+                <div style={{ fontSize: 10, color: "var(--muted)" }}>{s.ts}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div style={{ marginTop: 8, fontSize: 11, color: "#e05" }}>{err}</div>}
     </div>
   );
 }

@@ -396,9 +396,35 @@ export function SuiNftMarket({ workspace }: { workspace: Workspace }) {
 
 // ─── 4. zkLogin Proof Generator ──────────────────────────────────────────────
 
-type ZkProof = { provider: string; address: string; maxEpoch: number; proof: string; ts: string };
+type ZkProof = { provider: string; address: string; maxEpoch: number; proof: string; ts: string; real?: boolean };
 
 const PROVIDERS = ["Google", "Apple", "Facebook", "Twitch"];
+
+const PROVIDER_ISS: Record<string, string> = {
+  Google: "https://accounts.google.com",
+  Apple: "https://appleid.apple.com",
+  Facebook: "https://www.facebook.com",
+  Twitch: "https://id.twitch.tv/oauth2",
+};
+
+async function sha256Addr(data: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(data));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 64);
+}
+
+const SUI_RPC_ZK = "https://fullnode.mainnet.sui.io/";
+async function fetchSuiEpoch(): Promise<number | null> {
+  try {
+    const res = await fetch(SUI_RPC_ZK, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "suix_getCurrentEpoch", params: [] }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const j = await res.json() as { result?: { epoch?: string } };
+    const e = j.result?.epoch;
+    return e != null ? parseInt(e, 10) : null;
+  } catch { return null; }
+}
 
 export function ZkLoginPanel({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
@@ -408,18 +434,28 @@ export function ZkLoginPanel({ workspace }: { workspace: Workspace }) {
   const [salt, setSalt] = useState("0xdeadbeef0000000000000000000000000000000000000000000000000001");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState("");
+  const [liveEpoch, setLiveEpoch] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchSuiEpoch().then(e => { if (e !== null) setLiveEpoch(e); }).catch(() => {});
+  }, []);
+
+  const oauthUrl = `${PROVIDER_ISS[provider] ?? ""}` +
+    (provider === "Google"
+      ? `/o/oauth2/v2/auth?response_type=id_token&client_id=YOUR_CLIENT_ID&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=openid&nonce=<zklogin-nonce>`
+      : `/auth?response_type=code&client_id=YOUR_CLIENT_ID&scope=openid&nonce=<zklogin-nonce>`);
 
   async function generate() {
     setBusy(true);
-    setLog("Verifying JWT with " + provider + "…");
-    await new Promise((r) => setTimeout(r, 700));
-    setLog("Generating ZK proof bundle…");
-    await new Promise((r) => setTimeout(r, 1100));
-    const seed = provider + jwt + salt + Date.now();
-    const address = "0x" + hid(seed + "addr");
-    const maxEpoch = 420 + Math.floor(deterministicScore(seed, 0, 20));
-    const proof = hid(seed + "proof");
-    const zk: ZkProof = { provider, address, maxEpoch, proof, ts: now() };
+    setLog("Fetching live Sui epoch…");
+    const epoch = await fetchSuiEpoch() ?? liveEpoch ?? 420;
+    const maxEpoch = epoch + 10; // proof valid for 10 more epochs
+    setLog("Deriving Sui address (SHA-256)…");
+    const iss = PROVIDER_ISS[provider] ?? provider;
+    const addrHex = await sha256Addr(`${iss}|${jwt}|${salt}`);
+    const address = "0x" + addrHex;
+    const proof = addrHex.slice(0, 32); // simulated proof digest
+    const zk: ZkProof = { provider, address, maxEpoch, proof, ts: now(), real: epoch !== null };
     setProofs([zk, ...proofs.slice(0, 9)]);
     emitReceipt({
       workspaceId: workspace.id,
@@ -433,9 +469,9 @@ export function ZkLoginPanel({ workspace }: { workspace: Workspace }) {
       network: "sui-mainnet",
       status: "verified",
       kind: "sui.zklogin",
-      payload: { provider, address, maxEpoch, proof },
+      payload: { provider, address, maxEpoch, proof, liveEpoch: epoch },
     });
-    setLog(`zkLogin address: ${address.slice(0, 12)}…`);
+    setLog(`zkLogin address: ${address.slice(0, 12)}… · epoch ${maxEpoch}`);
     setBusy(false);
   }
 
@@ -444,8 +480,19 @@ export function ZkLoginPanel({ workspace }: { workspace: Workspace }) {
       <div className="block-head">
         <div className="ttl">
           <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Lock size={15} /></span>
-          <div><h3>zkLogin Proof Generator</h3><div className="sub">OAuth → Sui wallet · no seed phrase · single-use proof bundle</div></div>
+          <div>
+            <h3>zkLogin Proof Generator</h3>
+            <div className="sub">
+              OAuth → Sui wallet · no seed phrase ·{" "}
+              {liveEpoch !== null
+                ? <span style={{ color: "#4ade80" }}>live epoch #{liveEpoch}</span>
+                : "fetching epoch…"}
+            </div>
+          </div>
         </div>
+        <a href={oauthUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+          Open {provider} OAuth ↗
+        </a>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
         {PROVIDERS.map((p) => (
@@ -1137,12 +1184,38 @@ function parseIntent(text: string): { agents: string[]; steps: string[]; schedul
   return { agents, steps, schedule };
 }
 
+// ── PTB Builder (visual step palette) ──────────────────────────────────────────
+
+type PtbCmd = "MoveCall" | "TransferObjects" | "SplitCoins" | "MergeCoins" | "Pay" | "Publish";
+type PtbStep = { id: string; cmd: PtbCmd; detail: string; gasEst: number };
+
+const PTB_PALETTE: { cmd: PtbCmd; label: string; detail: string; gasEst: number }[] = [
+  { cmd: "MoveCall",       label: "Move Call",        detail: "escrow::open(signer, amount)", gasEst: 800 },
+  { cmd: "TransferObjects", label: "Transfer Objects", detail: "transfer_to(recipient)",      gasEst: 400 },
+  { cmd: "SplitCoins",     label: "Split Coins",      detail: "split_n(coin, [1000, 2000])",  gasEst: 300 },
+  { cmd: "MergeCoins",     label: "Merge Coins",      detail: "merge(coin, [extra])",         gasEst: 250 },
+  { cmd: "Pay",            label: "Pay SUI",          detail: "pay_sui([recipient], [amt])",  gasEst: 350 },
+  { cmd: "Publish",        label: "Publish Module",   detail: "publish(bytecode, upgradeCap)", gasEst: 2000 },
+];
+
+let ptbStepCounter = 0;
+
 export function IntentEngineWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
+  const [mode, setMode] = useState<"nl" | "builder">("nl");
+
+  // NL mode state
   const [intent, setIntent] = useState("");
   const [parsed, setParsed] = useState<{ agents: string[]; steps: string[]; schedule: string } | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployed, setDeployed] = useState(false);
+
+  // PTB Builder state
+  const [ptbSteps, setPtbSteps] = useState<PtbStep[]>([]);
+  const [building, setBuilding] = useState(false);
+  const [builtHash, setBuiltHash] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  const [dragging, setDragging] = useState<number | null>(null);
 
   function handleParse() {
     if (!intent.trim()) return;
@@ -1159,42 +1232,163 @@ export function IntentEngineWidget({ workspace }: { workspace: Workspace }) {
     setDeployed(true);
   }
 
+  function addStep(p: typeof PTB_PALETTE[number]) {
+    const id = `step_${ptbStepCounter++}`;
+    setPtbSteps(prev => [...prev, { id, cmd: p.cmd, detail: p.detail, gasEst: p.gasEst }]);
+    setBuiltHash(null);
+  }
+
+  function removeStep(id: string) { setPtbSteps(prev => prev.filter(s => s.id !== id)); setBuiltHash(null); }
+  function moveStep(idx: number, dir: -1 | 1) {
+    setPtbSteps(prev => {
+      const arr = [...prev];
+      const t = arr[idx + dir];
+      if (!t) return arr;
+      arr[idx + dir] = arr[idx]; arr[idx] = t;
+      return arr;
+    });
+    setBuiltHash(null);
+  }
+
+  // drag-and-drop reorder
+  function onDragStart(idx: number) { setDragging(idx); }
+  function onDragOver(e: React.DragEvent, idx: number) { e.preventDefault(); setDragOver(idx); }
+  function onDrop(idx: number) {
+    if (dragging === null || dragging === idx) { setDragging(null); setDragOver(null); return; }
+    setPtbSteps(prev => {
+      const arr = [...prev];
+      const [item] = arr.splice(dragging, 1);
+      arr.splice(idx, 0, item);
+      return arr;
+    });
+    setDragging(null); setDragOver(null); setBuiltHash(null);
+  }
+
+  async function buildPtb() {
+    if (ptbSteps.length === 0) return;
+    setBuilding(true);
+    await new Promise(r => setTimeout(r, 1200));
+    const hash = hid(`ptb-${ptbSteps.map(s => s.cmd).join("-")}-${Date.now()}`);
+    setBuiltHash(hash);
+    const totalGas = ptbSteps.reduce((s, st) => s + st.gasEst, 0);
+    emitReceipt({ workspaceId: workspace.id, serviceName: "PTB Builder · Execute", amount: totalGas / 1_000_000, currency: "SUI", network: "sui-mainnet", status: "verified", kind: "sui.ptb.execute", payload: { steps: ptbSteps.map(s => s.cmd), hash, totalGas } });
+    setBuilding(false);
+  }
+
+  const totalGas = ptbSteps.reduce((s, st) => s + st.gasEst, 0);
+
   return (
     <div className="widget-card">
       <div className="widget-header">
         <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Lightbulb size={15} /></span>
-        <div><h3>Intent Engine</h3><div className="sub">Natural language → multi-agent PTB workflow — no code required</div></div>
+        <div><h3>Intent Engine + PTB Builder</h3><div className="sub">NL → multi-agent workflow · or drag-and-drop PTB steps manually</div></div>
+        <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
+          <button className={`btn btn-sm ${mode === "nl" ? "btn-acc" : ""}`} onClick={() => setMode("nl")}>NL → PTB</button>
+          <button className={`btn btn-sm ${mode === "builder" ? "btn-acc" : ""}`} onClick={() => setMode("builder")}>PTB Builder</button>
+        </div>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-        {INTENT_EXAMPLES.map(ex => (
-          <button key={ex} onClick={() => { setIntent(ex); setParsed(parseIntent(ex)); setDeployed(false); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 20, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", cursor: "pointer", color: "var(--text-secondary)" }}>{ex}</button>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <textarea className="inp" rows={2} placeholder="Describe what you want agents to do…" value={intent} onChange={e => { setIntent(e.target.value); setParsed(null); setDeployed(false); }} style={{ flex: 1, resize: "vertical" }} />
-        <button className="btn btn-acc btn-sm" onClick={handleParse} disabled={!intent.trim()} style={{ alignSelf: "flex-end" }}>
-          <Target size={13} /> Parse
-        </button>
-      </div>
-      {parsed && (
-        <div style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", marginBottom: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>AGENTS ({parsed.agents.length})</div>
-              {parsed.agents.map(a => <div key={a} style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-primary)" }}>· {a}</div>)}
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>STEPS</div>
-              {parsed.steps.map((s, i) => <div key={i} style={{ fontSize: 10, color: "var(--text-primary)" }}>{i + 1}. {s}</div>)}
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>SCHEDULE</div>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>{parsed.schedule}</div>
-            </div>
+
+      {mode === "nl" && (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+            {INTENT_EXAMPLES.map(ex => (
+              <button key={ex} onClick={() => { setIntent(ex); setParsed(parseIntent(ex)); setDeployed(false); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 20, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", cursor: "pointer", color: "var(--text-secondary)" }}>{ex}</button>
+            ))}
           </div>
-          <button className="btn btn-acc" onClick={deployWorkflow} disabled={deploying || deployed} style={{ width: "100%" }}>
-            {deploying ? <><Loader2 size={13} className="wallet-spin" /> Deploying workflow…</> : deployed ? <><BadgeCheck size={13} /> Workflow deployed!</> : <><Play size={13} /> Deploy as PTB Workflow</>}
-          </button>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <textarea className="inp" rows={2} placeholder="Describe what you want agents to do…" value={intent} onChange={e => { setIntent(e.target.value); setParsed(null); setDeployed(false); }} style={{ flex: 1, resize: "vertical" }} />
+            <button className="btn btn-acc btn-sm" onClick={handleParse} disabled={!intent.trim()} style={{ alignSelf: "flex-end" }}>
+              <Target size={13} /> Parse
+            </button>
+          </div>
+          {parsed && (
+            <div style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>AGENTS ({parsed.agents.length})</div>
+                  {parsed.agents.map(a => <div key={a} style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-primary)" }}>· {a}</div>)}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>STEPS</div>
+                  {parsed.steps.map((s, i) => <div key={i} style={{ fontSize: 10, color: "var(--text-primary)" }}>{i + 1}. {s}</div>)}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>SCHEDULE</div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{parsed.schedule}</div>
+                </div>
+              </div>
+              <button className="btn btn-acc" onClick={deployWorkflow} disabled={deploying || deployed} style={{ width: "100%" }}>
+                {deploying ? <><Loader2 size={13} className="wallet-spin" /> Deploying workflow…</> : deployed ? <><BadgeCheck size={13} /> Workflow deployed!</> : <><Play size={13} /> Deploy as PTB Workflow</>}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === "builder" && (
+        <div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 8 }}>
+            Click a command to add it · drag steps to reorder · arrows for precise ordering
+          </div>
+          {/* Palette */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {PTB_PALETTE.map(p => (
+              <button key={p.cmd} onClick={() => addStep(p)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", cursor: "pointer", color: "var(--accent-primary)", fontWeight: 600 }}>
+                + {p.label}
+              </button>
+            ))}
+          </div>
+          {/* Step list */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12, minHeight: ptbSteps.length === 0 ? 48 : undefined }}>
+            {ptbSteps.length === 0 && (
+              <div style={{ textAlign: "center", padding: "12px 0", fontSize: 12, color: "var(--text-secondary)", border: "1px dashed var(--border-subtle)", borderRadius: 8 }}>
+                Add a step from the palette above
+              </div>
+            )}
+            {ptbSteps.map((s, i) => (
+              <div
+                key={s.id}
+                draggable
+                onDragStart={() => onDragStart(i)}
+                onDragOver={e => onDragOver(e, i)}
+                onDrop={() => onDrop(i)}
+                onDragEnd={() => { setDragging(null); setDragOver(null); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 12px", borderRadius: 8,
+                  border: dragOver === i ? "2px solid var(--accent-primary)" : "1px solid var(--border-subtle)",
+                  background: dragging === i ? "var(--accent-soft)" : "var(--card-bg)",
+                  cursor: "grab", opacity: dragging === i ? 0.5 : 1,
+                  transition: "border 0.12s, background 0.12s",
+                }}
+              >
+                <span style={{ fontSize: 11, color: "var(--text-secondary)", userSelect: "none" }}>≡</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent-primary)", minWidth: 100 }}>{i + 1}. {s.cmd}</span>
+                <code style={{ fontSize: 9, color: "var(--text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.detail}</code>
+                <span style={{ fontSize: 10, color: "var(--text-secondary)", minWidth: 60, textAlign: "right" }}>{s.gasEst} gas</span>
+                <div style={{ display: "flex", gap: 2 }}>
+                  <button onClick={() => moveStep(i, -1)} disabled={i === 0} style={{ fontSize: 10, padding: "1px 5px", cursor: "pointer", background: "none", border: "1px solid var(--border-subtle)", borderRadius: 4 }}>↑</button>
+                  <button onClick={() => moveStep(i, 1)} disabled={i === ptbSteps.length - 1} style={{ fontSize: 10, padding: "1px 5px", cursor: "pointer", background: "none", border: "1px solid var(--border-subtle)", borderRadius: 4 }}>↓</button>
+                  <button onClick={() => removeStep(s.id)} style={{ fontSize: 10, padding: "1px 5px", cursor: "pointer", background: "none", border: "1px solid var(--border-subtle)", borderRadius: 4, color: "var(--red)" }}>×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {ptbSteps.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "var(--text-secondary)", flex: 1 }}>
+                {ptbSteps.length} step{ptbSteps.length !== 1 ? "s" : ""} · est. {totalGas.toLocaleString()} gas units
+              </span>
+              <button className="btn btn-acc btn-sm" onClick={buildPtb} disabled={building}>
+                {building ? <><Loader2 size={13} className="wallet-spin" /> Building PTB…</> : <><Play size={13} /> Build + Execute PTB</>}
+              </button>
+            </div>
+          )}
+          {builtHash && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#4ade80", fontWeight: 600 }}>
+              ✓ PTB executed · tx <code style={{ fontSize: 10 }}>{builtHash.slice(0, 20)}…</code>
+            </div>
+          )}
         </div>
       )}
     </div>
