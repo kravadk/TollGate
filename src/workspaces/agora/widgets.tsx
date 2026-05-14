@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { TrendingUp, CircleDollarSign, Zap } from "lucide-react";
+import { TrendingUp, CircleDollarSign, Zap, ShieldCheck } from "lucide-react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Robot, Code, Receipt as RIco } from "../../icons402";
+import { getAgoraConfig } from "../../lib/agora";
 import { AgoraTradingWidget } from "../../components/widgets/agora/AgoraTradingWidget";
 import {
   AgoraPortfolioWidget,
@@ -147,11 +148,48 @@ export function renderAgentExtra(_workspace: Workspace): ReactNode | null {
   return null;
 }
 
-// ── Overview extra (none for agora) ───────────────────────────────────────────
+// ── Arc Deployed Contracts panel ───────────────────────────────────────────────
+function ArcContractsPanel() {
+  const cfg = getAgoraConfig();
+  const CONTRACTS = [
+    { name: "ArcMindRegistry.sol", addr: cfg.registryAddress, note: "on-chain agent & service registry" },
+    { name: "CopyTradeEscrow.sol", addr: cfg.escrowAddress, note: "ERC-8183 copy-trade escrow" },
+  ];
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden", marginTop: 14 }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
+        <span style={{ fontSize: ".62rem", color: "#1652F0", fontWeight: 700, background: "#1652F018", padding: "2px 7px", borderRadius: 5 }}>Arc L1 testnet · chainId 5042002</span>
+      </div>
+      {CONTRACTS.map((c) => (
+        <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
+          <ShieldCheck size={13} style={{ color: c.addr ? "#1652F0" : "var(--muted)", flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.name}</div>
+            <div style={{ fontSize: ".62rem", color: "var(--muted)" }}>{c.note}</div>
+          </div>
+          {c.addr ? (
+            <a href={`${cfg.explorerBase}/address/${c.addr}`} target="_blank" rel="noreferrer"
+              style={{ fontSize: ".6rem", fontWeight: 700, color: "#1652F0", fontFamily: "monospace", textDecoration: "none", whiteSpace: "nowrap" }}>
+              {c.addr.slice(0, 10)}…↗
+            </a>
+          ) : (
+            <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>not configured</span>
+          )}
+        </div>
+      ))}
+      <div style={{ padding: "8px 16px", fontSize: ".62rem", color: "var(--muted)" }}>
+        Arc L1 mainnet not yet live · both modes use testnet chain
+      </div>
+    </div>
+  );
+}
+
+// ── Overview extra ─────────────────────────────────────────────────────────────
 export function renderOverviewExtra(
   _workspace: Workspace,
   _onGoTab: (t: string) => boolean,
   _onGoReceipts: () => void,
 ): ReactNode | null {
-  return null;
+  return <ArcContractsPanel />;
 }
