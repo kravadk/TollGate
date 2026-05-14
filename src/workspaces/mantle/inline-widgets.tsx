@@ -7,6 +7,8 @@ import { deterministicScore, hashId } from "../../lib/util-hash";
 import { fmtUsd } from "../../lib/ws-helpers";
 import type { Workspace } from "../../types";
 import { Bolt, Check, Plus, Robot } from "../../icons402";
+import { fetchMantleGasPrice } from "../../lib/mantle";
+import { fetchPrices } from "../../lib/prices";
 
 // ---------------------------------------------------------------------------
 // MANTLE — Earn Calculator (mETH / USDY tab)
@@ -203,7 +205,8 @@ export function MantlePortfolioRebalancer({ workspace }: { workspace: Workspace 
   const { emitReceipt } = useAppState();
   const [targetMeth, setTargetMeth] = useState(60);
   const targetUsdy = 100 - targetMeth;
-  const currentMeth = 72; const currentUsdy = 28;
+  const [currentMeth, setCurrentMeth] = useLocalStore<number>("mantle.rebalancer.currentMeth", 72);
+  const currentUsdy = 100 - currentMeth;
   const drift = Math.abs(currentMeth - targetMeth);
   const driftCol = drift < 5 ? "var(--green)" : drift < 15 ? "#f59e0b" : "var(--red)";
   const swapDir = currentMeth > targetMeth ? "mETH → USDY" : "USDY → mETH";
@@ -213,6 +216,7 @@ export function MantlePortfolioRebalancer({ workspace }: { workspace: Workspace 
 
   const rebalance = () => {
     emitReceipt({ workspaceId: workspace.id, serviceName: `Mantle Rebalancer · ${swapDir}`, amount: swapAmt, currency: "USDC", network: workspace.networks[0] ?? "mantle-sepolia", kind: "mantle.rebalance", payload: { from: currentMeth, to: targetMeth, swapAmt, swapDir } });
+    setCurrentMeth(targetMeth);
     setDone(true); setTimeout(() => setDone(false), 2000);
   };
 
@@ -281,15 +285,20 @@ export function MantleGasOptimizer({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [alertThreshold, setAlertThreshold] = useState("0.05");
+  const [realGwei, setRealGwei] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchMantleGasPrice().then((s) => { const n = parseFloat(s); if (n > 0) setRealGwei(n); }).catch(() => {});
+  }, []);
 
   const hours = Array.from({ length: 24 }, (_, h) => ({ h, gwei: +(deterministicScore(`gas_mantle_h${h}`, 0.01, 0.18)).toFixed(3) }));
   const minGas = Math.min(...hours.map((x) => x.gwei));
   const maxGas = Math.max(...hours.map((x) => x.gwei));
   const cheapHour = hours.reduce((a, b) => a.gwei < b.gwei ? a : b);
   const currentHour = new Date().getHours();
-  const currentGwei = hours[currentHour]?.gwei ?? 0.05;
+  const currentGwei = realGwei ?? hours[currentHour]?.gwei ?? 0.05;
   const ethL1Gwei = 18.4;
-  const savingPct = Math.round((1 - currentGwei / (ethL1Gwei / 100)) * 100);
+  const savingPct = Math.round((1 - currentGwei / ethL1Gwei) * 100);
 
   const setAlert = () => {
     emitReceipt({ workspaceId: workspace.id, serviceName: "Mantle Gas Alert · Set", amount: 0, currency: "USDC", network: workspace.networks[0] ?? "mantle-sepolia", kind: "mantle.gas.alert", payload: { threshold: parseFloat(alertThreshold) } });
@@ -623,11 +632,15 @@ export function MantleEconomyLoop({ workspace }: { workspace: Workspace }) {
   const { emitReceipt, receipts } = useAppState();
   const [eco, setEco] = useLocalStore<MantleEconomy>("mantle.economy", { deployedUsd: 0, methAcquired: 0, deploys: 0 });
   const [fraction, setFraction] = useState("0.5");
+  const [liveEthPrice, setLiveEthPrice] = useState(METH_PRICE);
+  useEffect(() => {
+    fetchPrices().then((p) => { if (p["ETH"] && p["ETH"] > 0) setLiveEthPrice(p["ETH"]); }).catch(() => {});
+  }, []);
   const wsReceipts = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id), [receipts, workspace.id]);
   const revenue = useMemo(() => wsReceipts.filter((r) => r.kind !== "mantle.deploy").reduce((s, r) => s + r.amount, 0), [wsReceipts]);
   const threshold = 0.05;
   const surplus = Math.max(0, revenue - eco.deployedUsd - threshold);
-  const methNow = METH_PRICE * (1 + 0.012); // +1.2% mark
+  const methNow = liveEthPrice * (1 + 0.012); // +1.2% mark
   const lpCurrent = eco.methAcquired * methNow;
   const yieldUsd = lpCurrent - eco.deployedUsd;
   const aiSpend = useMemo(() => wsReceipts.filter((r) => r.kind === "mantle.backtest" || r.kind === "mantle.alpha.pull" || (r.kind ?? "").startsWith("mantle.rwa")).reduce((s, r) => s + r.amount, 0), [wsReceipts]);
@@ -640,7 +653,7 @@ export function MantleEconomyLoop({ workspace }: { workspace: Workspace }) {
     const fr = Math.min(1, Math.max(0.05, parseFloat(fraction) || 0.5));
     const amt = Number((surplus * fr).toFixed(4));
     if (amt <= 0) return;
-    const methGot = amt / METH_PRICE;
+    const methGot = amt / liveEthPrice;
     setEco((e) => ({ deployedUsd: Number((e.deployedUsd + amt).toFixed(4)), methAcquired: Number((e.methAcquired + methGot).toFixed(8)), deploys: e.deploys + 1 }));
     emitReceipt({ workspaceId: workspace.id, serviceName: "Agent Economy · Deploy surplus → mETH", amount: amt, currency: "USDC", network: workspace.networks[0] ?? "mantle-sepolia", kind: "mantle.deploy", payload: { deployedUsd: amt, methAcquired: methGot, fraction: fr, txHash: "0x" + hashId("tx", "deploy" + Date.now(), 12) } });
   };

@@ -1259,11 +1259,8 @@ export function AgentCreditLine({ workspace: _workspace }: { workspace: Workspac
       {lastTx && (
         <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: ".68rem", color: "#1fb58a" }}>
           <CheckCircle size={11} />
-          Tx: <code style={{ fontFamily: "var(--mono)" }}>{lastTx.slice(0, 14)}…</code>
-          <a href={mantleExplorerTxUrl(lastTx)} target="_blank" rel="noreferrer"
-            style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <ExternalLink size={9} /> Mantle explorer
-          </a>
+          Demo tx: <code style={{ fontFamily: "var(--mono)" }}>{lastTx.slice(0, 14)}…</code>
+          <span style={{ color: "var(--muted)", fontSize: ".62rem" }}>(simulated — set VITE_MANTLE_CREDIT_ADDRESS for on-chain lending)</span>
         </div>
       )}
 
