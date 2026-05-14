@@ -32,6 +32,9 @@ import {
   OgComputeLeaderboard,
   OgJobScheduler,
   OgSlashingAlert,
+  OgNetworkTopology,
+  OgBlockExplorerEmbed,
+  OgMultiSigApprove,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -62,6 +65,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
   const nodes: ReactNode[] = [];
   if (t.includes("compute") || t.includes("inference")) {
     nodes.push(<OgSocialFeedWidget key="social" workspace={workspace} />);
+    nodes.push(<OgNetworkTopology key="topology" />);
     nodes.push(<OgGasFeeEstimator key="gas" />);
     nodes.push(<OgComputeCostChart key="costchart" workspace={workspace} />);
     nodes.push(<InferenceJobRunner key="inference" workspace={workspace} />);
@@ -91,6 +95,7 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
   return (
     <>
       <LiveWalletBalance />
+      <OgMultiSigApprove workspace={workspace} />
       <OgAllowlistManager />
       <OgIntegrationStatus />
       <OpenClawSkillConsole workspace={workspace} />
@@ -104,6 +109,7 @@ export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string)
   return (
     <>
       <OgSlashingAlert />
+      <OgBlockExplorerEmbed />
       <OgLiveContractsPanel />
     </>
   );

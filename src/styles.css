@@ -9883,3 +9883,34 @@ select.twk-field {
 .ogdf-out pre.code-block { margin-bottom: 0; }
 .ogdf-foot { margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--line-2, rgba(140,140,150,.22)); font-size: .76rem; }
 .ogdf-foot a { font-weight: 600; }
+
+/* ── Mobile responsive: 0G widget panels collapse to single column ──────────── */
+@media (max-width: 600px) {
+  /* Topology SVG shrinks */
+  .og-topo-svg { width: 100% !important; flex: none !important; }
+
+  /* Grid-based panels inside compute tab go single column */
+  .panel.block.svc-flavor,
+  [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Overflow tables get horizontal scroll */
+  .svc-table__scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* The 3-col model/token/cost grid in InferenceJobRunner */
+  .inf-grid-3 { grid-template-columns: 1fr !important; }
+
+  /* Action panel header stacks */
+  .block-head { flex-wrap: wrap !important; gap: 8px !important; }
+
+  /* Topology legend goes below SVG */
+  .topo-wrap { flex-direction: column !important; }
+}
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0%   { opacity: .4; }
+  50%  { opacity: .9; }
+  100% { opacity: .4; }
+}

@@ -157,10 +157,12 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
   const cost = useMemo(() => model.base + model.pricePerToken * tokens, [model, tokens]);
   const sealedSurcharge = sealed ? 0.004 : 0;
 
-  const history = useMemo(
-    () => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "0g.inference").slice(0, 10),
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const allHistory = useMemo(
+    () => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "0g.inference"),
     [receipts, workspace.id],
   );
+  const history = useMemo(() => allHistory.slice(0, historyLimit), [allHistory, historyLimit]);
 
   async function runOne(mId: string, p: string, tk: number, batchId?: string) {
     const m = MODELS.find((x) => x.id === mId) ?? MODELS[0];
@@ -472,7 +474,7 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
       })()}
 
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Job history · {history.length} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— click a row for details</span></div>
+        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Job history · {allHistory.length} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— click a row for details</span></div>
         <div className="svc-table__scroll">
           <table className="svc-table">
             <thead><tr><th>Job</th><th>Model</th><th>Tokens</th><th>Sealed</th><th>Cost</th><th>When</th></tr></thead>
@@ -494,6 +496,15 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
             </tbody>
           </table>
         </div>
+        {allHistory.length > historyLimit && (
+          <button
+            type="button"
+            onClick={() => setHistoryLimit((l) => l + 20)}
+            style={{ marginTop: 6, width: "100%", padding: "6px", borderRadius: 8, border: "1px dashed var(--line-2)", background: "transparent", cursor: "pointer", fontSize: ".68rem", color: "var(--muted)", fontWeight: 600 }}
+          >
+            Show more ({allHistory.length - historyLimit} remaining)
+          </button>
+        )}
       </div>
     </ActionPanel>
   );

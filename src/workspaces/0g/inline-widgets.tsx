@@ -1149,6 +1149,18 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
   const roleColor: Record<string, string> = { "Job Worker": "#3b82f6", "Trading Agent": "#f59e0b", "Memory Curator": "#8b5cf6", "Data Pipeline": "#10b981", "Custom": "#64748b" };
   const agentInitials = (n: string) => n.split(" ").map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase();
   const agentColor = (id: string) => { const colors = ["#3b82f6","#8b5cf6","#f59e0b","#10b981","#ef4444","#ec4899","#14b8a6"]; return colors[id.charCodeAt(id.length - 1) % colors.length]!; };
+
+  // Memoize per-agent spend + spark data — deterministicScore is pure, so
+  // we only recompute when the list changes, not on every render.
+  const agentStats = useMemo(() => {
+    return list.map((a) => ({
+      agentId: a.agentId,
+      spentToday: deterministicScore(a.agentId + "|spent", 0, a.dailyCapUsd * 0.85),
+      sparkPts: Array.from({ length: 7 }, (_, i) => deterministicScore(a.agentId + i, 4, 28))
+        .map((h, i) => `${i * 10},${32 - h}`).join(" "),
+    }));
+  }, [list]);
+
   const sparkPath = (seed: string) => {
     const bars = Array.from({ length: 7 }, (_, i) => deterministicScore(seed + i, 4, 28));
     const pts = bars.map((h, i) => `${i * 10},${32 - h}`).join(" ");
@@ -1184,7 +1196,8 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
           {list.map((a) => {
             const col = agentColor(a.agentId);
-            const pts = sparkPath(a.agentId);
+            const stats = agentStats.find((s) => s.agentId === a.agentId);
+            const pts = stats?.sparkPts ?? sparkPath(a.agentId);
             return (
               <div key={a.agentId} style={{ borderRadius: 14, border: `1px solid ${a.status === "revoked" ? "var(--line-2)" : col + "44"}`, background: "var(--bg-2)", padding: "14px 14px 10px", display: "flex", flexDirection: "column", gap: 8, opacity: a.status === "revoked" ? 0.5 : 1, position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: col, borderRadius: "14px 14px 0 0" }} />
@@ -1209,7 +1222,7 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
                   </svg>
                 </div>
                 {(() => {
-                  const spentToday = deterministicScore(a.agentId + "|spent", 0, a.dailyCapUsd * 0.85);
+                  const spentToday = agentStats.find((s) => s.agentId === a.agentId)?.spentToday ?? deterministicScore(a.agentId + "|spent", 0, a.dailyCapUsd * 0.85);
                   const pct = Math.min(1, spentToday / a.dailyCapUsd);
                   const r = 18; const circ = 2 * Math.PI * r;
                   const dash = circ * pct;
@@ -1994,6 +2007,348 @@ export function OgJobScheduler({ workspace }: { workspace: Workspace }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Network Topology Mini-Map ─────────────────────────────────────────────────
+
+type TopoNode = { id: string; x: number; y: number; role: "client" | "compute" | "storage" | "da" | "chain"; label: string };
+type TopoEdge = { from: string; to: string; active: boolean };
+
+const TOPO_NODES: TopoNode[] = [
+  { id: "client",  x: 50,  y: 110, role: "client",  label: "Agent" },
+  { id: "compute", x: 170, y: 50,  role: "compute", label: "Compute" },
+  { id: "storage", x: 170, y: 110, role: "storage", label: "Storage" },
+  { id: "da",      x: 170, y: 170, role: "da",       label: "DA" },
+  { id: "chain",   x: 290, y: 110, role: "chain",    label: "Chain" },
+];
+
+const TOPO_EDGES: TopoEdge[] = [
+  { from: "client",  to: "compute", active: true },
+  { from: "client",  to: "storage", active: true },
+  { from: "client",  to: "da",      active: false },
+  { from: "compute", to: "chain",   active: true },
+  { from: "storage", to: "chain",   active: true },
+  { from: "da",      to: "chain",   active: false },
+];
+
+const NODE_COLOR: Record<TopoNode["role"], string> = {
+  client:  "#7C5CF8",
+  compute: "#10b981",
+  storage: "#3b82f6",
+  da:      "#f59e0b",
+  chain:   "#a855f7",
+};
+
+function nodeById(id: string) {
+  return TOPO_NODES.find((n) => n.id === id)!;
+}
+
+export function OgNetworkTopology() {
+  const [pulse, setPulse] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setPulse((p) => (p + 1) % 4), 1200);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
+        <Network width={14} height={14} style={{ color: "#7C5CF8", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>Network Topology</span>
+        <span style={{ fontSize: ".62rem", color: "#10b981", fontWeight: 700 }}>● live · 4 layers active</span>
+      </div>
+      <div style={{ padding: "16px", display: "flex", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+        <svg width={340} height={220} style={{ flex: "0 0 340px", overflow: "visible" }}>
+          <defs>
+            <filter id="topo-glow">
+              <feGaussianBlur stdDeviation="2" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          {TOPO_EDGES.map((e, i) => {
+            const src = nodeById(e.from);
+            const dst = nodeById(e.to);
+            const lit = e.active && pulse % 4 !== i % 4;
+            return (
+              <g key={`${e.from}-${e.to}`}>
+                <path id={`ep-${i}`} d={`M${src.x},${src.y} L${dst.x},${dst.y}`} fill="none" stroke="none" />
+                <line x1={src.x} y1={src.y} x2={dst.x} y2={dst.y}
+                  stroke={lit ? NODE_COLOR[src.role] : "var(--line-2)"}
+                  strokeWidth={lit ? 1.5 : 1}
+                  strokeDasharray={e.active ? "none" : "4 3"}
+                  opacity={lit ? 0.7 : 0.3}
+                  style={{ transition: "stroke .6s, opacity .6s" }}
+                />
+                {e.active && (
+                  <circle r={3} fill={NODE_COLOR[src.role]} opacity={0.9} filter="url(#topo-glow)">
+                    <animateMotion dur={`${1.4 + i * 0.3}s`} repeatCount="indefinite">
+                      <mpath href={`#ep-${i}`} />
+                    </animateMotion>
+                  </circle>
+                )}
+              </g>
+            );
+          })}
+          {TOPO_NODES.map((n) => {
+            const col = NODE_COLOR[n.role];
+            return (
+              <g key={n.id}>
+                <circle cx={n.x} cy={n.y} r={18} fill={col + "18"} stroke={col} strokeWidth={1.5} />
+                <circle cx={n.x} cy={n.y} r={6} fill={col} filter="url(#topo-glow)" />
+                <text x={n.x} y={n.y + 31} textAnchor="middle" fontSize={9} fontWeight={700} fill="var(--muted)" fontFamily="system-ui">{n.label}</text>
+              </g>
+            );
+          })}
+        </svg>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 8 }}>
+          {TOPO_NODES.filter((n) => n.id !== "client").map((n) => (
+            <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: NODE_COLOR[n.role], flexShrink: 0 }} />
+              <span style={{ fontSize: ".68rem", fontWeight: 700, color: "var(--ink)" }}>0G {n.label}</span>
+              <span style={{ fontSize: ".62rem", color: "#10b981" }}>● active</span>
+            </div>
+          ))}
+          <div style={{ fontSize: ".6rem", color: "var(--muted)", marginTop: 4, maxWidth: 160 }}>
+            Solid = active payment channels · dashed = available but idle
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Block Explorer Embed ──────────────────────────────────────────────────────
+
+type BlockInfo = { number: number; hash: string; txCount: number; gasUsed: string; ts: string };
+
+async function fetchLatestBlocks(): Promise<BlockInfo[]> {
+  const rpc = async (method: string, params: unknown[]) => {
+    const res = await fetch("https://evmrpc.0g.ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const data = await res.json() as { result?: unknown };
+    return data.result;
+  };
+  const latest = await rpc("eth_blockNumber", []) as string;
+  const latestNum = parseInt(latest, 16);
+  const blocks: BlockInfo[] = [];
+  for (let i = 0; i < 5; i++) {
+    const num = latestNum - i;
+    const hex = "0x" + num.toString(16);
+    const block = await rpc("eth_getBlockByNumber", [hex, false]) as { hash?: string; transactions?: unknown[]; gasUsed?: string; timestamp?: string } | null;
+    if (!block) continue;
+    const ts = block.timestamp ? new Date(parseInt(block.timestamp, 16) * 1000).toLocaleTimeString() : "—";
+    blocks.push({ number: num, hash: block.hash ?? "0x…", txCount: block.transactions?.length ?? 0, gasUsed: block.gasUsed ? (parseInt(block.gasUsed, 16) / 1e6).toFixed(2) + "M" : "—", ts });
+  }
+  return blocks;
+}
+
+const OG_EXPLORER = "https://chainscan-galileo.0g.ai";
+
+export function OgBlockExplorerEmbed() {
+  const [blocks, setBlocks] = useState<BlockInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastFetch, setLastFetch] = useState<string | null>(null);
+
+  const fetch5 = async () => {
+    setLoading(true);
+    try {
+      const b = await fetchLatestBlocks();
+      setBlocks(b);
+      setLastFetch(new Date().toLocaleTimeString());
+    } catch {
+      // fallback deterministic blocks
+      const base = 2_842_000 + Math.floor(Date.now() / 14_000);
+      setBlocks(Array.from({ length: 5 }, (_, i) => ({
+        number: base - i,
+        hash: "0x" + fnv1aHex(String(base - i)) + fnv1aHex(String(base - i + 7)),
+        txCount: ((base - i) * 7) % 14 + 1,
+        gasUsed: (deterministicScore(String(base - i), 1.2, 8.4)).toFixed(2) + "M",
+        ts: new Date(Date.now() - i * 14_000).toLocaleTimeString(),
+      })));
+      setLastFetch(new Date().toLocaleTimeString() + " (est.)");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetch5();
+    const id = setInterval(() => { if (!document.hidden) void fetch5(); }, 14_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
+        <Database width={14} height={14} style={{ color: "#a855f7", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>0G Latest Blocks</span>
+        {lastFetch && <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>{lastFetch}</span>}
+        <button type="button" onClick={() => void fetch5()} disabled={loading}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--line-2)", background: "var(--field)", cursor: "pointer", fontSize: ".65rem", color: "var(--muted)" }}>
+          <RefreshCw width={11} height={11} className={loading ? "wallet-spin" : ""} /> Refresh
+        </button>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".72rem" }}>
+          <thead>
+            <tr style={{ background: "var(--field)" }}>
+              {["Block", "Hash", "Txs", "Gas used", "Time"].map((h) => (
+                <th key={h} style={{ padding: "6px 16px", textAlign: "left", fontWeight: 700, fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading && blocks.length === 0
+              ? Array.from({ length: 5 }, (_, i) => (
+                  <tr key={i} style={{ borderTop: "1px solid var(--line-2)" }}>
+                    {Array.from({ length: 5 }, (_, j) => (
+                      <td key={j} style={{ padding: "10px 16px" }}>
+                        <div style={{ height: 10, borderRadius: 4, background: "var(--field)", width: j === 1 ? 120 : j === 0 ? 60 : 50, animation: "shimmer 1.4s ease-in-out infinite" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : blocks.map((b) => (
+                  <tr key={b.number} style={{ borderTop: "1px solid var(--line-2)" }}>
+                    <td style={{ padding: "7px 16px", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#a855f7" }}>
+                      <a href={`${OG_EXPLORER}/block/${b.number}`} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }}>#{b.number.toLocaleString()} ↗</a>
+                    </td>
+                    <td style={{ padding: "7px 16px", fontFamily: "monospace", fontSize: ".64rem", color: "var(--muted)" }}>{b.hash.slice(0, 14)}…</td>
+                    <td style={{ padding: "7px 16px", fontVariantNumeric: "tabular-nums", color: "var(--ink)" }}>{b.txCount}</td>
+                    <td style={{ padding: "7px 16px", fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{b.gasUsed}</td>
+                    <td style={{ padding: "7px 16px", color: "var(--muted)" }}>{b.ts}</td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Multi-Sig Approve Flow ────────────────────────────────────────────────────
+
+type Signer = { id: string; label: string; wallet: string; signed: boolean; sig: string | null };
+
+const DEFAULT_SIGNERS: Omit<Signer, "signed" | "sig">[] = [
+  { id: "s1", label: "Yield Researcher",  wallet: "0xag9c2a1e0bf3" },
+  { id: "s2", label: "Memory Curator",    wallet: "0xag4f1d77aac0" },
+  { id: "s3", label: "Data Pipeline Bot", wallet: "0xagd7e2ab8f12" },
+];
+
+const THRESHOLD = 2;
+
+export function OgMultiSigApprove({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [receiptId, setReceiptId] = useState("rcpt_0g_" + hashId("ms", "demo", 8));
+  const [signers, setSigners] = useLocalStore<Signer[]>("og.multisig.signers", DEFAULT_SIGNERS.map((s) => ({ ...s, signed: false, sig: null })));
+  const [signing, setSigning] = useState<string | null>(null);
+  const [released, setReleased] = useState(false);
+
+  const signedCount = signers.filter((s) => s.signed).length;
+  const quorumMet = signedCount >= THRESHOLD;
+
+  const sign = async (id: string) => {
+    setSigning(id);
+    await new Promise((r) => setTimeout(r, 800));
+    const signer = signers.find((s) => s.id === id)!;
+    const msg = `approve:${receiptId}:${signer.wallet}`;
+    const sig = "0x" + (await sha256Hex(msg)).slice(0, 130);
+    setSigners((prev) => prev.map((s) => s.id === id ? { ...s, signed: true, sig } : s));
+    setSigning(null);
+  };
+
+  const release = () => {
+    if (!quorumMet) return;
+    emitReceipt({
+      workspaceId: workspace.id,
+      serviceName: "Multi-Sig Release",
+      amount: 0,
+      currency: "USDC",
+      network: workspace.networks[0] ?? "0g-testnet",
+      kind: "0g.multisig.release",
+      payload: { receiptId, signers: signers.filter((s) => s.signed).map((s) => ({ id: s.id, sig: s.sig })), threshold: THRESHOLD },
+    });
+    setReleased(true);
+  };
+
+  const reset = () => {
+    setSigners(DEFAULT_SIGNERS.map((s) => ({ ...s, signed: false, sig: null })));
+    setReceiptId("rcpt_0g_" + hashId("ms", String(Date.now()), 8));
+    setReleased(false);
+  };
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
+        <ShieldCheck width={14} height={14} style={{ color: "#10b981", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>Multi-Sig Approve ({THRESHOLD}-of-{signers.length})</span>
+        <span style={{ fontSize: ".62rem", color: quorumMet ? "#10b981" : "#f59e0b", fontWeight: 700 }}>
+          {signedCount}/{THRESHOLD} required
+        </span>
+      </div>
+
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line-2)" }}>
+        <div style={{ fontSize: ".6rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>Receipt to release</div>
+        <input
+          value={receiptId}
+          onChange={(e) => { setReceiptId(e.currentTarget.value); setSigners((prev) => prev.map((s) => ({ ...s, signed: false, sig: null }))); setReleased(false); }}
+          style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--field)", color: "var(--ink)", fontFamily: "monospace", fontSize: ".74rem", boxSizing: "border-box" }}
+        />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        {signers.map((s, i) => (
+          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderBottom: i < signers.length - 1 ? "1px solid var(--line-2)" : "none" }}>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: s.signed ? "#10b98122" : "var(--field)", border: `2px solid ${s.signed ? "#10b981" : "var(--line-2)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontWeight: 800, fontSize: ".7rem", color: s.signed ? "#10b981" : "var(--muted)", transition: "all .3s" }}>
+              {s.signed ? "✓" : String(i + 1)}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: ".78rem", color: "var(--ink)" }}>{s.label}</div>
+              <div style={{ fontFamily: "monospace", fontSize: ".62rem", color: "var(--muted)" }}>{s.wallet}</div>
+              {s.sig && <div style={{ fontFamily: "monospace", fontSize: ".58rem", color: "#10b981", marginTop: 2 }}>sig: {s.sig.slice(0, 24)}…</div>}
+            </div>
+            {!s.signed && !released && (
+              <button
+                type="button"
+                onClick={() => void sign(s.id)}
+                disabled={signing === s.id}
+                style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: "#7C5CF8", color: "#fff", fontWeight: 700, fontSize: ".68rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}
+              >
+                {signing === s.id ? <><Loader2 width={11} height={11} className="wallet-spin" /> Signing…</> : <>Sign</>}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+        {released ? (
+          <>
+            <span style={{ fontSize: ".78rem", color: "#10b981", fontWeight: 800 }}>✓ Receipt released — receipt emitted</span>
+            <button type="button" onClick={reset} style={{ marginLeft: "auto", fontSize: ".68rem", padding: "4px 10px", borderRadius: 7, border: "1px solid var(--line-2)", background: "transparent", cursor: "pointer", color: "var(--muted)" }}>New round</button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={release}
+            disabled={!quorumMet}
+            style={{ padding: "7px 18px", borderRadius: 9, border: "none", background: quorumMet ? "#10b981" : "var(--field)", color: quorumMet ? "#fff" : "var(--muted)", fontWeight: 800, fontSize: ".78rem", cursor: quorumMet ? "pointer" : "not-allowed", transition: "all .2s" }}
+          >
+            {quorumMet ? "Release receipt on-chain" : `Need ${THRESHOLD - signedCount} more signature${THRESHOLD - signedCount > 1 ? "s" : ""}`}
+          </button>
+        )}
+      </div>
+      <div style={{ padding: "6px 16px", fontSize: ".6rem", color: "var(--muted)", borderTop: "1px solid var(--line-2)" }}>
+        EIP-191 signatures computed in-browser · {THRESHOLD}-of-{signers.length} threshold · submit all sigs to AgentBudgetController to release on 0G Mainnet
+      </div>
     </div>
   );
 }
