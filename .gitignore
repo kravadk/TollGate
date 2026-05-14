@@ -16,3 +16,4 @@ dist/
 screenshots/
 *.png
 chat-history.md
+.github/workflows/
