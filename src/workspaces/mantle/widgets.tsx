@@ -80,7 +80,8 @@ const MANTLE_CONTRACTS = [
   { label: "AgentIdentityRegistry (Main)", addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_IDENTITY_ADDRESS"] ?? "0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB", explorer: "https://explorer.mantle.xyz" },
   { label: "AgentCreditRegistry (Main)",   addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_CREDIT_ADDRESS"] ?? "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9", explorer: "https://explorer.mantle.xyz" },
   { label: "ServiceRegistry (Mainnet)",    addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_SERVICE_REGISTRY_ADDRESS"] ?? "0x441fE2B53A85a38572C94688b2344a096ECe50cc", explorer: "https://explorer.mantle.xyz" },
-  { label: "IdentityRegistry (Sepolia)",   addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_IDENTITY_ADDRESS"] ?? "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6", explorer: "https://explorer.sepolia.mantle.xyz" },
+  { label: "IdentityRegistry (Sepolia)",   addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_IDENTITY_ADDRESS"] ?? "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142", explorer: "https://explorer.sepolia.mantle.xyz" },
+  { label: "ServiceRegistry (Sepolia)",    addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_SERVICE_REGISTRY_ADDRESS"] ?? "0x42a14858Da4B2f75DB5C581bA5579786A12d97b4", explorer: "https://explorer.sepolia.mantle.xyz" },
   { label: "CreditRegistry (Sepolia)",     addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_CREDIT_ADDRESS"] ?? "0xA8302734081F26b8a3E42f90DCf07b3E063441de", explorer: "https://explorer.sepolia.mantle.xyz" },
 ] as const;
 
