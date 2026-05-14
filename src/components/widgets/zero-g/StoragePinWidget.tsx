@@ -354,7 +354,11 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
                     <div style={{ fontSize: ".75rem", fontWeight: 700, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.name}>{b.name}</div>
                     <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
                       {b.kind === "memory" && <span className="pill ok" style={{ fontSize: ".58rem", padding: "1px 6px" }}>g{b.generation ?? 1}</span>}
-                      {b.onchainTxHash && <span style={{ fontSize: ".58rem", color: "#10b981", fontWeight: 700 }}>⛓ on-chain</span>}
+                      {b.onchainTxHash
+                        ? <span style={{ fontSize: ".55rem", color: "#10b981", fontWeight: 800, background: "#10b98120", borderRadius: 4, padding: "1px 5px" }}>⛓ on-chain</span>
+                        : b.storageSimulated === false
+                          ? <span style={{ fontSize: ".55rem", color: "#3b82f6", fontWeight: 800, background: "#3b82f620", borderRadius: 4, padding: "1px 5px" }}>0G</span>
+                          : <span style={{ fontSize: ".55rem", color: "#f59e0b", fontWeight: 800, background: "#f59e0b20", borderRadius: 4, padding: "1px 5px" }}>SHA-256</span>}
                     </div>
                     <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>0g://{shortHash(b.hash)}</div>
                     <div style={{ fontSize: ".62rem", color: "var(--muted)" }}>{fmtBytes(b.size)} · {new Date(b.createdAt).toLocaleTimeString()}</div>

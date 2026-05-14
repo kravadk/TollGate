@@ -150,7 +150,6 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
   const [modalReceipt, setModalReceipt] = useState<(typeof history)[number] | null>(null);
   const [proofOpen, setProofOpen] = useState(false);
   const [proofHash, setProofHash] = useState<string | null>(null);
-  const [proofVerified, setProofVerified] = useState<"idle" | "verifying" | "valid" | "invalid">("idle");
   const ogReady = isOgRegistryConfigured();
 
   const model = useMemo(() => MODELS.find((m) => m.id === modelId) ?? MODELS[0], [modelId]);
@@ -229,7 +228,6 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
       setResult({ id: r.id, response: og.content, sealed, attestationId, sealHash, ogProvider: og.provider, ogChatID: og.chatID, ogVerified: og.verified });
       setProofHash(await sha256Hex(og.content + r.id));
       setProofOpen(false);
-      setProofVerified("idle");
       setStage("done");
       return;
     }
@@ -238,7 +236,6 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
     setResult(out);
     setProofHash(await sha256Hex(out.response + out.id));
     setProofOpen(false);
-    setProofVerified("idle");
     setStage("done");
   };
 
@@ -385,10 +382,10 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
             onClick={() => setProofOpen((o) => !o)}
             style={{ width: "100%", padding: "9px 14px", background: "var(--field)", border: "none", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left" }}
           >
-            <ShieldCheck width={13} height={13} color={proofVerified === "valid" ? "#10b981" : proofVerified === "invalid" ? "#ef4444" : "#7C5CF8"} />
+            <ShieldCheck width={13} height={13} color="#7C5CF8" />
             <span style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--ink)", flex: 1 }}>Cryptographic proof</span>
             <span style={{ fontSize: ".68rem", color: "var(--muted)" }}>
-              {proofVerified === "valid" ? "✓ Signature valid" : proofVerified === "invalid" ? "✗ Invalid" : proofVerified === "verifying" ? "verifying…" : "EIP-191 · click to expand"}
+              SHA-256 integrity · click to expand
             </span>
             <span style={{ fontSize: ".8rem", color: "var(--muted)" }}>{proofOpen ? "▲" : "▼"}</span>
           </button>
@@ -396,34 +393,13 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
             <div style={{ padding: "12px 14px", background: "var(--bg-1)" }}>
               <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginBottom: 4 }}>Response SHA-256</div>
               <code style={{ fontSize: ".7rem", wordBreak: "break-all", color: "var(--ink)" }}>{proofHash}</code>
-              <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginTop: 10, marginBottom: 4 }}>EIP-191 message</div>
+              <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginTop: 10, marginBottom: 4 }}>Integrity payload (receipt id · response hash)</div>
               <code style={{ fontSize: ".7rem", wordBreak: "break-all", color: "var(--ink)" }}>
-                {`\\x19Ethereum Signed Message:\\n${(result.id + "|" + proofHash).length}${result.id}|${proofHash}`}
+                {result.id}|{proofHash}
               </code>
-              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <button
-                  className="btn btn-sm"
-                  type="button"
-                  disabled={proofVerified === "verifying"}
-                  onClick={async () => {
-                    setProofVerified("verifying");
-                    try {
-                      const msg = result.id + "|" + proofHash;
-                      const msgBytes = new TextEncoder().encode(msg);
-                      const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
-                      const full = new Uint8Array([...prefix, ...msgBytes]);
-                      await crypto.subtle.digest("SHA-256", full);
-                      await new Promise((r) => setTimeout(r, 600));
-                      setProofVerified("valid");
-                    } catch {
-                      setProofVerified("invalid");
-                    }
-                  }}
-                >
-                  {proofVerified === "verifying" ? <><Loader2 size={12} className="wallet-spin" /> Verifying…</> : "Verify in browser"}
-                </button>
-                {proofVerified === "valid" && <span style={{ fontSize: ".72rem", color: "#10b981", fontWeight: 700 }}>✓ Hash computed · EIP-191 message well-formed</span>}
-                {proofVerified === "invalid" && <span style={{ fontSize: ".72rem", color: "#ef4444", fontWeight: 700 }}>✗ Verification failed</span>}
+              <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(124,92,248,.08)", fontSize: ".71rem", color: "var(--muted)", lineHeight: 1.5 }}>
+                SHA-256 of <code style={{ color: "var(--ink)" }}>response + receiptId</code> — anchor it on 0G above for a permanent integrity proof.
+                For full EIP-191 wallet-signature verification, open the <b>Proof Verifier</b> tab and paste this receipt id.
               </div>
             </div>
           )}

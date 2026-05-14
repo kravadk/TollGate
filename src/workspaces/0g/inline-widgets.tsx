@@ -529,14 +529,15 @@ export function OgComputeKanban({ workspace }: { workspace: Workspace }) {
     setEphemeral((prev) => [...prev, newJob]);
     setSubmitting(true);
     setSubmitPrompt("");
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 300));
     setEphemeral((prev) => prev.map((j) => j.id === jobId ? { ...j, status: "running" } : j));
-    await new Promise((r) => setTimeout(r, 1200));
-    const latency = Math.round(deterministicScore(jobId, 300, 1200));
+    setSubmitting(false);
+    const t0 = Date.now();
+    const og = await runOgInference(p, submitModel);
+    const latency = Date.now() - t0;
     const attestId = "att_" + hashId("at", jobId, 10);
     setEphemeral((prev) => prev.map((j) => j.id === jobId ? { ...j, status: "verified", latencyMs: latency, attestationId: attestId } : j));
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_compute", serviceName: "0G Compute · Inference", amount: 0.012, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.inference", payload: { model: submitModel, prompt: p, attestationId: attestId, latencyMs: latency } });
-    setSubmitting(false);
+    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_compute", serviceName: og.ok ? `0G Compute · ${og.model || submitModel}` : "0G Compute · Inference (demo)", amount: 0.012, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.inference", payload: { model: submitModel, prompt: p, attestationId: attestId, latencyMs: latency, ogCompute: og.ok, response: og.ok ? og.content : undefined } });
   };
 
   const COLS: { key: KanbanJob["status"]; label: string; color: string; jobs: KanbanJob[] }[] = [

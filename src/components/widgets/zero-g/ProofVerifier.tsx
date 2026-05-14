@@ -6,7 +6,7 @@ import { useWallet } from "../../../wallet";
 import { useLocalStore } from "../../../lib/storage";
 import { sha256Hex } from "../../../lib/util-hash";
 import {
-  signReceipt, recoverReceiptSigner, isReceiptRecorded, receiptHashFor,
+  signReceipt, recoverReceiptSigner, safeVerifyDelivery, isReceiptRecorded, receiptHashFor,
   isOgRegistryConfigured, anchorReceiptOnChain, ogExplorerTxUrl,
 } from "../../../lib/og";
 import { ActionPanel } from "../ActionPanel";
@@ -103,12 +103,10 @@ export function ProofVerifier({ workspace }: { workspace: Workspace }) {
     if (!dReqId || !dRespHash || !dSig) return;
     setDBusy(true); setDResult({ kind: "idle" });
     try {
-      // EIP-191 prefix: verify that dSig signs keccak256(abi.encodePacked(dReqId, dRespHash))
-      // Use the existing recoverReceiptSigner pattern — sign the concatenated string
-      const message = `delivery:${dReqId}:${dRespHash}`;
-      const recovered = safeRecover(message, dSig);
+      // Use the canonical TollGate delivery sign message: "TollGate proof of delivery\nrequest: …\nresponse: …"
+      const recovered = safeVerifyDelivery(dReqId, dRespHash, dSig);
       if (!recovered) {
-        setDResult({ kind: "invalid", detail: "Could not recover signer — malformed signature" });
+        setDResult({ kind: "invalid", detail: "Could not recover signer — malformed signature or wrong message format" });
       } else {
         setDResult({ kind: "ok", signer: recovered });
       }

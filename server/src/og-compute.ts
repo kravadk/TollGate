@@ -86,6 +86,7 @@ export async function runOgInference(prompt: string, modelHint?: string): Promis
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`provider ${res.status} ${res.statusText}`);
     const data = (await res.json()) as { id?: string; choices?: { message?: { content?: string } }[] };
