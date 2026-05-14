@@ -92,10 +92,15 @@ export function QieCreditWidget({ workspace }: { workspace: Workspace }) {
         <span style={{ width: 36, height: 36, borderRadius: 10, background: `${col}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Award size={18} style={{ color: col }} />
         </span>
-        <div>
+        <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--ink)" }}>QIE Agent Credit Line</div>
           <div style={{ fontSize: ".73rem", color: "var(--muted)" }}>AgentScore from real receipts → QIElend · beats NeuroCred 2025</div>
         </div>
+        <a
+          href="https://testnet.qie.digital/address/0xBA4721Df33C3f32d8d35dEE21745cDC2B5b2Db81"
+          target="_blank" rel="noreferrer"
+          style={{ fontSize: ".6rem", color: col, fontWeight: 700, textDecoration: "none", background: `${col}18`, padding: "3px 7px", borderRadius: 6, whiteSpace: "nowrap" }}
+        >on-chain 0xBA47…Db81</a>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

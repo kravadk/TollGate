@@ -87,10 +87,15 @@ export function QieOracleFeedWidget({ workspace }: { workspace: Workspace }) {
         <span style={{ width: 36, height: 36, borderRadius: 10, background: "#7c3aed22", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Radio size={18} style={{ color: "#7c3aed" }} />
         </span>
-        <div>
+        <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--ink)" }}>QIE Oracle Feed</div>
           <div style={{ fontSize: ".73rem", color: "var(--muted)" }}>TollGate service demand → on-chain oracle · beats YesNo Markets 2025</div>
         </div>
+        <a
+          href="https://testnet.qie.digital/address/0x455cfBf7053d9E1c47306A7B7e53559ea73eeF1A"
+          target="_blank" rel="noreferrer"
+          style={{ fontSize: ".6rem", color: "#7c3aed", fontWeight: 700, textDecoration: "none", background: "#7c3aed11", padding: "3px 7px", borderRadius: 6, whiteSpace: "nowrap" }}
+        >on-chain 0x455c…eF1A</a>
       </div>
 
       <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
