@@ -88,6 +88,16 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
     nodes.push(<OgAgentToAgentLoop key="a2a" workspace={workspace} />);
     nodes.push(<OgTradingArenaWidget key="arena" workspace={workspace} />);
   }
+  if (t.includes("agent") || t.includes("identity")) {
+    nodes.push(<LiveWalletBalance key="wallet" />);
+    nodes.push(<AgentIdRegistry key="identity" workspace={workspace} />);
+    nodes.push(<OgAllowlistManager key="allowlist" />);
+  }
+  if (t.includes("receipt")) {
+    nodes.push(<ProofVerifier key="proof" workspace={workspace} />);
+    nodes.push(<RevenueSplitConsole key="revenue" workspace={workspace} />);
+    nodes.push(<OgMultiSigApprove key="multisig" workspace={workspace} />);
+  }
   return nodes.length > 0 ? <>{nodes}</> : null;
 }
 
