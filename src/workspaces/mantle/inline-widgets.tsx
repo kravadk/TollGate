@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { FileText, Loader2, TrendingUp, Zap } from "lucide-react";
 import { Code2 } from "lucide-react";
 import { useAppState } from "../../app-state";
@@ -11,11 +11,25 @@ import { Bolt, Check, Plus, Robot } from "../../icons402";
 // ---------------------------------------------------------------------------
 // MANTLE — Earn Calculator (mETH / USDY tab)
 // ---------------------------------------------------------------------------
+async function fetchMantleApys(): Promise<{ mETH: number; USDY: number }> {
+  const defaults = { mETH: 4.12, USDY: 5.03 };
+  try {
+    const res = await fetch("https://meth.mantle.xyz/api/v1/protocol/rates", { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return defaults;
+    const data = await res.json() as { stakingAPR?: string | number; [k: string]: unknown };
+    const methApy = data.stakingAPR ? parseFloat(String(data.stakingAPR)) * 100 : 0;
+    return { mETH: methApy > 0 ? +methApy.toFixed(2) : defaults.mETH, USDY: defaults.USDY };
+  } catch { return defaults; }
+}
+
 export function MantleEarnCalc({ workspace: _workspace }: { workspace: Workspace }) {
   const [amount, setAmount] = useState("1000");
   const [asset, setAsset] = useState<"mETH" | "USDY">("mETH");
-  const APY: Record<"mETH" | "USDY", number> = { mETH: 4.12, USDY: 5.03 };
+  const [liveApy, setLiveApy] = useState<Record<"mETH" | "USDY", number>>({ mETH: 4.12, USDY: 5.03 });
+  const APY = liveApy;
   const apy = APY[asset];
+
+  useEffect(() => { fetchMantleApys().then(setLiveApy); }, []);
   const principal = parseFloat(amount) || 0;
 
   const periods = [

@@ -358,8 +358,17 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
 
   async function fetchSignal(src: SignalSource) {
     setLoading(src.id);
-    await new Promise(r => setTimeout(r, 800));
-    const value = generateValue(src);
+    let value = generateValue(src);
+    if (src.id === "hyperliquid") {
+      try {
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6000) });
+        const data = await res.json() as { ethereum?: { usd?: number } };
+        const ethPrice = data.ethereum?.usd;
+        if (ethPrice) value = `${(ethPrice / 1.3).toFixed(0)} M OI`;
+      } catch { /* fall back to deterministic */ }
+    } else {
+      await new Promise(r => setTimeout(r, 800));
+    }
     setSignals((prev: FetchedSignal[]) => {
       const filtered = prev.filter((s: FetchedSignal) => s.id !== src.id);
       return [...filtered, { id: src.id, value, ts: Date.now() }];

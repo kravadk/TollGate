@@ -386,6 +386,35 @@ export function PolygonStatsWidget({ workspace: _ }: { workspace: Workspace }) {
           </div>
         ))}
       </div>
+      <PolygonDeployedContracts />
+    </div>
+  );
+}
+
+function PolygonDeployedContracts() {
+  const escrow = import.meta.env.VITE_POLYGON_MAINNET_ESCROW_ADDRESS as string | undefined;
+  const explorer = (import.meta.env.VITE_POLYGON_EXPLORER as string | undefined) ?? "https://zkevm.polygonscan.com";
+  return (
+    <div style={{ marginTop: 10, background: "var(--bg-2)", borderRadius: 12, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: ".68rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
+        <span style={{ fontSize: ".62rem", color: "#7B3FE4", fontWeight: 700, background: "#7B3FE418", padding: "2px 7px", borderRadius: 5 }}>Polygon zkEVM mainnet</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px" }}>
+        <ShieldCheck size={12} style={{ color: escrow ? "#7B3FE4" : "var(--muted)", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: ".75rem", fontWeight: 700 }}>AgentEscrow.sol</div>
+          <div style={{ fontSize: ".6rem", color: "var(--muted)" }}>chainId 1101 · deployed 2026-05-14</div>
+        </div>
+        {escrow ? (
+          <a href={`${explorer}/address/${escrow}`} target="_blank" rel="noreferrer"
+            style={{ fontSize: ".6rem", fontWeight: 700, color: "#7B3FE4", fontFamily: "monospace", textDecoration: "none" }}>
+            {escrow.slice(0, 10)}…↗
+          </a>
+        ) : (
+          <span style={{ fontSize: ".6rem", color: "var(--muted)", fontFamily: "monospace" }}>set VITE_POLYGON_MAINNET_ESCROW_ADDRESS</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -407,8 +436,8 @@ export function PolygonMerchantOnboardingWidget({ workspace }: { workspace: Work
   async function deploy() {
     setDeploying(true);
     await new Promise(r => setTimeout(r, 2000));
-    const address = `0x${hashId("merchant", `${name}-${Date.now()}`).slice(0, 40)}`;
-    setDeployed({ name, address, endpoint: `/api/${name.toLowerCase().replace(/\s/g, "-")}`, ts: new Date().toLocaleTimeString() });
+    const escrow = (import.meta.env.VITE_POLYGON_MAINNET_ESCROW_ADDRESS as string | undefined) ?? `0x${hashId("merchant", `${name}`).slice(0, 40)}`;
+    setDeployed({ name, address: escrow, endpoint: `/api/${name.toLowerCase().replace(/\s/g, "-")}`, ts: new Date().toLocaleTimeString() });
     setDeploying(false);
     setStep(3);
   }

@@ -1,9 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Radio, TrendingUp, Zap, CheckCircle2, Loader2, Database, BarChart2 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { hashId } from "../../../lib/util-hash";
+
+const QIE_MAINNET_RPC = "https://rpc1mainnet.qie.digital/";
+const QIE_ORACLE_ADDR = "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142";
+const SERVICE_COUNT_SELECTOR = "0x06237526"; // keccak256("serviceCount()")[0:4]
+
+async function fetchOnChainFeedCount(): Promise<number> {
+  try {
+    const res = await fetch(QIE_MAINNET_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: QIE_ORACLE_ADDR, data: SERVICE_COUNT_SELECTOR }, "latest"] }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const json = await res.json() as { result?: string };
+    return json.result ? parseInt(json.result, 16) : 0;
+  } catch { return 0; }
+}
+
+async function fetchEthPrice(): Promise<number> {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(8000) });
+    const data = await res.json() as { ethereum?: { usd?: number } };
+    return data.ethereum?.usd ?? 0;
+  } catch { return 0; }
+}
 
 // TollGate publishes service demand data as QIE oracle feeds.
 // Beats YesNo Markets (2025 winner): real call counts vs synthetic prediction markets.
@@ -41,6 +66,13 @@ export function QieOracleFeedWidget({ workspace }: { workspace: Workspace }) {
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<DemoStep[]>([]);
   const [done, setDone] = useState(false);
+  const [onChainCount, setOnChainCount] = useState<number | null>(null);
+  const [ethPrice, setEthPrice] = useState<number>(0);
+
+  useEffect(() => {
+    fetchOnChainFeedCount().then(setOnChainCount);
+    fetchEthPrice().then(setEthPrice);
+  }, []);
 
   const wsReceipts = receipts.filter((r) => r.workspaceId === workspace.id);
   const liveCheckouts = SEED_FEEDS[0].callCount + wsReceipts.filter((r) => r.serviceId === "svc_qie_checkout").length;
@@ -96,6 +128,29 @@ export function QieOracleFeedWidget({ workspace }: { workspace: Workspace }) {
           target="_blank" rel="noreferrer"
           style={{ fontSize: ".6rem", color: "#7c3aed", fontWeight: 700, textDecoration: "none", background: "#7c3aed11", padding: "3px 7px", borderRadius: 6, whiteSpace: "nowrap" }}
         >on-chain 0xAe3D…7142</a>
+      </div>
+
+      {/* Live on-chain + market stats bar */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, padding: "9px 12px", borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line-2)", minWidth: 120 }}>
+          <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800 }}>On-chain feeds</div>
+          <div style={{ fontSize: ".9rem", fontWeight: 800, color: "#7c3aed" }}>
+            {onChainCount === null ? <Loader2 size={12} className="wallet-spin" style={{ display: "inline" }} /> : onChainCount}
+          </div>
+          <div style={{ fontSize: ".58rem", color: "var(--muted)" }}>QieOracleFeed · mainnet</div>
+        </div>
+        <div style={{ flex: 1, padding: "9px 12px", borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line-2)", minWidth: 120 }}>
+          <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800 }}>ETH ref price</div>
+          <div style={{ fontSize: ".9rem", fontWeight: 800, color: "#7c3aed" }}>
+            {ethPrice > 0 ? `$${ethPrice.toLocaleString()}` : <Loader2 size={12} className="wallet-spin" style={{ display: "inline" }} />}
+          </div>
+          <div style={{ fontSize: ".58rem", color: "var(--muted)" }}>CoinGecko · live</div>
+        </div>
+        <div style={{ flex: 1, padding: "9px 12px", borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line-2)", minWidth: 120 }}>
+          <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800 }}>Local feeds</div>
+          <div style={{ fontSize: ".9rem", fontWeight: 800, color: "#7c3aed" }}>{liveFeeds.length}</div>
+          <div style={{ fontSize: ".58rem", color: "var(--muted)" }}>pending publish</div>
+        </div>
       </div>
 
       <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>

@@ -1,0 +1,10 @@
+{
+  "network": "polygonMainnet",
+  "contract": "AgentEscrow",
+  "address": "0x6A7275B3ed37A06216e8a1dC90c8C3e840149Ef5",
+  "txHash": "0xc473e490c521e1be4a811425a7b5a6ff38d64d7863296c4d2e79c8405ce6d87b",
+  "chainId": 1101,
+  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "explorer": "https://zkevm.polygonscan.com/address/0x6A7275B3ed37A06216e8a1dC90c8C3e840149Ef5",
+  "deployedAt": "2026-05-14T20:17:30.185Z"
+}

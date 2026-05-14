@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Award, Zap, TrendingUp, CheckCircle2, Loader2 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
@@ -7,6 +7,26 @@ import { hashId } from "../../../lib/util-hash";
 
 // AgentScore → QIElend credit line widget.
 // Beats NeuroCred (2025 QIE winner): real x402 receipts as score basis, no off-chain ML.
+
+const QIE_MAINNET_RPC = "https://rpc1mainnet.qie.digital/";
+const QIE_CREDIT_ADDR = "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6";
+// keccak256("getLine(address)")[0:4] = 0x60116863
+const GET_LINE_SEL = "0x60116863";
+const DEMO_AGENT = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
+
+async function fetchOnChainCreditLine(): Promise<number> {
+  try {
+    const padded = DEMO_AGENT.slice(2).toLowerCase().padStart(64, "0");
+    const res = await fetch(QIE_MAINNET_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: QIE_CREDIT_ADDR, data: GET_LINE_SEL + padded }, "latest"] }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const json = await res.json() as { result?: string };
+    return json.result ? parseInt(json.result, 16) : 0;
+  } catch { return 0; }
+}
 
 const hid = (s: string) => hashId("qie-credit", s);
 
@@ -38,6 +58,9 @@ export function QieCreditWidget({ workspace }: { workspace: Workspace }) {
   const [steps, setSteps] = useState<DemoStep[]>([]);
   const [done, setDone] = useState(false);
   const [repaying, setRepaying] = useState(false);
+  const [onChainLine, setOnChainLine] = useState<number | null>(null);
+
+  useEffect(() => { fetchOnChainCreditLine().then(setOnChainLine); }, []);
 
   const wsReceipts = receipts.filter((r) => r.workspaceId === workspace.id);
   const count = wsReceipts.length;
@@ -177,11 +200,12 @@ export function QieCreditWidget({ workspace }: { workspace: Workspace }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
         {[
           { ico: <TrendingUp size={12} />, label: "Score basis", val: "Real receipts" },
           { ico: <Award size={12} />, label: "vs NeuroCred", val: "No ML oracle" },
           { ico: <Zap size={12} />, label: "QIElend pool", val: limitQie > 0 ? "Active" : "Locked" },
+          { ico: <Award size={12} />, label: "On-chain line", val: onChainLine === null ? "…" : `${onChainLine} QIE` },
         ].map((c) => (
           <div key={c.label} style={{ background: "var(--bg-2)", borderRadius: 10, padding: "10px 12px", border: "1px solid var(--line-2)", textAlign: "center" }}>
             <div style={{ color: col, display: "flex", justifyContent: "center", marginBottom: 3 }}>{c.ico}</div>
