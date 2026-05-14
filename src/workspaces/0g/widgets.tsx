@@ -24,6 +24,7 @@ import {
   OgSocialFeedWidget,
   AgentIdRegistry,
   RevenueSplitConsole,
+  OgLiveContractsPanel,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -87,5 +88,5 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
 }
 
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
-  return null;
+  return <OgLiveContractsPanel />;
 }

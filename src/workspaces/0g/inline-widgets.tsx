@@ -1193,3 +1193,47 @@ export function RevenueSplitConsole({ workspace }: { workspace: Workspace }) {
     </div>
   );
 }
+
+// ── Live Contracts Panel ───────────────────────────────────────────────────────
+function envAddr(key: string): string | null {
+  const v = (import.meta.env as Record<string, string | undefined>)[key];
+  return v && v.trim() ? v.trim() : null;
+}
+
+const EXPLORER = "https://chainscan.0g.ai";
+
+const OG_CONTRACTS = [
+  { label: "AgentReceiptRegistry", envKey: "VITE_0G_REGISTRY_ADDRESS", fallback: "0xF4BFd93061B160Fa376c7F66De207a00225B4e70", badge: "live" },
+  { label: "ServiceRegistry",      envKey: "VITE_0G_SERVICE_REGISTRY_MAINNET_ADDRESS", fallback: "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8", badge: "live" },
+  { label: "AgentBudget",          envKey: "VITE_0G_AGENT_BUDGET_MAINNET_ADDRESS",     fallback: "0xA8302734081F26b8a3E42f90DCf07b3E063441de", badge: "live" },
+  { label: "DeliveryVerifier",     envKey: "VITE_0G_DELIVERY_VERIFIER_MAINNET_ADDRESS", fallback: "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6", badge: "live" },
+] as const;
+
+export function OgLiveContractsPanel() {
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>0G Mainnet Contracts</span>
+        <span style={{ fontSize: ".63rem", color: "#4ade80", fontWeight: 700, background: "#4ade8018", padding: "2px 7px", borderRadius: 5 }}>chainId 16661</span>
+      </div>
+      {OG_CONTRACTS.map((c) => {
+        const addr = envAddr(c.envKey) ?? c.fallback;
+        const short = `${addr.slice(0, 8)}…${addr.slice(-6)}`;
+        return (
+          <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
+            <ShieldCheck width={13} height={13} style={{ color: "#4ade80", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
+              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{addr}</div>
+            </div>
+            <a
+              href={`${EXPLORER}/address/${addr}`}
+              target="_blank" rel="noreferrer"
+              style={{ fontSize: ".6rem", color: "#4ade80", fontWeight: 700, textDecoration: "none", background: "#4ade8014", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap" }}
+            >{short} ↗</a>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
