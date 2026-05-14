@@ -31,17 +31,6 @@ export const services: Service[] = [
     description: "Sealed read/write of private agent memory; only the agent's keypair can decrypt.",
     sampleResponse: { ref: "0g-sealed://<hash>", accessRule: "agent-key-only" } }),
 
-  // Liquify
-  svc({ id: "svc_liq_wallet_risk", workspaceIds: ["liquify"], name: "Liquify · Wallet Risk", category: "analytics", priceUsd: 0.05,
-    description: "Risk score + labels + approval exposure for an EVM address, powered by the Liquify indexer.",
-    sampleResponse: { riskScore: 82, labels: ["DeFi veteran", "2 unlimited approvals"], summary: "…" } }),
-  svc({ id: "svc_liq_signal", workspaceIds: ["liquify"], name: "Liquify · Trading Signal", category: "trading", priceUsd: 0.1,
-    description: "Indexed buy/sell/hold signal with confidence for a pair.",
-    sampleResponse: { pair: "ETH/USDC", signal: "hold", confidence: 0.61 } }),
-  svc({ id: "svc_liq_tax", workspaceIds: ["liquify"], name: "Liquify · Tax Classifier", category: "tax", priceUsd: 0.08,
-    description: "Categorize a wallet's taxable events (swaps, LP, bridges, staking) into a draft report.",
-    sampleResponse: { taxableEvents: 14, realizedPnlUsd: 1234.5, jurisdictionTags: ["US"] } }),
-
   // QIE
   svc({ id: "svc_qie_checkout", workspaceIds: ["qie"], name: "QIE · Merchant Checkout", category: "payment", priceUsd: 0.01,
     description: "Hosted checkout link on the QIE rail; returns a pay URL + invoice id.",
