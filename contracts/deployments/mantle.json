@@ -3,7 +3,7 @@
   "identityRegistry": "0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB",
   "agentVault": "0xCbBcFc657787Fef2702ae6E35CA5a809a68480da",
   "budgetController": "0x54d203df5e5123d798581Dd61172F7E2a021A156",
-  "serviceRegistry": null,
+  "serviceRegistry": "0x441fE2B53A85a38572C94688b2344a096ECe50cc",
   "receiptNft": "0x9dD4Df1dE852c8308A2d3Aa6bD8e2257Dd786A09",
   "creditRegistry": "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9",
   "yieldToken": "0xcDA86A272531e8640cD7F1a92c01839911B90bb0",
@@ -12,5 +12,6 @@
   "chainId": 5000,
   "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   "explorer": "https://explorer.mantle.xyz",
-  "deployedAt": "2026-05-13T09:53:54.363Z"
+  "deployedAt": "2026-05-13T09:53:54.363Z",
+  "serviceRegistryTxHash": "0xa8f4ba3b4ec9d1dc29f68e80d805530c9f94b34405ae7f449c3556f080fad447"
 }

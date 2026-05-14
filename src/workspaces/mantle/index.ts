@@ -13,7 +13,7 @@ export const workspace: Workspace = {
   pitch: "Agent wallets with spend policy buy Mantle alpha, mETH/USDY yield signals and RWA risk reports per call.",
   tracks: ["Agentic Wallets & Economy", "AI Trading & Strategy", "AI Alpha & Data", "AI × RWA", "AI DevTools"],
   networks: ["mantle-sepolia"],
-  tabs: ["Overview", "Agent Economy", "Alpha Data", "Yield Optimizer", "RWA Data", "Trading Strategies", "AI DevTools", "Agent Credit Score"],
+  tabs: ["Overview", "Agent Economy", "Alpha Data", "Yield Compare", "Yield Optimizer", "RWA Data", "Trading Strategies", "AI DevTools", "Agent Credit Score", "Budget Dashboard", "A2A Loop"],
   accent: "#0FBF7A",
   darkAccent: "#2BE39C",
   Icon: MantleLogo,

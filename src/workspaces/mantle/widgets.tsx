@@ -1,14 +1,15 @@
 export { MantleAgentIdentity, MantleVaultPanel, MantleBudgetPanel } from "../../components/widgets/mantle/MantleOnchain";
-export { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget, AgentCreditLine } from "../../components/widgets/mantle-extra/MantleExtraWidgets";
+export { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget, AgentCreditLine, AgentBudgetDashboard, YieldComparisonWidget, MantleA2ALoopWidget } from "../../components/widgets/mantle-extra/MantleExtraWidgets";
 export { MantleEarnCalc, MantleAgentEconomyDashboard, MantlePortfolioRebalancer, MantleGasOptimizer, AlphaDesk, RwaRegistry, MantleEconomyLoop, YieldBoard, MantleDevToolsPanel } from "./inline-widgets";
 
+import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { ArrowUpRight, Bell, Database, Robot, Bolt, Receipt as RIco } from "../../icons402";
 import { MantleAgentIdentity, MantleVaultPanel, MantleBudgetPanel } from "../../components/widgets/mantle/MantleOnchain";
-import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget, AgentCreditLine } from "../../components/widgets/mantle-extra/MantleExtraWidgets";
+import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget, AgentCreditLine, AgentBudgetDashboard, YieldComparisonWidget, MantleA2ALoopWidget } from "../../components/widgets/mantle-extra/MantleExtraWidgets";
 import { MantleEarnCalc, MantleAgentEconomyDashboard, MantlePortfolioRebalancer, MantleGasOptimizer, AlphaDesk, RwaRegistry, MantleEconomyLoop, YieldBoard, MantleDevToolsPanel } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -56,6 +57,9 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
     nodes.push(<MantleDevToolsPanel key="devtools" workspace={workspace} />);
   }
   if (t.includes("credit")) nodes.push(<CreditScoreMeter key="credit" workspace={workspace} />);
+  if (t.includes("budget")) nodes.push(<AgentBudgetDashboard key="budget" workspace={workspace} />);
+  if (t.includes("compare")) nodes.push(<YieldComparisonWidget key="yieldcompare" workspace={workspace} />);
+  if (t.includes("a2a") || t.includes("loop")) nodes.push(<MantleA2ALoopWidget key="a2aloop" workspace={workspace} />);
   return nodes.length > 0 ? <>{nodes}</> : null;
 }
 
@@ -80,6 +84,20 @@ const MANTLE_CONTRACTS = [
   { label: "CreditRegistry (Sepolia)",     addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_CREDIT_ADDRESS"] ?? "0xA8302734081F26b8a3E42f90DCf07b3E063441de", explorer: "https://explorer.sepolia.mantle.xyz" },
 ] as const;
 
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      style={{ background: "none", border: "none", cursor: "pointer", color: copied ? "#0FBF7A" : "var(--muted)", padding: "2px 4px", borderRadius: 4, fontSize: 11, display: "flex", alignItems: "center" }}
+      title="Copy address"
+    >
+      {copied ? "✓" : "⎘"}
+    </button>
+  );
+}
+
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
   return (
     <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
@@ -94,7 +112,10 @@ export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string)
             <Database width={13} height={13} style={{ color: "#1A9AFF", flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
-              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{c.addr}</div>
+              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace", display: "flex", alignItems: "center", gap: 4 }}>
+                {c.addr}
+                <CopyBtn text={c.addr} />
+              </div>
             </div>
             <a href={`${c.explorer}/address/${c.addr}`} target="_blank" rel="noreferrer"
               style={{ fontSize: ".6rem", color: "#1A9AFF", fontWeight: 700, textDecoration: "none", background: "#1A9AFF14", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap" }}

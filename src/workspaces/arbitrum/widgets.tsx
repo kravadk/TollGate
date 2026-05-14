@@ -1,7 +1,7 @@
 export { ArbitrumEscrowPanel } from "../../components/widgets/arbitrum/ArbitrumEscrowPanel";
 export { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "../../components/widgets/arbitrum-extra/ArbitrumExtraWidgets";
 export { AgentIntentWidget } from "../../components/widgets/arbitrum-extra/AgentIntentWidget";
-export { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel } from "./inline-widgets";
+export { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel, ArbBudgetPanel, ArbOnChainRegistry, ArbDisputePanel, ArbAgentReputation } from "./inline-widgets";
 
 import type { ReactNode } from "react";
 import type { Service, Workspace } from "../../types";
@@ -11,7 +11,7 @@ import { Send, Shield, Globe, Robot, Lock, Receipt as RIco } from "../../icons40
 import { ArbitrumEscrowPanel } from "../../components/widgets/arbitrum/ArbitrumEscrowPanel";
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "../../components/widgets/arbitrum-extra/ArbitrumExtraWidgets";
 import { AgentIntentWidget } from "../../components/widgets/arbitrum-extra/AgentIntentWidget";
-import { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel } from "./inline-widgets";
+import { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel, ArbBudgetPanel, ArbOnChainRegistry, ArbDisputePanel, ArbAgentReputation } from "./inline-widgets";
 
 export const signature: SigBlock = {
   title: "Orbit & USDC settlement",
@@ -39,7 +39,10 @@ export function cards({ onGoTab, onOpenPayment: _onOpenPayment, wsReceipts, def:
 
 export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[], onOpenPayment: (s: Service) => void): ReactNode | null {
   const nodes: ReactNode[] = [];
-  if (t.includes("escrow")) nodes.push(<ArbitrumEscrowPanel key="escrow" workspace={workspace} />);
+  if (t.includes("escrow")) {
+    nodes.push(<ArbitrumEscrowPanel key="escrow" workspace={workspace} />);
+    nodes.push(<ArbDisputePanel key="dispute" workspace={workspace} />);
+  }
   if (t.includes("orbit") || t.includes("monitor")) nodes.push(<RobinhoodChainPanel key="robinhood" workspace={workspace} />);
   if (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) {
     nodes.push(<ArbPaymentFlowDiagram key="flow" />);
@@ -50,6 +53,8 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
   }
   if (t.includes("agent") || t.includes("marketplace")) {
     nodes.push(<AgentServiceRegistry key="registry" workspace={workspace} onOpenPayment={onOpenPayment} />);
+    nodes.push(<ArbBudgetPanel key="budget" workspace={workspace} />);
+    nodes.push(<ArbOnChainRegistry key="onchain-reg" workspace={workspace} />);
   }
   if (t.includes("stylus") || t.includes("rust")) {
     nodes.push(<StylusSnippetViewer key="stylus" workspace={workspace} />);
@@ -60,6 +65,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
   if (t.includes("risk") || t.includes("rule") || t.includes("protection")) {
     nodes.push(<ArbAllowanceManager key="allowance" workspace={workspace} />);
     nodes.push(<SpendRulesEditor key="rules" workspace={workspace} services={[]} />);
+    nodes.push(<ArbAgentReputation key="reputation" workspace={workspace} />);
   }
   return nodes.length > 0 ? <>{nodes}</> : null;
 }

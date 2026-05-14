@@ -373,9 +373,77 @@ export async function recordAgentPayment(params: { agentAddress: string; amountC
   if (!cfg.creditAddress) throw new Error("AgentCreditRegistry not configured (set VITE_MANTLE_CREDIT_ADDRESS).");
   const signer = await getMantleSigner();
   const c = new Contract(cfg.creditAddress, CREDIT_ABI, signer);
-  // convert cents to 18-dec wei: $0.10 = 10 cents = 0.10 * 1e18 wei
   const amountWei = BigInt(Math.round(params.amountCents * 1e16));
   const tx = await c.recordPayment(params.agentAddress, amountWei);
   await tx.wait();
+  _creditCache.delete(params.agentAddress.toLowerCase());
   return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+}
+
+// ─── Read-only RPC helpers (no wallet required) ───────────────────────────────
+
+const MANTLE_PUBLIC_RPC = "https://rpc.mantle.xyz";
+
+async function mantlePublicRpc(method: string, params: unknown[] = []): Promise<unknown> {
+  const res = await fetch(MANTLE_PUBLIC_RPC, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const j = await res.json() as { result?: unknown; error?: { message: string } };
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+
+/** Live Mantle gas price in human-readable form e.g. "2.3 gwei". */
+export async function fetchMantleGasPrice(): Promise<string> {
+  try {
+    const hex = (await mantlePublicRpc("eth_gasPrice")) as string;
+    return `${(parseInt(hex, 16) / 1e9).toFixed(2)} gwei`;
+  } catch { return "—"; }
+}
+
+/** Live APYs for mETH and USDY from DeFiLlama yields API. Falls back to protocol-published defaults. */
+export async function fetchMantleApys(): Promise<{ mEthApy: number; usdyApy: number }> {
+  try {
+    const r = await fetch("https://yields.llama.fi/pools", { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) throw new Error("llama " + r.status);
+    const data = await r.json() as { data: Array<{ chain: string; symbol: string; apy: number }> };
+    const pools = data.data.filter((p) => p.chain === "Mantle");
+    const mEthPool = pools.find((p) => /meth/i.test(p.symbol));
+    const usdyPool = pools.find((p) => /usdy/i.test(p.symbol));
+    return {
+      mEthApy: mEthPool?.apy ? parseFloat(mEthPool.apy.toFixed(2)) : 3.9,
+      usdyApy: usdyPool?.apy ? parseFloat(usdyPool.apy.toFixed(2)) : 5.1,
+    };
+  } catch {
+    return { mEthApy: 3.9, usdyApy: 5.1 };
+  }
+}
+
+/** Total agents registered in AgentCreditRegistry (read via public RPC, no wallet needed). */
+export async function fetchTotalAgentCount(): Promise<number> {
+  const cfg = getMantleConfig();
+  if (!cfg.creditAddress) return 0;
+  try {
+    // totalAgentCount() selector = keccak256("totalAgentCount()")[:4] = 0x5c76b8b7
+    const result = (await mantlePublicRpc("eth_call", [
+      { to: cfg.creditAddress, data: "0x5c76b8b7" },
+      "latest",
+    ])) as string;
+    return result && result !== "0x" ? parseInt(result, 16) : 0;
+  } catch { return 0; }
+}
+
+/** 30-second TTL in-memory cache for credit record reads — avoids redundant RPC round-trips. */
+const _creditCache = new Map<string, { record: CreditRecord; ts: number }>();
+const CREDIT_TTL_MS = 30_000;
+
+export async function getCreditRecordCached(agentAddress: string): Promise<CreditRecord> {
+  const key = agentAddress.toLowerCase();
+  const cached = _creditCache.get(key);
+  if (cached && Date.now() - cached.ts < CREDIT_TTL_MS) return cached.record;
+  const record = await getCreditRecord(agentAddress);
+  _creditCache.set(key, { record, ts: Date.now() });
+  return record;
 }

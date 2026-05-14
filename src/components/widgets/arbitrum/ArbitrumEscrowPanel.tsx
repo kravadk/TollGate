@@ -6,9 +6,10 @@ import { useWallet } from "../../../wallet";
 import { useLocalStore } from "../../../lib/storage";
 import { sha256Hex } from "../../../lib/util-hash";
 import {
-  isArbitrumEscrowConfigured, getArbitrumConfig, arbitrumExplorerTxUrl, arbitrumExplorerAddrUrl,
-  openEscrow, releaseEscrow, refundEscrow, cancelEscrow, getEscrowView, type EscrowView,
+  getArbitrumConfig, arbitrumExplorerTxUrl, arbitrumExplorerAddrUrl,
+  openEscrow, releaseEscrow, refundEscrow, cancelEscrow, getEscrowView, formatDeadlineRelative, type EscrowView,
 } from "../../../lib/arbitrum";
+import type { NetworkMode } from "../../../lib/chains";
 import { ActionPanel } from "../ActionPanel";
 
 const headStyle: CSSProperties = { fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 };
@@ -23,7 +24,8 @@ type LocalEscrow = { id: number | null; txHash: string; payee: string; amountEth
 export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const wallet = useWallet();
-  const cfg = getArbitrumConfig();
+  const [netMode, setNetMode] = useState<NetworkMode>("testnet");
+  const cfg = getArbitrumConfig(netMode);
   const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("0.001");
   const [mins, setMins] = useState("30");
@@ -34,7 +36,7 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
   const [last, setLast] = useState<{ id: number | null; txHash: string } | null>(null);
   const [log, setLog] = useLocalStore<LocalEscrow[]>("arb.escrow.log", []);
 
-  if (!isArbitrumEscrowConfigured()) {
+  if (!cfg.escrowAddress) {
     return (
       <div className="panel block" style={{ borderStyle: "dashed" }}>
         <div className="block-head"><div className="ttl"><span className="sq soft"><Badge width={15} height={15} /></span><div><h3>AgentEscrow on Arbitrum — not wired yet</h3><div className="sub">scaffolded, one command from live</div></div></div></div>
@@ -90,6 +92,8 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
       sub={`Real escrow on Arbitrum Sepolia: the agent funds it (native ETH), releases on delivery, refunds after the deadline, or the provider cancels. Single-claim, no admin. Contract ${SHORT(cfg.escrowAddress!)}.`}
       actions={
         <span className="row sm" style={{ gap: 6 }}>
+          <button className={"pill click" + (netMode === "testnet" ? " on" : "")} type="button" onClick={() => setNetMode("testnet")} style={{ fontSize: ".65rem" }}>Sepolia</button>
+          <button className={"pill click" + (netMode === "mainnet" ? " on" : "")} type="button" onClick={() => setNetMode("mainnet")} style={{ fontSize: ".65rem" }}>Mainnet</button>
           <a className="btn btn-ghost btn-sm" href={arbitrumExplorerAddrUrl(cfg.escrowAddress!)} target="_blank" rel="noreferrer">Contract <ExternalLink width={11} height={11} /></a>
           <button className="btn btn-acc btn-sm" type="button" onClick={open} disabled={busy}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Opening…</> : <><HandCoins width={13} height={13} /> Open escrow</>}</button>
         </span>
@@ -135,7 +139,7 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
                   <td>{e.id != null ? <span className="pill ok">#{e.id}</span> : "—"}</td>
                   <td><code>{SHORT(e.payee)}</code></td>
                   <td className="svc-table__num">{e.amountEth} ETH</td>
-                  <td className="muted svc-table__num">{new Date(e.deadline * 1000).toLocaleTimeString()}</td>
+                  <td className="muted svc-table__num" title={new Date(e.deadline * 1000).toLocaleString()}>{(() => { const d = formatDeadlineRelative(e.deadline); return <span style={d.expired ? { color: "var(--red)" } : {}}>{d.label}</span>; })()}</td>
                   <td>{e.state === "Open" ? <span className="pill">open</span> : e.state === "Released" ? <span className="pill ok">released</span> : e.state === "Refunded" ? <span className="pill">refunded</span> : "—"}</td>
                   <td><a href={arbitrumExplorerTxUrl(e.txHash)} target="_blank" rel="noreferrer"><code>{e.txHash.slice(0, 10)}…</code></a></td>
                   <td>

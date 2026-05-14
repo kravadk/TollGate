@@ -55,6 +55,7 @@ contract AgentVault {
         uint256 dep = deployedOf[msg.sender] + amount;
         deployedOf[msg.sender] = dep;
         totalDeployed += amount;
+        if (_firstDeployBlock[msg.sender] == 0) _firstDeployBlock[msg.sender] = uint32(block.number);
         emit DeployedToYield(msg.sender, amount, strategyRef, yieldToken, dep);
     }
 
@@ -91,6 +92,21 @@ contract AgentVault {
     /// @notice Idle + deployed for an agent.
     function positionOf(address agent) external view returns (uint256 idle, uint256 deployed) {
         return (balanceOf[agent], deployedOf[agent]);
+    }
+
+    // #19 Approximate yield earned: 3.9% APY on deployed balance since first deploy block.
+    //     Informational only — no settlement or minting.
+    uint256 private constant BLOCKS_PER_YEAR = 2_628_000; // ~12s average block time
+
+    mapping(address => uint32) private _firstDeployBlock;
+
+    function earnedYield(address agent) external view returns (uint256) {
+        uint256 dep = deployedOf[agent];
+        if (dep == 0) return 0;
+        uint256 startBlock = _firstDeployBlock[agent];
+        if (startBlock == 0 || block.number <= startBlock) return 0;
+        uint256 blocksElapsed = block.number - startBlock;
+        return dep * 39 * blocksElapsed / (1000 * BLOCKS_PER_YEAR);
     }
 
     receive() external payable {

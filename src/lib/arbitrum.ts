@@ -36,6 +36,9 @@ const ARBITRUM_ADD_CHAIN: Record<string, unknown> = {
 
 export type ArbitrumConfig = {
   escrowAddress: string | null;
+  budgetAddress: string | null;
+  serviceRegistryAddress: string | null;
+  intentSettlerAddress: string | null;
   explorerBase: string;   // no trailing slash
   chainHex: string;       // lowercase 0x…
 };
@@ -45,20 +48,41 @@ export function getArbitrumConfig(mode?: NetworkMode): ArbitrumConfig {
   const defaultExplorer = isMainnet ? "https://arbiscan.io" : "https://sepolia.arbiscan.io";
   const defaultChainHex = isMainnet ? "0xa4b1" : ARBITRUM_DEFAULT_CHAIN_HEX;
   const escrowVar = isMainnet ? "VITE_ARBITRUM_MAINNET_ESCROW_ADDRESS" : "VITE_ARBITRUM_ESCROW_ADDRESS";
+  const budgetVar = isMainnet ? "VITE_ARB_MAINNET_AGENT_BUDGET_ADDRESS" : "VITE_ARB_BUDGET_ADDRESS";
+  const registryVar = isMainnet ? "VITE_ARB_MAINNET_SERVICE_REGISTRY_ADDRESS" : "VITE_ARB_SERVICE_REGISTRY_ADDRESS";
   const explorer = (env("VITE_ARBITRUM_EXPLORER") ?? defaultExplorer).replace(/\/+$/, "");
   const chainRaw = env("VITE_ARBITRUM_CHAIN_ID");
   let chainHex = defaultChainHex;
   if (chainRaw && !isMainnet) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
   return {
     escrowAddress: env(escrowVar) ?? null,
+    budgetAddress: env(budgetVar) ?? null,
+    serviceRegistryAddress: env(registryVar) ?? null,
+    intentSettlerAddress: env("VITE_ARB_INTENT_SETTLER_ADDRESS") ?? null,
     explorerBase: explorer,
     chainHex,
   };
 }
 
 export function isArbitrumEscrowConfigured(): boolean { return getArbitrumConfig().escrowAddress !== null; }
+export function isArbitrumBudgetConfigured(): boolean { return getArbitrumConfig().budgetAddress !== null; }
+export function isArbitrumRegistryConfigured(): boolean { return getArbitrumConfig().serviceRegistryAddress !== null; }
 export function arbitrumExplorerTxUrl(txHash: string): string { return `${getArbitrumConfig().explorerBase}/tx/${txHash}`; }
 export function arbitrumExplorerAddrUrl(addr: string): string { return `${getArbitrumConfig().explorerBase}/address/${addr}`; }
+
+export function formatDeadlineRelative(deadlineSec: number): { label: string; expired: boolean } {
+  const diffMs = deadlineSec * 1000 - Date.now();
+  const expired = diffMs <= 0;
+  const abs = Math.abs(diffMs);
+  const mins = Math.floor(abs / 60_000);
+  const hrs = Math.floor(abs / 3_600_000);
+  const days = Math.floor(abs / 86_400_000);
+  let label: string;
+  if (days > 0) label = `${days}d ${Math.floor((abs % 86_400_000) / 3_600_000)}h`;
+  else if (hrs > 0) label = `${hrs}h ${Math.floor((abs % 3_600_000) / 60_000)}m`;
+  else label = `${mins}m`;
+  return { label: expired ? `Expired ${label} ago` : `Expires in ${label}`, expired };
+}
 
 const ESCROW_ABI = [
   "function open(address payee, address token, uint256 amount, uint64 deadline, bytes32 ref) payable returns (uint256 id)",
@@ -184,4 +208,82 @@ export async function getEscrowView(id: number): Promise<EscrowView | null> {
       ref: e.ref,
     };
   } catch { return null; }
+}
+
+// ─── AgentBudgetController ───────────────────────────────────────────────────
+
+const BUDGET_ABI = [
+  "function setBudget(address agent, uint128 dailyLimitCents, uint128 perRequestMaxCents, bool autoPay) external",
+  "function getBudget(address agent) view returns (uint128 dailyLimitCents, uint128 perRequestMaxCents, uint64 dayStart, uint128 spentToday, bool autoPay)",
+  "function spentToday(address agent) view returns (uint128)",
+];
+
+export type AgentBudget = {
+  dailyLimitCents: number;
+  perRequestMaxCents: number;
+  dayStart: number;
+  spentToday: number;
+  autoPay: boolean;
+};
+
+function budgetContract(signerOrProvider: unknown) {
+  const cfg = getArbitrumConfig("mainnet");
+  const addr = cfg.budgetAddress ?? "0x68c17e2e69DD79651457D440B5f5DCE77B9ad732";
+  return new Contract(addr, BUDGET_ABI, signerOrProvider as never);
+}
+
+export async function getAgentBudget(agentAddr: string): Promise<AgentBudget | null> {
+  try {
+    const eth = getEth();
+    const provider = new BrowserProvider(eth as never);
+    const b = await budgetContract(provider).getBudget(agentAddr);
+    return {
+      dailyLimitCents: Number(b.dailyLimitCents),
+      perRequestMaxCents: Number(b.perRequestMaxCents),
+      dayStart: Number(b.dayStart),
+      spentToday: Number(b.spentToday),
+      autoPay: b.autoPay,
+    };
+  } catch { return null; }
+}
+
+export async function setAgentBudget(agentAddr: string, dailyLimitCents: number, perRequestMaxCents: number, autoPay: boolean): Promise<{ txHash: string; explorerUrl: string }> {
+  const signer = await getArbitrumSigner();
+  const tx = await budgetContract(signer).setBudget(agentAddr, BigInt(dailyLimitCents), BigInt(perRequestMaxCents), autoPay);
+  await tx.wait();
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
+}
+
+// ─── ServiceRegistry ─────────────────────────────────────────────────────────
+
+const REGISTRY_ABI = [
+  "function register(string serviceId, string name, string endpointUrl, uint96 priceUsdc, address provider, string agentCardUri) external payable",
+  "function deregister(bytes32 id) external",
+  "function getService(bytes32 id) view returns (string serviceId, string name, string endpointUrl, uint96 priceUsdc, address provider, bool active, string agentCardUri)",
+  "function totalServices() view returns (uint256)",
+  "event ServiceRegistered(bytes32 indexed id, string serviceId, address indexed provider)",
+];
+
+export type OnChainService = {
+  serviceId: string; name: string; endpointUrl: string;
+  priceUsdc: number; provider: string; active: boolean; agentCardUri: string;
+};
+
+function registryContract(signerOrProvider: unknown) {
+  const cfg = getArbitrumConfig("mainnet");
+  const addr = cfg.serviceRegistryAddress ?? "0x8403F655Cb8750012D443c135840185691039236";
+  return new Contract(addr, REGISTRY_ABI, signerOrProvider as never);
+}
+
+export async function registerService(params: { serviceId: string; name: string; endpointUrl: string; priceUsdc: number; provider: string; agentCardUri?: string }): Promise<{ txHash: string; explorerUrl: string }> {
+  const signer = await getArbitrumSigner();
+  const listingFee = parseEther("0.0001");
+  const tx = await registryContract(signer).register(
+    params.serviceId, params.name, params.endpointUrl,
+    BigInt(Math.round(params.priceUsdc * 100)), params.provider,
+    params.agentCardUri ?? "",
+    { value: listingFee }
+  );
+  await tx.wait();
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
 }

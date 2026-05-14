@@ -23,13 +23,17 @@ contract AgentCreditRegistry {
 
     uint256 public totalAgentCount;
 
-    /// @notice Owner — can set the Stylus verifier address.
+    /// @notice Owner — can set the Stylus verifier address and manage gateways.
     address public owner;
     /// @notice Optional Rust/Stylus contract for gas-efficient score computation.
     ///         Set to address(0) to use inline Solidity fallback.
     address public stylusVerifier;
 
+    // #17 Gateway allowlist — only trusted TollGate gateways may record payments.
+    mapping(address => bool) public trustedGateways;
+
     event StylusVerifierSet(address indexed verifier);
+    event GatewayUpdated(address indexed gateway, bool trusted);
 
     event PaymentRecorded(
         address indexed agent,
@@ -43,10 +47,19 @@ contract AgentCreditRegistry {
         uint64  newMissedPayments,
         uint256 newScore
     );
+    // #18 Emitted when an agent first crosses the Gold threshold (score >= 800).
+    event TierBadgeMinted(address indexed agent, uint256 score, string tier);
 
     error ZeroAgent();
     error ZeroAmount();
     error NotOwner();
+    error NotGateway();
+
+    // #17 Owner is always allowed to cover bootstrap before any gateway is set.
+    modifier onlyGateway() {
+        if (!trustedGateways[msg.sender] && msg.sender != owner) revert NotGateway();
+        _;
+    }
 
     constructor() {
         owner = msg.sender;
@@ -60,12 +73,20 @@ contract AgentCreditRegistry {
         emit StylusVerifierSet(_verifier);
     }
 
-    /// @notice Record a successful x402 payment. Called by the TollGate gateway
-    ///         after every successful settlement.
-    function recordPayment(address agent, uint128 amountWei) external returns (uint256 score) {
+    /// @notice Add or remove a trusted TollGate gateway address.
+    function setGateway(address gateway, bool trusted) external {
+        if (msg.sender != owner) revert NotOwner();
+        trustedGateways[gateway] = trusted;
+        emit GatewayUpdated(gateway, trusted);
+    }
+
+    /// @notice Record a successful x402 payment. Restricted to trusted gateways.
+    function recordPayment(address agent, uint128 amountWei) external onlyGateway returns (uint256 score) {
         if (agent == address(0)) revert ZeroAgent();
         if (amountWei == 0) revert ZeroAmount();
         AgentRecord storage r = _records[agent];
+        // Capture score before mutation for tier-badge comparison.
+        uint256 prevScore = _computeScore(r);
         if (r.firstSeenBlock == 0) {
             r.firstSeenBlock = uint32(block.number);
             totalAgentCount++;
@@ -74,11 +95,15 @@ contract AgentCreditRegistry {
         r.totalVolumeWei += amountWei;
         r.lastSeenBlock = uint32(block.number);
         score = _computeScore(r);
+        // #18 Emit badge event the first time an agent crosses the Gold threshold.
+        if (prevScore < 800 && score >= 800) {
+            emit TierBadgeMinted(agent, score, "Gold");
+        }
         emit PaymentRecorded(agent, amountWei, r.totalPayments, score, r.lastSeenBlock);
     }
 
-    /// @notice Record a missed/failed payment (reduces score).
-    function recordMissedPayment(address agent) external returns (uint256 score) {
+    /// @notice Record a missed/failed payment (reduces score). Restricted to trusted gateways.
+    function recordMissedPayment(address agent) external onlyGateway returns (uint256 score) {
         if (agent == address(0)) revert ZeroAgent();
         AgentRecord storage r = _records[agent];
         r.missedPayments++;

@@ -1,4 +1,4 @@
-﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -76,10 +76,20 @@ import {
 } from "./widgets/sui/SuiWidgets";
 import { OpenClawSkillConsole, TeeAttestationVerifier, DePinBulkPin } from "./widgets/og-extra/OgExtraWidgets";
 import { OgIntegrationStatus } from "./widgets/og-extra/OgIntegrationStatus";
-import { StrategyDeployPanel, YieldProjectionCalc, WhaleAlertFeed, CreditScoreMeter, AlphaBotWidget, AgentCreditLine } from "./widgets/mantle-extra/MantleExtraWidgets";
+// #16 Lazy-load MantleExtraWidgets to split this heavy bundle out of the main chunk.
+const _mew = () => import("./widgets/mantle-extra/MantleExtraWidgets");
+const StrategyDeployPanel   = lazy(() => _mew().then((m) => ({ default: m.StrategyDeployPanel })));
+const YieldProjectionCalc   = lazy(() => _mew().then((m) => ({ default: m.YieldProjectionCalc })));
+const WhaleAlertFeed        = lazy(() => _mew().then((m) => ({ default: m.WhaleAlertFeed })));
+const CreditScoreMeter      = lazy(() => _mew().then((m) => ({ default: m.CreditScoreMeter })));
+const AlphaBotWidget        = lazy(() => _mew().then((m) => ({ default: m.AlphaBotWidget })));
+const AgentCreditLine       = lazy(() => _mew().then((m) => ({ default: m.AgentCreditLine })));
+const AgentBudgetDashboard  = lazy(() => _mew().then((m) => ({ default: m.AgentBudgetDashboard })));
+const YieldComparisonWidget = lazy(() => _mew().then((m) => ({ default: m.YieldComparisonWidget })));
+const MantleA2ALoopWidget   = lazy(() => _mew().then((m) => ({ default: m.MantleA2ALoopWidget })));
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "./widgets/arbitrum-extra/ArbitrumExtraWidgets";
 import { AgentIntentWidget } from "./widgets/arbitrum-extra/AgentIntentWidget";
-import { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel } from "../workspaces/arbitrum/inline-widgets";
+import { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel, ArbBudgetPanel, ArbOnChainRegistry, ArbDisputePanel, ArbAgentReputation } from "../workspaces/arbitrum/inline-widgets";
 import { EconomyDashboard, OgDemoFlow, OgStorageEstimator, OgComputeCostChart, OgSocialFeedWidget, OgComputeKanban, OgPrivacyStepper, OgAgentToAgentLoop, OgTradingArenaWidget, AgentIdRegistry, RevenueSplitConsole } from "../workspaces/0g/inline-widgets";
 import { MantleEarnCalc, MantleAgentEconomyDashboard, MantlePortfolioRebalancer, MantleGasOptimizer, AlphaDesk, RwaRegistry, MantleEconomyLoop, YieldBoard, MantleDevToolsPanel } from "../workspaces/mantle/inline-widgets";
 import { QieBillSplitter, QieRequestPay, QieWalletDashboard, QieCreatorSubscriptions, QieSalesAnalytics, QiePassIssuer, QieCreatorTipsWidget, AgentWalletConsole, QieCreditWidget, QieOracleFeedWidget } from "../workspaces/qie/widgets";
@@ -1903,7 +1913,7 @@ export function ServiceTabPage({
     isVerifyFlavor || t.includes("compute") || t.includes("inference") || t.includes("storage") ||
     t.includes("checkout") || t.includes("orbit") || t.includes("monitor") || t.includes("qiedex") || t.includes("dex") ||
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
-    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit"))) ||
+    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("compare") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit") || t.includes("budget") || t.includes("a2a") || t.includes("loop"))) ||
     (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("widget") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet") || t.includes("oracle") || t.includes("credit"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
@@ -1933,6 +1943,7 @@ export function ServiceTabPage({
 
       {t.includes("escrow") && <InteractiveEscrow workspace={workspace} />}
       {workspace.id === "arbitrum" && t.includes("escrow") && <ArbitrumEscrowPanel workspace={workspace} />}
+      {workspace.id === "arbitrum" && t.includes("escrow") && <ArbDisputePanel workspace={workspace} />}
 
       {(t.includes("strateg") || t.includes("sandbox")) && <BacktestRunner workspace={workspace} />}
 
@@ -2000,6 +2011,8 @@ export function ServiceTabPage({
       {workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) && <BatchPayoutConsole workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) && <ArbRecurringPayments workspace={workspace} />}
       {workspace.id === "arbitrum" && t.includes("agent") && <AgentServiceRegistry workspace={workspace} onOpenPayment={onOpenPayment} />}
+      {workspace.id === "arbitrum" && (t.includes("agent") || t.includes("marketplace")) && <ArbBudgetPanel workspace={workspace} />}
+      {workspace.id === "arbitrum" && (t.includes("agent") || t.includes("marketplace")) && <ArbOnChainRegistry workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("agent") || t.includes("marketplace")) && <DiscoveryWidget />}
       {workspace.id === "arbitrum" && t.includes("marketplace") && <MerchantWidget />}
       {workspace.id === "arbitrum" && (t.includes("stylus") || t.includes("rust") || t.includes("agent")) && <StylusSnippetViewer workspace={workspace} />}
@@ -2008,21 +2021,25 @@ export function ServiceTabPage({
       {workspace.id === "arbitrum" && t.includes("stylus") && <ArbContractPaymentSim workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection")) && <ArbAllowanceManager workspace={workspace} />}
       {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection")) && <SpendRulesEditor workspace={workspace} services={base} />}
+      {workspace.id === "arbitrum" && (t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("wallet")) && <ArbAgentReputation workspace={workspace} />}
       {workspace.id === "mantle" && t.includes("economy") && <MantleAgentEconomyDashboard workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("agent") || t.includes("marketplace") || t.includes("economy")) && <DiscoveryWidget />}
       {workspace.id === "mantle" && (t.includes("agent") || t.includes("marketplace")) && <MerchantWidget />}
       {workspace.id === "mantle" && t.includes("alpha") && <AlphaDesk workspace={workspace} />}
-      {workspace.id === "mantle" && t.includes("alpha") && <WhaleAlertFeed workspace={workspace} />}
+      {workspace.id === "mantle" && t.includes("alpha") && <Suspense fallback={null}><WhaleAlertFeed workspace={workspace} /></Suspense>}
       {workspace.id === "mantle" && (t.includes("meth") || t.includes("usdy") || (t.includes("yield") && !t.includes("alpha"))) && <MantleEarnCalc workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("meth") || t.includes("usdy") || (t.includes("yield") && !t.includes("alpha"))) && <MantlePortfolioRebalancer workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("meth") || t.includes("usdy") || (t.includes("yield") && !t.includes("alpha"))) && <YieldBoard workspace={workspace} />}
-      {workspace.id === "mantle" && (t.includes("meth") || t.includes("usdy") || (t.includes("yield") && !t.includes("alpha"))) && <YieldProjectionCalc workspace={workspace} />}
-      {workspace.id === "mantle" && (t.includes("strateg") || t.includes("sandbox")) && <StrategyDeployPanel workspace={workspace} />}
+      {workspace.id === "mantle" && (t.includes("meth") || t.includes("usdy") || (t.includes("yield") && !t.includes("alpha"))) && <Suspense fallback={null}><YieldProjectionCalc workspace={workspace} /></Suspense>}
+      {workspace.id === "mantle" && (t.includes("strateg") || t.includes("sandbox")) && <Suspense fallback={null}><StrategyDeployPanel workspace={workspace} /></Suspense>}
       {workspace.id === "mantle" && t.includes("rwa") && <RwaRegistry workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("devtool") || t.includes("dev tool")) && <MantleGasOptimizer workspace={workspace} />}
       {workspace.id === "mantle" && (t.includes("devtool") || t.includes("dev tool")) && <MantleDevToolsPanel workspace={workspace} />}
-      {workspace.id === "mantle" && t.includes("credit") && <CreditScoreMeter workspace={workspace} />}
-      {workspace.id === "mantle" && t.includes("alpha") && <AlphaBotWidget workspace={workspace} />}
+      {workspace.id === "mantle" && t.includes("credit") && <Suspense fallback={null}><CreditScoreMeter workspace={workspace} /></Suspense>}
+      {workspace.id === "mantle" && t.includes("alpha") && <Suspense fallback={null}><AlphaBotWidget workspace={workspace} /></Suspense>}
+      {workspace.id === "mantle" && t.includes("budget") && <Suspense fallback={null}><AgentBudgetDashboard workspace={workspace} /></Suspense>}
+      {workspace.id === "mantle" && (t.includes("yield") || t.includes("compare")) && <Suspense fallback={null}><YieldComparisonWidget workspace={workspace} /></Suspense>}
+      {workspace.id === "mantle" && (t.includes("a2a") || t.includes("loop")) && <Suspense fallback={null}><MantleA2ALoopWidget workspace={workspace} /></Suspense>}
       {workspace.id === "sui" && (t.includes("walrus") || t.includes("storage")) && <WalrusStorageWidget workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("move") || t.includes("contracts")) && <MoveContractViewer workspace={workspace} />}
       {workspace.id === "sui" && (t.includes("nft") || t.includes("market")) && <SuiNftMarket workspace={workspace} />}
@@ -2346,7 +2363,7 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       {workspace.id === "mantle" && <MantleVaultPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleBudgetPanel workspace={workspace} />}
       {workspace.id === "mantle" && <MantleEconomyLoop workspace={workspace} />}
-      {workspace.id === "mantle" && <ErrorBoundary label="AgentCreditLine"><AgentCreditLine workspace={workspace} /></ErrorBoundary>}
+      {workspace.id === "mantle" && <ErrorBoundary label="AgentCreditLine"><Suspense fallback={null}><AgentCreditLine workspace={workspace} /></Suspense></ErrorBoundary>}
       {workspace.id === "mantle" && <AgentScoreCard agentId="agent_mantle_strategist" />}
       <div className="panel block">
         <div className="block-head"><div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Enforced on every paid request</h3><div className="sub">server-side — frontend is never the source of truth</div></div></div></div>

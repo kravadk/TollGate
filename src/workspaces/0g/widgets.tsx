@@ -27,6 +27,8 @@ import {
   OgLiveContractsPanel,
   LiveWalletBalance,
   OgDaMonitor,
+  OgGasFeeEstimator,
+  OgAllowlistManager,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -57,6 +59,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
   const nodes: ReactNode[] = [];
   if (t.includes("compute") || t.includes("inference")) {
     nodes.push(<OgSocialFeedWidget key="social" workspace={workspace} />);
+    nodes.push(<OgGasFeeEstimator key="gas" />);
     nodes.push(<OgComputeCostChart key="costchart" workspace={workspace} />);
     nodes.push(<InferenceJobRunner key="inference" workspace={workspace} />);
     nodes.push(<OgComputeKanban key="kanban" workspace={workspace} />);
@@ -83,6 +86,7 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
   return (
     <>
       <LiveWalletBalance />
+      <OgAllowlistManager />
       <OgIntegrationStatus />
       <OpenClawSkillConsole workspace={workspace} />
       <AgentIdRegistry workspace={workspace} />
