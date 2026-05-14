@@ -897,11 +897,39 @@ export function renderAgentPanel(ws: Workspace): ReactNode {
 }
 
 // ---------------------------------------------------------------------------
-// renderOverviewExtra() — no special extras for QIE overview
+// renderOverviewExtra() — deployed contracts panel
 // ---------------------------------------------------------------------------
 
+const QIE_CONTRACTS = [
+  { label: "QieCheckout (Mainnet v3)",    addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_CHECKOUT_ADDRESS"]     ?? "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8" },
+  { label: "QiePass (Mainnet v3)",        addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_PASS_ADDRESS"]          ?? "0xA8302734081F26b8a3E42f90DCf07b3E063441de" },
+  { label: "QieAgentCredit (Mainnet v3)", addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_AGENT_CREDIT_ADDRESS"]  ?? "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6" },
+  { label: "QieOracleFeed (Mainnet v3)",  addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_ORACLE_FEED_ADDRESS"]   ?? "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142" },
+] as const;
+
 export function renderOverviewExtra(_ws: Workspace): ReactNode {
-  return null;
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
+        <span style={{ fontSize: ".63rem", color: "#7c3aed", fontWeight: 700, background: "#7c3aed18", padding: "2px 7px", borderRadius: 5 }}>QIE Mainnet v3 · chainId 1990</span>
+      </div>
+      {QIE_CONTRACTS.map((c) => {
+        const short = `${c.addr.slice(0, 8)}…${c.addr.slice(-6)}`;
+        return (
+          <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
+              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{c.addr}</div>
+            </div>
+            <a href={`https://mainnet.qie.digital/address/${c.addr}`} target="_blank" rel="noreferrer"
+              style={{ fontSize: ".6rem", color: "#7c3aed", fontWeight: 700, textDecoration: "none", background: "#7c3aed14", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap" }}
+            >{short} ↗</a>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // Suppress unused-import warnings for utility functions kept for completeness

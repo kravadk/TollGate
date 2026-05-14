@@ -48,7 +48,9 @@ async function main() {
 
   const explorer = chainId === 1983n
     ? "https://testnet.qie.digital"
-    : "https://mainnet.qiblockchain.online";
+    : chainId === 1990n
+      ? "https://mainnet.qie.digital"
+      : "https://mainnet.qiblockchain.online";
 
   console.log(`\n📋 Copy to .env.local / Vercel:`);
   console.log(`VITE_QIE_CHECKOUT_ADDRESS=${checkoutAddr}`);

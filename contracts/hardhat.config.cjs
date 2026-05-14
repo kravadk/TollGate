@@ -22,6 +22,8 @@ const {
   ORBIT_RPC_URL,
   ORBIT_CHAIN_ID,
   QIE_RPC_URL,
+  QIE_MAINNET_RPC_URL,
+  QIE_MAINNET_V3_RPC_URL,
   QIE_PRIVATE_KEY,
   ARC_RPC_URL,
   ARC_PRIVATE_KEY,
@@ -88,6 +90,18 @@ module.exports = {
     qieTestnet: {
       url: QIE_RPC_URL || "https://rpc1testnet.qie.digital/",
       chainId: 1983,
+      accounts: qieAccounts,
+    },
+    // QIE legacy mainnet (chainId 5656). TLS issues on rpc-main1; use rpc-main2 as fallback.
+    qieMainnetLegacy: {
+      url: QIE_MAINNET_RPC_URL || "https://rpc-main2.qiblockchain.online/",
+      chainId: 5656,
+      accounts: qieAccounts,
+    },
+    // QIE mainnet v3 (chainId 1990) — current mainnet since July 2024.
+    qieMainnet: {
+      url: QIE_MAINNET_V3_RPC_URL || "https://rpc1mainnet.qie.digital/",
+      chainId: 1990,
       accounts: qieAccounts,
     },
     // Arc L1 testnet (chainId 5042002). USDC is native gas token.
