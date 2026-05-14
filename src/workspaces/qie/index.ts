@@ -13,7 +13,7 @@ export const workspace: Workspace = {
   pitch: "Merchants list paid AI/API services; agents settle through the QIE payment rail with QIE Pass gating.",
   tracks: ["DeFi & Payments", "AI + Web3", "Gaming & Metaverse", "Social & Community", "Infra & Tools"],
   networks: ["qie-testnet"],
-  tabs: ["Overview", "Merchant Checkout", "QIE Wallet", "QIE Pass", "Game Store", "Creator Hub"],
+  tabs: ["Overview", "Merchant Checkout", "QIE Wallet", "QIE Pass", "Oracle Feed", "Agent Credit", "Game Store", "Creator Hub"],
   accent: "#00C389",
   darkAccent: "#2EE3A8",
   Icon: QieLogo,

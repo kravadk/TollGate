@@ -82,7 +82,7 @@ import { AgentIntentWidget } from "./widgets/arbitrum-extra/AgentIntentWidget";
 import { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel } from "../workspaces/arbitrum/inline-widgets";
 import { EconomyDashboard, OgDemoFlow, OgStorageEstimator, OgComputeCostChart, OgSocialFeedWidget, OgComputeKanban, OgPrivacyStepper, OgAgentToAgentLoop, OgTradingArenaWidget, AgentIdRegistry, RevenueSplitConsole } from "../workspaces/0g/inline-widgets";
 import { MantleEarnCalc, MantleAgentEconomyDashboard, MantlePortfolioRebalancer, MantleGasOptimizer, AlphaDesk, RwaRegistry, MantleEconomyLoop, YieldBoard, MantleDevToolsPanel } from "../workspaces/mantle/inline-widgets";
-import { QieBillSplitter, QieRequestPay, QieWalletDashboard, QieCreatorSubscriptions, QieSalesAnalytics, QiePassIssuer, QieCreatorTipsWidget, AgentWalletConsole } from "../workspaces/qie/widgets";
+import { QieBillSplitter, QieRequestPay, QieWalletDashboard, QieCreatorSubscriptions, QieSalesAnalytics, QiePassIssuer, QieCreatorTipsWidget, AgentWalletConsole, QieCreditWidget, QieOracleFeedWidget } from "../workspaces/qie/widgets";
 import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "./widgets/qie-extra/QieExtraWidgets";
 import { A2AMarketplaceWidget } from "./widgets/A2AMarketplaceWidget";
 import { MerchantWidget } from "./widgets/MerchantWidget";
@@ -1905,7 +1905,7 @@ export function ServiceTabPage({
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
     (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit"))) ||
     (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("widget") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
-    (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
+    (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet") || t.includes("oracle") || t.includes("credit"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
     (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt") || t.includes("copy") || t.includes("reasoning") || t.includes("trace") || t.includes("signal") || t.includes("hub") || t.includes("kill") || t.includes("risk"))) ||
     (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("agent") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview") || t.includes("receipt")));
@@ -1991,6 +1991,8 @@ export function ServiceTabPage({
       {workspace.id === "qie" && (t.includes("social") || t.includes("creator")) && <QieCreatorSubscriptions workspace={workspace} />}
       {workspace.id === "qie" && t.includes("wallet") && <QieWalletDashboard workspace={workspace} />}
       {workspace.id === "qie" && t.includes("merchant") && <><MerchantPayoutsPanel workspace={workspace} /></>}
+      {workspace.id === "qie" && t.includes("oracle") && <QieOracleFeedWidget workspace={workspace} />}
+      {workspace.id === "qie" && t.includes("credit") && <QieCreditWidget workspace={workspace} />}
 
       {workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) && <ArbPaymentFlowDiagram />}
       {workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) && <ArbAddressBook />}
