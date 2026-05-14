@@ -7,6 +7,7 @@
  * otherwise the app degrades gracefully — same pattern as src/lib/og.ts.
  */
 import { BrowserProvider, Contract, parseEther } from "ethers";
+import type { NetworkMode } from "./chains";
 
 function env(key: string): string | undefined {
   const v = (import.meta.env as Record<string, string | undefined>)[key];
@@ -41,15 +42,20 @@ export type MantleConfig = {
   chainHex: string;         // lowercase 0x…
 };
 
-export function getMantleConfig(): MantleConfig {
-  const explorer = (env("VITE_MANTLE_EXPLORER") ?? "https://explorer.mantle.xyz").replace(/\/+$/, "");
+export function getMantleConfig(mode?: NetworkMode): MantleConfig {
+  const isTestnet = mode === "testnet";
+  const defaultExplorer = isTestnet ? "https://explorer.sepolia.mantle.xyz" : "https://explorer.mantle.xyz";
+  const defaultChainHex = isTestnet ? "0x138b" : MANTLE_DEFAULT_CHAIN_HEX;
+  const identityVar = isTestnet ? "VITE_MANTLE_TESTNET_IDENTITY_ADDRESS" : "VITE_MANTLE_IDENTITY_ADDRESS";
+  const creditVar = isTestnet ? "VITE_MANTLE_TESTNET_CREDIT_ADDRESS" : "VITE_MANTLE_CREDIT_ADDRESS";
+  const explorer = (env("VITE_MANTLE_EXPLORER") ?? defaultExplorer).replace(/\/+$/, "");
   const chainRaw = env("VITE_MANTLE_CHAIN_ID");
-  let chainHex = MANTLE_DEFAULT_CHAIN_HEX;
-  if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
+  let chainHex = defaultChainHex;
+  if (chainRaw && !isTestnet) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
   return {
-    identityAddress: env("VITE_MANTLE_IDENTITY_ADDRESS") ?? null,
+    identityAddress: env(identityVar) ?? null,
     vaultAddress: env("VITE_MANTLE_VAULT_ADDRESS") ?? null,
-    creditAddress: env("VITE_MANTLE_CREDIT_ADDRESS") ?? null,
+    creditAddress: env(creditVar) ?? null,
     explorerBase: explorer,
     chainHex,
   };

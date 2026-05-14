@@ -2,15 +2,14 @@ import { ZeroGLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
+const W2 = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
 
 export const workspace: Workspace = {
   id: "0g",
   shortName: "0G",
   name: "0G Agent Payment Router",
   route: "/0g",
-  hackathon: "0G APAC Hackathon",
   pitch: "Agents pay per inference job and per storage write; receipts link to verifiable job metadata in 0G Storage.",
   tracks: ["Agentic Economy", "Agentic Infra", "Agentic Trading Arena", "Privacy & TEE", "Web 4.0"],
   networks: ["0g-testnet", "base-sepolia"],
@@ -44,7 +43,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_0g_worker", workspaceId: "0g", name: "0G Job Worker", wallet: "0xAg3n…91aa",
+  id: "agent_0g_worker", workspaceId: "0g", name: "0G Job Worker", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 8, maxPerRequestUsd: 0.10, spentTodayUsd: 0.62,
   allowlist: ["svc_0g_inference", "svc_0g_storage", "svc_0g_context", "svc_0g_dav", "svc_0g_batch"],
 };

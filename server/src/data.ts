@@ -10,7 +10,7 @@ const PAYOUT = env.x402PayoutAddress;
 
 function svc(p: Partial<Service> & Pick<Service, "id" | "workspaceIds" | "name" | "category" | "priceUsd" | "description" | "sampleResponse">): Service {
   return {
-    provider: p.provider ?? "TollGate Demo Provider",
+    provider: p.provider ?? "AgentPay Router",
     providerWallet: p.providerWallet ?? PAYOUT,
     currency: p.currency ?? env.x402Asset,
     network: p.network ?? env.x402Network,

@@ -846,10 +846,11 @@ export function MantleDevToolsPanel({ workspace }: { workspace: Workspace }) {
   const [busy, setBusy] = useState(false);
   const endpoint = MANTLE_API_ENDPOINTS.find((e) => e.id === selected) ?? MANTLE_API_ENDPOINTS[0]!;
   const isRegistered = registered.some((r) => r.endpointId === selected);
+  const _apiBase = ((import.meta.env.VITE_API_BASE as string | undefined) ?? "https://tollgate-1.onrender.com").replace(/\/+$/, "");
   const curlSnippet = `curl -X ${endpoint.method} \\
   -H "X-PAYMENT: dev-bypass" \\
   -H "X-Agent-Id: agent_mantle_devtools" \\
-  http://localhost:8787${endpoint.path}`;
+  ${_apiBase}${endpoint.path}`;
   const register = async () => {
     setBusy(true);
     await new Promise((r) => setTimeout(r, 500));

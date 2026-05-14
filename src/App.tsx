@@ -91,7 +91,7 @@ export default function App() {
         status: "verified",
         createdAt: new Date().toISOString(),
         kind: "x402.pay",
-        payload: onchainTxHash ? { onchainTxHash, x402: true } : { x402: true, demo: true },
+        payload: onchainTxHash ? { onchainTxHash, x402: true } : { x402: true },
       };
       return [receipt, ...prev];
     });
@@ -107,7 +107,7 @@ export default function App() {
       serviceName: input.serviceName,
       agentName: input.agentName ?? agent.name,
       payerWallet: input.payerWallet ?? agent.wallet,
-      providerWallet: input.providerWallet ?? "0xProv…ap2",
+      providerWallet: input.providerWallet ?? "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
       amount: input.amount,
       currency: input.currency ?? "USDC",
       network: input.network,

@@ -67,7 +67,7 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
       serviceId: "svc_sui_walrus_pin",
       serviceName: "Walrus Storage Pin",
       agentName: "Sui Economy Agent",
-      payerWallet: "0xAg3n…4da2",
+      payerWallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
       providerWallet: "0xWalrus…1a2b",
       amount: 0.02,
       currency: "SUI",
@@ -142,8 +142,8 @@ type PtbResult = { module: string; fn: string; args: string; status: string; gas
 
 const SAMPLE_CALLS = [
   { module: "escrow", fn: "open", args: '["0x7a3f…D2f", "100000000"]' },
-  { module: "agent_registry", fn: "register", args: '["sui-economy-agent", "0xAg3n…4da2"]' },
-  { module: "nft_pass", fn: "mint_pass", args: '["gold", "0xAg3n…4da2"]' },
+  { module: "agent_registry", fn: "register", args: '["sui-economy-agent", "0x0E437c109A4C1e15172c4dA557E77724D7243F71"]' },
+  { module: "nft_pass", fn: "mint_pass", args: '["gold", "0x0E437c109A4C1e15172c4dA557E77724D7243F71"]' },
   { module: "walrus", fn: "extend_epochs", args: '["wl_4a1c2b07", "5"]' },
 ];
 
@@ -174,7 +174,7 @@ export function MoveContractViewer({ workspace }: { workspace: Workspace }) {
         serviceId: "svc_sui_move_exec",
         serviceName: "Move Contract Executor",
         agentName: "Sui Economy Agent",
-        payerWallet: "0xAg3n…4da2",
+        payerWallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
         providerWallet: "0xSuiVM…1a2b",
         amount: 0.015,
         currency: "SUI",
@@ -264,7 +264,7 @@ export function SuiNftMarket({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [passes, setPasses] = useLocalStore<NftPass[]>("sui.nft.passes", []);
   const [mintTier, setMintTier] = useState<"gold" | "silver" | "bronze">("silver");
-  const [recipient, setRecipient] = useState("0xAg3n…4da2");
+  const [recipient, setRecipient] = useState("0x0E437c109A4C1e15172c4dA557E77724D7243F71");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState("");
 
@@ -286,7 +286,7 @@ export function SuiNftMarket({ workspace }: { workspace: Workspace }) {
       serviceId: "svc_sui_nft_mint",
       serviceName: "NFT Mint API",
       agentName: "Sui Economy Agent",
-      payerWallet: "0xAg3n…4da2",
+      payerWallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
       providerWallet: "0xSuiNFT…1a2b",
       amount: selected.price,
       currency: "SUI",
@@ -399,7 +399,7 @@ export function ZkLoginPanel({ workspace }: { workspace: Workspace }) {
       serviceId: "svc_sui_zkproof",
       serviceName: "zkLogin Proof API",
       agentName: "Sui Economy Agent",
-      payerWallet: "0xAg3n…4da2",
+      payerWallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
       providerWallet: "0xzkLogin…1a2b",
       amount: 0.01,
       currency: "SUI",
@@ -492,7 +492,7 @@ export function SuiAgentWalletPanel({ workspace }: { workspace: Workspace }) {
       serviceId: "svc_sui_agent_id",
       serviceName: "Sui Transfer",
       agentName: "Sui Economy Agent",
-      payerWallet: "0xAg3n…4da2",
+      payerWallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
       providerWallet: to,
       amount,
       currency: "SUI",
@@ -510,7 +510,7 @@ export function SuiAgentWalletPanel({ workspace }: { workspace: Workspace }) {
       <div className="block-head">
         <div className="ttl">
           <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Wallet size={15} /></span>
-          <div><h3>Sui Agent Wallet</h3><div className="sub">0xAg3n…4da2 · budget-controlled · zkLogin-compatible</div></div>
+          <div><h3>Sui Agent Wallet</h3><div className="sub">0x0E437c109A4C1e15172c4dA557E77724D7243F71 · budget-controlled · zkLogin-compatible</div></div>
         </div>
         <button className="btn btn-ghost btn-sm" type="button" onClick={() => setBalance(+(balance + 5).toFixed(4))}>
           <RefreshCw size={13} /> Top up +5 SUI
@@ -600,7 +600,7 @@ export function SuiAgentEconomyLoop({ workspace }: { workspace: Workspace }) {
         serviceId: p.svcId,
         serviceName: p.svcName,
         agentName: "Sui Economy Agent",
-        payerWallet: "0xAg3n…4da2",
+        payerWallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
         providerWallet: "0xSuiSvc…1a2b",
         amount: p.amount,
         currency: "SUI",
@@ -852,7 +852,7 @@ export function SuiPayButtonWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [label, setLabel] = useState("Pay with Sui AI");
   const [amount, setAmount] = useState("0.01");
-  const [recipient, setRecipient] = useState("0xagent…");
+  const [recipient, setRecipient] = useState("");
   const [copied, setCopied] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);

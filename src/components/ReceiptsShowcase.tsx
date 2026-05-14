@@ -16,6 +16,7 @@ import type { TweakState } from "./TweaksPanel";
 import { ConnectWalletButton } from "../wallet";
 import { initialReceipts, serviceById, workspaces, agents } from "../data";
 import type { Receipt, ReceiptStatus } from "../types";
+import { explorerTxForNetwork } from "../lib/chains";
 
 const SHOWCASE_TWEAKS_KEY = "tollgate-showcase-tweaks";
 
@@ -216,7 +217,19 @@ function PaymentSheet({ receipt }: { receipt: Receipt }) {
         {receipt.txHash && (
           <div className="rsh-meta__row">
             <span>Tx hash</span>
-            <span className="rsh-meta__hash">{receipt.txHash.slice(0, 18)}…</span>
+            {explorerTxForNetwork(receipt.network, receipt.txHash) ? (
+              <a
+                className="rsh-meta__hash"
+                href={explorerTxForNetwork(receipt.network, receipt.txHash)!}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "inherit", textDecoration: "underline" }}
+              >
+                {receipt.txHash.slice(0, 18)}…
+              </a>
+            ) : (
+              <span className="rsh-meta__hash">{receipt.txHash.slice(0, 18)}…</span>
+            )}
           </div>
         )}
         <div className="rsh-meta__row">

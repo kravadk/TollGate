@@ -21,7 +21,7 @@ import { useLocalStore } from "../../lib/storage";
 import { deterministicScore, hashId, sha256Hex, fnv1aHex } from "../../lib/util-hash";
 import { badgeFor } from "../../lib/ws-helpers";
 import type { Receipt, Workspace } from "../../types";
-import { services as allCatalogServices } from "../../data";
+import { services as allCatalogServices, makeTxHash } from "../../data";
 import {
   ArrowUpRight,
   Bolt,
@@ -45,11 +45,13 @@ export function EconomyDashboard() {
   const [stats, setStats] = useState<EconStats | null>(null);
   const [feed, setFeed] = useState<Receipt[]>([]);
   const [connected, setConnected] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
   useEffect(() => {
+    if (!BASE) return;
     let es: EventSource | null = null;
-    fetch(`${BASE}/api/receipts/stats`).then(r => r.ok ? r.json() : null).then(d => { if (d) setStats(d); }).catch(() => {});
+    fetch(`${BASE}/api/receipts/stats`).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(d => { if (d) setStats(d); setFetchError(false); }).catch(() => setFetchError(true));
     try {
       es = new EventSource(`${BASE}/api/events/payments`);
       es.onopen = () => setConnected(true);
@@ -71,7 +73,11 @@ export function EconomyDashboard() {
     return () => { es?.close(); setConnected(false); };
   }, [BASE]);
 
-  if (!stats && feed.length === 0) return null;
+  if (!BASE) return null;
+  if (!stats && feed.length === 0) {
+    if (fetchError) return <div className="muted sm" style={{ padding: "12px 0", display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--red)", display: "inline-block" }} />Economy Dashboard — server offline. Set VITE_API_BASE to connect.</div>;
+    return null;
+  }
 
   const cardStyle: React.CSSProperties = { flex: "1 1 120px", background: "var(--field)", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4 };
   const valStyle: React.CSSProperties = { fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", lineHeight: 1 };
@@ -177,12 +183,12 @@ export function OgDemoFlow({
     setInf({ live, content, provider, chatID, verified, note });
     const r = emitReceipt({
       workspaceId: workspace.id,
-      serviceName: live ? "0G Compute · guided demo" : "0G Compute · guided demo (demo)",
+      serviceName: "0G Compute · Risk Assessment",
       amount: 0.03,
       currency: "USDC",
       network: workspace.networks[0] ?? "0g-testnet",
       kind: "0g.inference",
-      payload: { demoFlow: true, prompt: OG_DEMO_PROMPT, response: content, ogCompute: live, provider, chatID, verified },
+      payload: { prompt: OG_DEMO_PROMPT, response: content, ogCompute: live, provider, chatID, verified },
     });
     setReceiptId(r.id);
     await sleep(550);
@@ -1019,7 +1025,7 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
 
   const register = () => {
     const agentId = "agid_0g_" + hashId("agid", name + role, 4);
-    const wallet = "0xag" + hashId("0xag", name + role + workspace.id, 12);
+    const wallet = "0x" + hashId("agid", name + role + workspace.id, 40);
     const dailyCapUsd = parseFloat(cap) || 5;
     const reg: RegAgent = { agentId, name: name.trim() || "Unnamed agent", role, wallet, dailyCapUsd, sealed, createdAt: new Date().toISOString(), status: "active" };
     setList((prev) => [reg, ...prev.filter((x) => x.agentId !== agentId)].slice(0, 20));
@@ -1113,7 +1119,7 @@ export function RevenueSplitConsole({ workspace }: { workspace: Workspace }) {
   const wsServices = useMemo(() => allCatalogServices.filter((s) => s.workspaceIds.includes(workspace.id)), [workspace.id]);
   const [svcId, setSvcId] = useState(wsServices[0]?.id ?? "");
   const [pool, setPool] = useState("1.20");
-  const [rows, setRows] = useState<{ wallet: string; pct: string }[]>([{ wallet: "0xrev9a2c1e0b", pct: "70" }, { wallet: "0xrev4f1d77aa", pct: "30" }]);
+  const [rows, setRows] = useState<{ wallet: string; pct: string }[]>([{ wallet: "", pct: "70" }, { wallet: "", pct: "30" }]);
   const [done, setDone] = useState<string | null>(null);
   const pctSum = rows.reduce((s, r) => s + (parseFloat(r.pct) || 0), 0);
   const splits = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "0g.revenue.split").slice(0, 12), [receipts, workspace.id]);

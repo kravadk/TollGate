@@ -2,15 +2,14 @@ import { PolygonLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
+const W2 = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
 
 export const workspace: Workspace = {
   id: "polygon",
   shortName: "Polygon",
   name: "Polygon Agent Commerce",
   route: "/polygon",
-  hackathon: "Smart Commerce Infrastructure Challenge — Polygon Labs × Ignyte ($25K + $100K incentives)",
   pitch: "SME merchants publish paid APIs in 30 seconds; agents and buyers settle per call in USDC on Polygon zkEVM — UAE commerce infrastructure.",
   tracks: ["SME Trade Finance", "Merchant Payments", "Cross-Border Stablecoins", "Agent Infrastructure"],
   networks: ["polygon-zkevm", "polygon-pos"],
@@ -36,7 +35,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_poly_merchant", workspaceId: "polygon", name: "Polygon Merchant Agent", wallet: "0xAg3n…9a3b",
+  id: "agent_poly_merchant", workspaceId: "polygon", name: "Polygon Merchant Agent", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.25, spentTodayUsd: 0.85,
   allowlist: ["svc_poly_invoice", "svc_poly_merchant", "svc_poly_cross"],
 };

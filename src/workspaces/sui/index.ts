@@ -2,15 +2,14 @@ import { SuiLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
+const W2 = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
 
 export const workspace: Workspace = {
   id: "sui",
   shortName: "Sui",
   name: "SuiAgent OS — Agent Economy",
   route: "/sui",
-  hackathon: "Sui Overflow 2026",
   pitch: "The first Agent Economy OS on Sui: agents hire agents via x402, escrow funds earn DeepBook yield, receipts live on Walrus, reputation is a living NFT, and any website gets AI payments with one script tag.",
   tracks: ["Agentic Web (AI)", "Walrus $70K", "DeepBook $70K", "EVE Frontier $50K", "ONE Championship $70K", "DeFi & Payments"],
   networks: ["sui-mainnet", "sui-testnet"],
@@ -64,7 +63,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_sui_economy", workspaceId: "sui", name: "Sui Economy Agent", wallet: "0xAg3n…4da2",
+  id: "agent_sui_economy", workspaceId: "sui", name: "Sui Economy Agent", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 10, maxPerRequestUsd: 0.15, spentTodayUsd: 0.74,
   allowlist: ["svc_sui_walrus_pin", "svc_sui_move_exec", "svc_sui_nft_mint", "svc_sui_agent_id", "svc_sui_zkproof"],
 };
@@ -75,7 +74,7 @@ export const seedRows: SeedRow[] = [
   { ws: "sui", svc: "svc_sui_move_exec", agent: "agent_sui_economy", mins: 24, status: "verified",
     kind: "sui.move.exec", name: "Move PTB · escrow::open", payload: { module: "escrow", fn: "open", args: '["0x7a3f…D2f","100000000"]', gas: "1250000 MIST", effects: '{"status":"success"}' } },
   { ws: "sui", svc: "svc_sui_nft_mint", agent: "agent_sui_economy", mins: 48, status: "verified",
-    kind: "sui.nft.mint", name: "NFT Mint · Silver Agent Pass", payload: { nftId: "0xee7191aa4da2", tier: "silver", collection: "AgentPass", to: "0xAg3n…4da2" } },
+    kind: "sui.nft.mint", name: "NFT Mint · Silver Agent Pass", payload: { nftId: "0xee7191aa4da2", tier: "silver", collection: "AgentPass", to: "0x0E437c109A4C1e15172c4dA557E77724D7243F71" } },
   { ws: "sui", svc: "svc_sui_zkproof", agent: "agent_sui_economy", mins: 75, status: "verified",
     kind: "sui.zklogin", name: "zkLogin Proof · Google", payload: { provider: "Google", address: "0x4da2f91a3b7c…", maxEpoch: 428 } },
   { ws: "sui", svc: "svc_sui_agent_id", agent: "agent_sui_economy", mins: 130, status: "verified" },

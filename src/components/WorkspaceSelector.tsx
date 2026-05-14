@@ -39,7 +39,7 @@ export function WorkspaceSelector({
         <div className="ws-welcome__panel">
           <h1 className="ws-welcome__title">CHOOSE YOUR PROJECT</h1>
           <p className="ws-welcome__sub">
-            Your hackathon track for this campaign. You can switch any time from the workspace switcher.
+            Select a blockchain to work with. You can switch any time from the workspace switcher.
           </p>
 
           <div className="ws-pick">

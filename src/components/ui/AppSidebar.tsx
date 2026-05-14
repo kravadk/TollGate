@@ -5,7 +5,10 @@ import { ArrowLeft, ArrowLeftRight, Moon, RefreshCw, Sun, X } from "lucide-react
 import type { Workspace } from "../../types";
 import { agentFor } from "../../data";
 import { useAppState } from "../../app-state";
-import { useWallet, useErc20Balances, chainLabel, shortAddr, nativeSymbolForChain, tokensForChain, WORKSPACE_CHAIN } from "../../wallet";
+import { useWallet, useErc20Balances, chainLabel, shortAddr, nativeSymbolForChain, tokensForChain } from "../../wallet";
+import { getChain, isSingleChain } from "../../lib/chains";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { NetworkToggle } from "./NetworkToggle";
 import { SectionLabel } from "../visual/SectionLabel";
 import {
   buildRail,
@@ -44,6 +47,9 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
   const w = useWallet();
   const erc20 = useErc20Balances(w.address, w.chainId);
   const [refreshing, setRefreshing] = useState(false);
+  const { mode, toggle } = useNetworkMode(workspace.id);
+  const target = getChain(workspace.id, mode);
+  const singleChain = isSingleChain(workspace.id);
 
   const refreshAll = async () => {
     if (!w.address) { await w.connect(); return; }
@@ -63,33 +69,35 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
 
   if (!w.address) {
     return (
-      <button
-        type="button"
-        onClick={() => void w.connect()}
-        disabled={w.connecting}
-        className="flex items-center justify-center w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-60"
-        style={{
-          background: "color-mix(in srgb, var(--accent-primary) 14%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--accent-primary) 38%, transparent)",
-          color: "var(--accent-primary)",
-        }}
-      >
-        {w.connecting ? "Connecting…" : "Connect Wallet"}
-      </button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <NetworkToggle mode={mode} onToggle={toggle} hidden={singleChain} />
+        </div>
+        <button
+          type="button"
+          onClick={() => void w.connect()}
+          disabled={w.connecting}
+          className="flex items-center justify-center w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-60"
+          style={{
+            background: "color-mix(in srgb, var(--accent-primary) 14%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--accent-primary) 38%, transparent)",
+            color: "var(--accent-primary)",
+          }}
+        >
+          {w.connecting ? "Connecting…" : "Connect Wallet"}
+        </button>
+      </div>
     );
   }
 
   const nativeSym = nativeSymbolForChain(w.chainId);
-  // Surface the project's expected stables (USDC + USDT) first, then any extras the chain has.
   const all = tokensForChain(w.chainId);
   const stables = [...all].sort((a, b) => {
     const rank = (s: string) => (s === "USDC" ? 0 : s === "USDT" ? 1 : 2);
     return rank(a.symbol) - rank(b.symbol);
   });
   const balOf = (sym: string) => erc20.balances.find((b) => b.symbol === sym)?.display ?? (erc20.loading ? "…" : "0");
-  const target = WORKSPACE_CHAIN[workspace.id];
-  const onTarget = target ? w.chainId?.toLowerCase() === target.hex.toLowerCase() : true;
-  const isTestnet = w.chainId ? /sepolia|testnet/i.test(chainLabel(w.chainId)) : false;
+  const onTarget = !target.isNonEvm && w.chainId?.toLowerCase() === target.hex.toLowerCase();
 
   return (
     <div
@@ -99,18 +107,21 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--accent-primary)", boxShadow: "0 0 7px color-mix(in srgb, var(--accent-primary) 60%, transparent)" }} />
-          <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">{w.chainId ? chainLabel(w.chainId) : "—"}{isTestnet ? " · testnet" : ""}</span>
+          <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">{w.chainId ? chainLabel(w.chainId) : "—"}</span>
         </div>
-        <button
-          type="button"
-          onClick={refreshAll}
-          aria-label="Refresh all balances"
-          title="Refresh all balances"
-          disabled={refreshing}
-          className="p-1 rounded-lg hover:bg-surface-3 text-text-muted hover:text-primary transition-all duration-200 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 transition-transform duration-500 ${refreshing || erc20.loading ? "animate-spin" : ""}`} />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <NetworkToggle mode={mode} onToggle={toggle} hidden={singleChain} />
+          <button
+            type="button"
+            onClick={refreshAll}
+            aria-label="Refresh all balances"
+            title="Refresh all balances"
+            disabled={refreshing}
+            className="p-1 rounded-lg hover:bg-surface-3 text-text-muted hover:text-primary transition-all duration-200 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 transition-transform duration-500 ${refreshing || erc20.loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
       <div className="space-y-px">
         <BalanceRow symbol={nativeSym} value={w.balanceEth ?? (refreshing ? "…" : "—")} accent />
@@ -120,13 +131,13 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
           <BalanceRow key={t.symbol} symbol={t.symbol} value={balOf(t.symbol)} />
         ))}
       </div>
-      {!onTarget && target && (
+      {!onTarget && !target.isNonEvm && (
         <button
           type="button"
           onClick={() => void w.switchChain(target.hex)}
           className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
           style={{ background: "color-mix(in srgb, var(--accent-primary) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-primary) 34%, transparent)", color: "var(--accent-primary)" }}
-          title={`This project settles on ${target.name} — switch network`}
+          title={`Switch wallet to ${target.name}`}
         >
           <ArrowLeftRight className="w-3 h-3" /> Switch to {target.name}
         </button>

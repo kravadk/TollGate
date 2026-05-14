@@ -2,15 +2,14 @@ import { MantleLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB";
+const W2 = "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9";
 
 export const workspace: Workspace = {
   id: "mantle",
   shortName: "Mantle",
   name: "Mantle Agent Wallet Economy",
   route: "/mantle",
-  hackathon: "DoraHacks × Mantle Turing Test",
   pitch: "Agent wallets with spend policy buy Mantle alpha, mETH/USDY yield signals and RWA risk reports per call.",
   tracks: ["Agentic Wallets & Economy", "AI Trading & Strategy", "AI Alpha & Data", "AI × RWA", "AI DevTools"],
   networks: ["mantle-sepolia"],
@@ -44,7 +43,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_mnt_strategist", workspaceId: "mantle", name: "Alpha Strategist", wallet: "0xAg3n…ee71",
+  id: "agent_mnt_strategist", workspaceId: "mantle", name: "Alpha Strategist", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 15, maxPerRequestUsd: 0.30, spentTodayUsd: 0.96,
   allowlist: ["svc_mnt_rwa", "svc_mnt_meth", "svc_mnt_backtest", "svc_mnt_liq", "svc_mnt_stress"],
 };

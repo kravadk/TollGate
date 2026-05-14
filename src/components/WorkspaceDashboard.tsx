@@ -37,7 +37,7 @@ import { useAppState } from "../app-state";
 import { useLocalStore } from "../lib/storage";
 import { deterministicScore, hashId, sha256Hex, fnv1aHex } from "../lib/util-hash";
 import type { Agent, Receipt, ReceiptStatus, Service, Theme, Workspace, WorkspaceId } from "../types";
-import { serviceById, workspaceMetrics, makeServiceId, services as allCatalogServices, agents as allAgents } from "../data";
+import { serviceById, workspaceMetrics, makeServiceId, services as allCatalogServices, agents as allAgents, makeTxHash } from "../data";
 import { BarSpark, WeekBars } from "../charts402";
 import {
   ArrowRight,
@@ -246,7 +246,7 @@ export function CreateServiceModal({
   const [currency, setCurrency] = useState<string>(CURRENCIES[0]);
   const [network, setNetwork] = useState(workspace.networks[0]);
   const [provider, setProvider] = useState("");
-  const [wallet, setWallet] = useState("0xProv…");
+  const [wallet, setWallet] = useState("");
   const [response, setResponse] = useState('{ "data": "…" }');
   const [done, setDone] = useState(false);
 
@@ -258,7 +258,7 @@ export function CreateServiceModal({
       workspaceIds: [workspace.id],
       name: name.trim(),
       provider: provider.trim() || "Custom Provider",
-      providerWallet: wallet.trim() || "0xProv…",
+      providerWallet: wallet.trim() || "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
       category,
       price: `${priceUsd.toFixed(2)} ${currency}`,
       priceUsd,
@@ -483,7 +483,7 @@ export function OverviewPage({
   return (
     <>
       <LedeHead
-        crumb={`${workspace.id} workspace · ${workspace.hackathon}`}
+        crumb={`${workspace.id} workspace · ${workspace.networks[0] ?? ""}`}
         title={workspace.name}
         withRings
         chips={
@@ -985,7 +985,7 @@ function CheckoutLinkBuilder({ workspace }: { workspace: Workspace }) {
   const settle = (l: BuiltLink) => {
     if (l.state === "paid") return;
     const amt = parseFloat(l.amount) || 0;
-    const txHash = "0x" + hashId("tx", l.id, 12);
+    const txHash = makeTxHash();
     setLinks((ls) => ls.map((x) => x.id === l.id ? { ...x, state: "paid", txHash } : x));
     const parent = emitReceipt({ workspaceId: workspace.id, serviceId: "svc_qie_checkout", serviceName: "QIE Checkout · " + l.purpose, amount: amt, currency: "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.checkout.settle", payload: { linkId: l.id, purpose: l.purpose, url: l.url, txHash } });
     // fan out the split
@@ -1908,7 +1908,7 @@ export function ServiceTabPage({
     (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet"))) ||
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
     (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt") || t.includes("copy") || t.includes("reasoning") || t.includes("trace") || t.includes("signal") || t.includes("hub") || t.includes("kill") || t.includes("risk"))) ||
-    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("agent") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview")));
+    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("agent") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview") || t.includes("receipt")));
 
   return (
     <section className="svc-tab">
@@ -2036,6 +2036,22 @@ export function ServiceTabPage({
       {workspace.id === "agora" && t.includes("portfolio") && <AgoraPortfolioWidget workspace={workspace} />}
       {workspace.id === "agora" && (t.includes("x402") && !t.includes("portfolio")) && <AgoraX402Widget workspace={workspace} />}
       {workspace.id === "agora" && t.includes("circle") && <><AgoraCircleToolsWidget workspace={workspace} /><AgoraCctpWidget workspace={workspace} /></>}
+      {workspace.id === "agora" && t.includes("receipt") && (
+        <div className="panel block svc-flavor">
+          <div className="block-head"><div className="ttl"><span className="sq soft"><RIco width={15} height={15} /></span><div><h3>Payment receipts</h3><div className="sub">Arc payments settled via x402 · leaderboard below</div></div></div></div>
+          {receipts.filter(r => r.workspaceId === workspace.id).length === 0 && <div className="muted sm" style={{ padding: "16px 20px" }}>No receipts yet — make a call to see payments here.</div>}
+          <div className="svc-hist">
+            {receipts.filter((r): r is Receipt => r.workspaceId === workspace.id).slice(0, 10).map((r) => (
+              <div className="svc-hist__row" key={r.id}>
+                <span className="svc-hist__dot" style={{ background: "#1fb58a" }} />
+                <div className="svc-hist__main"><b>{r.serviceName}</b><span>{r.network} · {new Date(r.createdAt).toLocaleString()}</span></div>
+                {badgeFor(r.status)}
+                <span className="svc-hist__amt">{fmtUsd(r.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {workspace.id === "agora" && t.includes("receipt") && <AgoraLeaderboardWidget workspace={workspace} />}
       {workspace.id === "agora" && (t.includes("copy") || t.includes("copy trading")) && <ArcMindCopyTradingWidget workspace={workspace} />}
       {workspace.id === "agora" && (t.includes("reasoning") || t.includes("trace")) && <ArcMindReasoningWidget workspace={workspace} />}
@@ -2047,6 +2063,22 @@ export function ServiceTabPage({
       {workspace.id === "polygon" && (t.includes("marketplace") || t.includes("agent")) && <PolygonAgentMarketplaceWidget workspace={workspace} />}
       {workspace.id === "polygon" && (t.includes("usdc") || t.includes("payment") || t.includes("remittance")) && <PolygonUsdcPaymentsWidget workspace={workspace} />}
       {workspace.id === "polygon" && t.includes("overview") && <PolygonStatsWidget workspace={workspace} />}
+      {workspace.id === "polygon" && t.includes("receipt") && (
+        <div className="panel block svc-flavor">
+          <div className="block-head"><div className="ttl"><span className="sq soft"><RIco width={15} height={15} /></span><div><h3>Payment receipts</h3><div className="sub">all Polygon payments settled via x402</div></div></div></div>
+          {receipts.filter(r => r.workspaceId === workspace.id).length === 0 && <div className="muted sm" style={{ padding: "16px 20px" }}>No receipts yet — make a call to see payments here.</div>}
+          <div className="svc-hist">
+            {receipts.filter((r): r is Receipt => r.workspaceId === workspace.id).slice(0, 20).map((r) => (
+              <div className="svc-hist__row" key={r.id}>
+                <span className="svc-hist__dot" style={{ background: "#1fb58a" }} />
+                <div className="svc-hist__main"><b>{r.serviceName}</b><span>{r.network} · {new Date(r.createdAt).toLocaleString()}</span></div>
+                {badgeFor(r.status)}
+                <span className="svc-hist__amt">{fmtUsd(r.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!hasFlavor && <QuickCallPanel workspace={workspace} services={base} primary={base.find((s) => s.status === "active") ?? primary} onOpenPayment={onOpenPayment} receipts={receipts} />}
 
@@ -2490,7 +2522,7 @@ Content-Type: application/json
     "amount": "0.05",
     "currency": "USDC",
     "network": "base-sepolia",
-    "payTo": "0xProv…a91c",
+    "payTo": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
     "expiresAt": "2026-05-11T14:00:00Z",
     "requestHash": "0x3f8c…"
   }

@@ -1,0 +1,16 @@
+{
+  "network": "mantleSepolia",
+  "identityRegistry": null,
+  "agentVault": "0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
+  "budgetController": "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8",
+  "serviceRegistry": null,
+  "receiptNft": null,
+  "creditRegistry": "0xA8302734081F26b8a3E42f90DCf07b3E063441de",
+  "yieldToken": "0x0000000000000000000000000000000000000000",
+  "identityTxHash": null,
+  "vaultTxHash": "0x5511d0bd9424ac7553c316fd4e4cd86177013a43445ff0d184b8d7d196c08f71",
+  "chainId": 5003,
+  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "explorer": "https://explorer.mantle.xyz",
+  "deployedAt": "2026-05-14T15:12:25.931Z"
+}

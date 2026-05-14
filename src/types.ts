@@ -31,7 +31,6 @@ export type Workspace = {
   shortName: string;
   name: string;
   route: string;
-  hackathon: string;
   pitch: string;
   tracks: string[];
   networks: string[];

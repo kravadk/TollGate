@@ -78,7 +78,7 @@ let sc = 7000;
 export const makeReceiptId = () => `rcpt_${(rc++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 export const makeServiceId = () => `svc_usr_${(sc++).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 export const makeTxHash = () =>
-  `0x${Math.random().toString(16).slice(2, 10)}…${Math.random().toString(16).slice(2, 6)}`;
+  `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
 
 const ALL_SEED_ROWS: SeedRow[] = [
   ...ogRows, ...qieRows, ...arbRows, ...mantleRows, ...suiRows, ...agoraRows, ...polyRows,

@@ -21,7 +21,7 @@ function buildCommands(navigate: ReturnType<typeof useNavigate>): Cmd[] {
     cmds.push({
       id: `ws-${ws.id}`,
       label: ws.shortName,
-      sub: ws.hackathon,
+      sub: ws.networks[0] ?? ws.id,
       group: "Workspaces",
       icon: ws.Icon ? <ws.Icon size={14} /> : <Globe2 size={14} />,
       action: () => navigate(`/app/${ws.id}`),

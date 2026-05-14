@@ -2,15 +2,14 @@ import { CircleLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
+const W2 = "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8";
 
 export const workspace: Workspace = {
   id: "agora",
   shortName: "Agora",
   name: "ArcMind — Autonomous Trading Intelligence",
   route: "/agora",
-  hackathon: "Agora Agents Hackathon ($50K) + Stablecoins Commerce Stack Track 4 ($6K) — Circle × Arc L1",
   pitch: "ArcMind: the first autonomous trading agent that shows you its reasoning, lets you copy-trade with $1, and kills itself when it starts losing — all settled in USDC on Arc L1.",
   tracks: ["Cross-Platform Arbitrage Agent", "Adaptive Portfolio Manager", "Copy Trading", "Reasoning Traces x402", "Kill Switch Risk Manager"],
   networks: ["arc-mainnet", "arbitrum-one", "base"],
@@ -60,7 +59,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_arc_arb", workspaceId: "agora", name: "ArcMind Agent", wallet: "0xAg3n…c1f4",
+  id: "agent_arc_arb", workspaceId: "agora", name: "ArcMind Agent", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 20, maxPerRequestUsd: 1.00, spentTodayUsd: 1.42,
   allowlist: ["svc_arc_oracle", "svc_arc_arb", "svc_arc_portfolio", "svc_arc_signal_hl", "svc_arc_signal_poly", "svc_arc_signal_news", "svc_arc_signal_whale", "svc_arc_reasoning", "svc_arc_copytrade"],
 };

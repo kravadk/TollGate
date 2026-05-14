@@ -151,7 +151,7 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
                     ))}
                   </div>
                   <div className="flex items-center justify-between pt-3 border-t border-border-default">
-                    <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider">{ws.hackathon}</span>
+                    <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider">{ws.networks.join(" · ")}</span>
                     <span className="inline-flex items-center gap-1 text-[12px] font-bold" style={{ color: ws.accent }}>
                       Open <ArrowUpRight size={14} />
                     </span>

@@ -7,6 +7,7 @@
  * otherwise the app degrades gracefully — same pattern as src/lib/og.ts and src/lib/mantle.ts.
  */
 import { BrowserProvider, Contract, parseEther, formatEther } from "ethers";
+import type { NetworkMode } from "./chains";
 
 function env(key: string): string | undefined {
   const v = (import.meta.env as Record<string, string | undefined>)[key];
@@ -39,13 +40,17 @@ export type ArbitrumConfig = {
   chainHex: string;       // lowercase 0x…
 };
 
-export function getArbitrumConfig(): ArbitrumConfig {
-  const explorer = (env("VITE_ARBITRUM_EXPLORER") ?? "https://sepolia.arbiscan.io").replace(/\/+$/, "");
+export function getArbitrumConfig(mode?: NetworkMode): ArbitrumConfig {
+  const isMainnet = mode === "mainnet";
+  const defaultExplorer = isMainnet ? "https://arbiscan.io" : "https://sepolia.arbiscan.io";
+  const defaultChainHex = isMainnet ? "0xa4b1" : ARBITRUM_DEFAULT_CHAIN_HEX;
+  const escrowVar = isMainnet ? "VITE_ARBITRUM_MAINNET_ESCROW_ADDRESS" : "VITE_ARBITRUM_ESCROW_ADDRESS";
+  const explorer = (env("VITE_ARBITRUM_EXPLORER") ?? defaultExplorer).replace(/\/+$/, "");
   const chainRaw = env("VITE_ARBITRUM_CHAIN_ID");
-  let chainHex = ARBITRUM_DEFAULT_CHAIN_HEX;
-  if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
+  let chainHex = defaultChainHex;
+  if (chainRaw && !isMainnet) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
   return {
-    escrowAddress: env("VITE_ARBITRUM_ESCROW_ADDRESS") ?? null,
+    escrowAddress: env(escrowVar) ?? null,
     explorerBase: explorer,
     chainHex,
   };

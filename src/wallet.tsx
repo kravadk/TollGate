@@ -21,13 +21,17 @@ const CHAIN_NAMES: Record<string, string> = {
   "0x2105": "Base",
   "0x14a34": "Base Sepolia",
   "0xaa36a7": "Sepolia",
-  "0xa4b1": "Arbitrum",
+  "0xa4b1": "Arbitrum One",
   "0x66eee": "Arbitrum Sepolia",
   "0x1388": "Mantle",
   "0x138b": "Mantle Sepolia",
-  "0x4115": "0G",
+  "0x4115": "0G Mainnet",
+  "0x40da": "0G Galileo",
   "0x40d9": "0G Testnet",
-  "0x7bf": "QIE Testnet",
+  "0x7bf": "QIE Mainnet",
+  "0x4cef52": "Arc",
+  "0x44d": "Polygon zkEVM",
+  "0x985": "Polygon Cardona",
 };
 
 export function chainLabel(hex: string | null): string {
@@ -88,21 +92,29 @@ const NATIVE_SYMBOL: Record<string, string> = {
   "0x1388": "MNT",
   "0x138b": "MNT",
   "0x4115": "0G",
+  "0x40da": "0G",
   "0x40d9": "0G",
   "0x7bf": "QIE",
+  "0x4cef52": "USDC",
+  "0x44d": "ETH",
+  "0x985": "ETH",
 };
 export function nativeSymbolForChain(chainId: string | null): string {
   if (!chainId) return "ETH";
   return NATIVE_SYMBOL[chainId.toLowerCase()] ?? "ETH";
 }
 
-// ── Preferred mainnet chain per workspace ("відповідно до проекту") ──────────
+// ── Preferred chain per workspace (used for "Switch to X" in the sidebar) ────
+// Mode-aware switching is handled by AppSidebar via useNetworkMode + getChain.
+// This map provides a stable fallback for components that don't have mode context.
 export const WORKSPACE_CHAIN: Record<string, { hex: string; name: string; native: string }> = {
-  "0g": { hex: "0x4115", name: "0G", native: "0G" },          // 0G mainnet (chainId 16661) — AgentReceiptRegistry is deployed here
-  qie: { hex: "0x7bf", name: "QIE Testnet", native: "QIE" }, // QIE testnet (chainId 1983 = 0x7BF)
-  arbitrum: { hex: "0xa4b1", name: "Arbitrum One", native: "ETH" },
-  mantle: { hex: "0x1388", name: "Mantle", native: "MNT" },
-  sui: { hex: "0x1", name: "Sui", native: "SUI" },              // Sui is non-EVM; hex is placeholder — Sui sidebar shows SUI balance only
+  "0g":      { hex: "0x4115",   name: "0G Mainnet",       native: "0G"   },
+  qie:       { hex: "0x7bf",    name: "QIE Mainnet",       native: "QIE"  },
+  arbitrum:  { hex: "0x66eee",  name: "Arbitrum Sepolia",  native: "ETH"  },
+  mantle:    { hex: "0x1388",   name: "Mantle",            native: "MNT"  },
+  sui:       { hex: "0x101",    name: "Sui Mainnet",       native: "SUI"  },
+  agora:     { hex: "0x4cef52", name: "Arc",               native: "USDC" },
+  polygon:   { hex: "0x985",    name: "Polygon Cardona",   native: "ETH"  },
 };
 
 const EXPLORERS: Record<string, string> = {
@@ -115,7 +127,11 @@ const EXPLORERS: Record<string, string> = {
   "0x1388": "https://explorer.mantle.xyz",
   "0x138b": "https://explorer.sepolia.mantle.xyz",
   "0x4115": "https://chainscan.0g.ai",
+  "0x40da": "https://chainscan-galileo.0g.ai",
   "0x7bf": "https://testnet.qie.digital",
+  "0x4cef52": "https://testnet.arcscan.app",
+  "0x44d": "https://zkevm.polygonscan.com",
+  "0x985": "https://cardona-zkevm.polygonscan.com",
 };
 
 export function explorerTxUrl(chainId: string | null, hash: string): string | null {

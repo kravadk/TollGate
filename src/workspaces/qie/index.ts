@@ -2,15 +2,14 @@ import { QieLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
+const W2 = "0xA8302734081F26b8a3E42f90DCf07b3E063441de";
 
 export const workspace: Workspace = {
   id: "qie",
   shortName: "QIE",
   name: "QIE Agent Payment Gateway",
   route: "/qie",
-  hackathon: "QIE Hackathon",
   pitch: "Merchants list paid AI/API services; agents settle through the QIE payment rail with QIE Pass gating.",
   tracks: ["DeFi & Payments", "AI + Web3", "Gaming & Metaverse", "Social & Community", "Infra & Tools"],
   networks: ["qie-testnet"],
@@ -44,7 +43,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_qie_merchant_bot", workspaceId: "qie", name: "Merchant Bot", wallet: "0xAg3n…44de",
+  id: "agent_qie_merchant_bot", workspaceId: "qie", name: "Merchant Bot", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 6, maxPerRequestUsd: 0.05, spentTodayUsd: 0.18,
   allowlist: ["svc_qie_checkout", "svc_qie_dex", "svc_qie_payout", "svc_qie_pos"],
 };

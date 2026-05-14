@@ -133,7 +133,7 @@ apiRouter.get("/v1/x402-spec", (req: Request, res: Response) => {
     name: "TollGate x402 API",
     version: "1.0.0",
     description:
-      "Pay-per-call API economy for AI agents. Every endpoint is gated by an x402 payment challenge; pay the stablecoin amount and retry with X-PAYMENT to unlock the resource. One core gateway, eight hackathon workspaces.",
+      "Pay-per-call API economy for AI agents. Every endpoint is gated by an x402 payment challenge; pay the stablecoin amount and retry with X-PAYMENT to unlock the resource.",
     workspace: ws ?? "all",
     defaultNetwork: env.x402Network,
     defaultAsset: env.x402Asset,
@@ -158,8 +158,8 @@ apiRouter.get("/v1/x402-spec", (req: Request, res: Response) => {
       responseShape: s.sampleResponse,
     })),
     examples: {
-      unauthenticated_returns_402: `curl -i ${"http://localhost:" + env.port}/api/gateway/svc_liq_wallet_risk`,
-      dev_bypass: isProd() ? undefined : `curl -H "X-PAYMENT: dev-bypass" ${"http://localhost:" + env.port}/api/gateway/svc_liq_wallet_risk`,
+      unauthenticated_returns_402: `curl -i ${req.protocol}://${req.get("host")}/api/gateway/svc_0g_inference`,
+      dev_bypass: isProd() ? undefined : `curl -H "X-PAYMENT: dev-bypass" ${req.protocol}://${req.get("host")}/api/gateway/svc_0g_inference`,
     },
   });
 });

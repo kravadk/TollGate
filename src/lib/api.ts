@@ -1,10 +1,10 @@
 // Thin client for the TollGate server (../server). Optional: if the
 // server isn't running, callers fall back to the in-app simulation.
 //
-// Base URL: import.meta.env.VITE_API_BASE (e.g. https://tollgate-server.onrender.com)
-// — defaults to http://localhost:8787 in dev. Set VITE_API_BASE="" to hard-disable.
+// Base URL: import.meta.env.VITE_API_BASE (e.g. https://tollgate-1.onrender.com)
+// — must be set in .env.local for dev or as env var on Vercel/Render for prod.
 
-const RAW_BASE = (import.meta.env.VITE_API_BASE ?? "http://localhost:8787") as string;
+const RAW_BASE = (import.meta.env.VITE_API_BASE ?? "") as string;
 export const API_BASE = RAW_BASE.replace(/\/+$/, "");
 export const API_ENABLED = API_BASE.length > 0;
 

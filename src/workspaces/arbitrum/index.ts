@@ -2,15 +2,14 @@ import { ArbitrumLogo } from "../../components/logos/ProjectLogos";
 import type { Workspace } from "../../types";
 import type { AgentRaw, SeedRow, SRaw } from "../_types";
 
-const W = "0xProv…a91c";
-const W2 = "0xProv…77be";
+const W = "0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7";
+const W2 = "0x1dF5382BDb63537cd731A8e3Ee09eF10EA4179a3";
 
 export const workspace: Workspace = {
   id: "arbitrum",
   shortName: "Arbitrum",
   name: "Arbitrum Agent Services",
   route: "/arbitrum",
-  hackathon: "Arbitrum Open House London",
   pitch: "Agents pay USDC for API/services on Arbitrum with spend limits, receipts and optional escrowed delivery.",
   tracks: ["Best Agentic Project", "Overall Prize", "Stylus / Rust", "DeFi / Payments", "Grants"],
   networks: ["arbitrum-sepolia"],
@@ -44,7 +43,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_arb_treasury", workspaceId: "arbitrum", name: "Treasury Agent", wallet: "0xAg3n…0b12",
+  id: "agent_arb_treasury", workspaceId: "arbitrum", name: "Treasury Agent", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 12, maxPerRequestUsd: 0.20, spentTodayUsd: 0.88,
   allowlist: ["svc_arb_invoice", "svc_arb_orbit", "svc_arb_escrow", "svc_arb_bridge", "svc_arb_usdc"],
 };

@@ -14,6 +14,7 @@
  */
 import { BrowserProvider, Contract, verifyMessage } from "ethers";
 import { sha256Hex } from "./util-hash";
+import type { NetworkMode } from "./chains";
 
 function env(key: string): string | undefined {
   const v = (import.meta.env as Record<string, string | undefined>)[key];
@@ -40,13 +41,17 @@ export type OgConfig = {
   storageIndexer: string | null;
 };
 
-export function getOgConfig(): OgConfig {
-  const explorer = (env("VITE_0G_EXPLORER") ?? "https://chainscan.0g.ai").replace(/\/+$/, "");
+export function getOgConfig(mode?: NetworkMode): OgConfig {
+  const isTestnet = mode === "testnet";
+  const defaultExplorer = isTestnet ? "https://chainscan-galileo.0g.ai" : "https://chainscan.0g.ai";
+  const defaultChainHex = isTestnet ? "0x40da" : OG_DEFAULT_CHAIN_HEX;
+  const registryVar = isTestnet ? "VITE_0G_TESTNET_REGISTRY_ADDRESS" : "VITE_0G_REGISTRY_ADDRESS";
+  const explorer = (env("VITE_0G_EXPLORER") ?? defaultExplorer).replace(/\/+$/, "");
   const chainRaw = env("VITE_0G_CHAIN_ID");
-  let chainHex = OG_DEFAULT_CHAIN_HEX;
-  if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
+  let chainHex = defaultChainHex;
+  if (chainRaw && !isTestnet) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
   return {
-    registryAddress: env("VITE_0G_REGISTRY_ADDRESS") ?? null,
+    registryAddress: env(registryVar) ?? null,
     explorerBase: explorer,
     chainHex,
     storageIndexer: env("VITE_0G_STORAGE_INDEXER") ?? null,

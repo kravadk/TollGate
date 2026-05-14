@@ -35,10 +35,7 @@ import {
 // ---------------------------------------------------------------------------
 type SavedAddr = { nick: string; address: string; tag: string };
 export function ArbAddressBook({ onSelect }: { onSelect?: (addr: string) => void }) {
-  const [book, setBook] = useLocalStore<SavedAddr[]>("arb.addrbook", [
-    { nick: "Alice", address: "0xAb12000000000000000000000000000000003f4a", tag: "colleague" },
-    { nick: "Treasury", address: "0xDEAD000000000000000000000000000000beef01", tag: "company" },
-  ]);
+  const [book, setBook] = useLocalStore<SavedAddr[]>("arb.addrbook", []);
   const [nick, setNick] = useState("");
   const [addr, setAddr] = useState("");
   const [tag, setTag] = useState("friend");
@@ -522,7 +519,7 @@ export function SpendRulesEditor({ workspace, services }: { workspace: Workspace
   const [blocked, setBlocked] = useState(rules.blockedAddresses.join("\n"));
   const [testSvc, setTestSvc] = useState(services[0]?.id ?? "");
   const [testAmt, setTestAmt] = useState("0.15");
-  const [testAddr, setTestAddr] = useState("0xA17e0b9c4d2192aF31b7c0e2e5b8f1");
+  const [testAddr, setTestAddr] = useState("");
   const [testResult, setTestResult] = useState<{ pass: boolean; reason: string } | null>(null);
   const [publishedId, setPublishedId] = useState<string | null>(null);
 

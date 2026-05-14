@@ -5,6 +5,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import { getChain, chainAddParams, isSingleChain } from "../../lib/chains";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { NetworkToggle } from "./NetworkToggle";
 
 type EthereumProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -18,14 +21,6 @@ declare global {
   }
 }
 
-// Map workspace id → required chain (hex) + human label.
-const WORKSPACE_CHAIN: Record<string, { hex: string; label: string }> = {
-  "0g":               { hex: "0x4115",  label: "0G Mainnet (16661)" },
-  "mantle":           { hex: "0x1388",  label: "Mantle Mainnet (5000)" },
-  "arbitrum":         { hex: "0x66eee", label: "Arbitrum Sepolia (421614)" },
-  "qie":              { hex: "0x7bf",   label: "QIE Mainnet (1983)" },
-};
-
 function eqHex(a: string | null, b: string): boolean {
   if (!a) return false;
   return a.toLowerCase() === b.toLowerCase();
@@ -37,7 +32,12 @@ export function NetworkBanner() {
   const [accountChanged, setAccountChanged] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
-  const expected = wsId ? WORKSPACE_CHAIN[wsId] : undefined;
+  const { mode, toggle } = useNetworkMode(wsId ?? "");
+  const expected = wsId ? getChain(wsId, mode) : undefined;
+  const singleChain = wsId ? isSingleChain(wsId) : true;
+
+  // Reset dismiss when mode or workspace changes
+  useEffect(() => { setDismissed(false); }, [mode, wsId]);
 
   useEffect(() => {
     const eth = window.ethereum;
@@ -67,25 +67,32 @@ export function NetworkBanner() {
     };
   }, []);
 
-  async function switchTo(hex: string) {
+  async function switchTo(cfg: NonNullable<typeof expected>) {
     const eth = window.ethereum;
     if (!eth) return;
     try {
-      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
-    } catch {
-      // user rejected — fine
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.hex }] });
+    } catch (err) {
+      const code = (err as { code?: number }).code;
+      if (code === 4902) {
+        try {
+          await eth.request({ method: "wallet_addEthereumChain", params: [chainAddParams(cfg)] });
+        } catch { /* user rejected add */ }
+      }
     }
   }
 
   if (dismissed) return null;
-  if (!chainHex) return null; // no wallet connected
-  if (!expected) return null; // workspace has no required chain (sui…)
-  if (eqHex(chainHex, expected.hex) && !accountChanged) return null;
+  if (!chainHex) return null;
+  if (!expected || expected.isNonEvm) return null;
 
-  const isAccountBanner = accountChanged && eqHex(chainHex, expected.hex);
+  const onCorrectChain = eqHex(chainHex, expected.hex);
+  if (onCorrectChain && !accountChanged) return null;
+
+  const isAccountBanner = accountChanged && onCorrectChain;
   const msg = isAccountBanner
     ? "Wallet account changed — balances and receipts will refresh."
-    : `You're on ${chainHex}. This workspace expects ${expected.label}.`;
+    : `Wallet is on a different chain. This workspace expects ${expected.name}.`;
 
   return (
     <div
@@ -106,18 +113,21 @@ export function NetworkBanner() {
         {msg}
       </span>
       {!isAccountBanner && (
-        <button
-          type="button"
-          onClick={() => switchTo(expected.hex)}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 5,
-            padding: "5px 12px", borderRadius: 8, cursor: "pointer",
-            background: "#f59e0b", color: "#0a0a0b",
-            border: "none", fontWeight: 700, fontSize: 12,
-          }}
-        >
-          <RotateCcw size={11} /> Switch
-        </button>
+        <>
+          <NetworkToggle mode={mode} onToggle={toggle} hidden={singleChain} />
+          <button
+            type="button"
+            onClick={() => void switchTo(expected)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+              background: "#f59e0b", color: "#0a0a0b",
+              border: "none", fontWeight: 700, fontSize: 12,
+            }}
+          >
+            <RotateCcw size={11} /> Switch to {expected.name}
+          </button>
+        </>
       )}
       <button
         type="button"

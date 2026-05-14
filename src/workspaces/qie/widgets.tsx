@@ -27,6 +27,7 @@ import {
 import { useAppState } from "../../app-state";
 import { useLocalStore } from "../../lib/storage";
 import { deterministicScore, hashId } from "../../lib/util-hash";
+import { makeTxHash } from "../../data";
 import type { Receipt, Service, Workspace } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 
@@ -215,7 +216,7 @@ export function QieRequestPay({ workspace }: { workspace: Workspace }) {
   const [currency, setCurrency] = useState<"QIE" | "USDT">("USDT");
   const [copied, setCopied] = useState(false);
 
-  const myAddr = "0xmy" + hashId("me", workspace.id, 12);
+  const myAddr = "0x" + hashId("me", workspace.id, 40);
   const link = `https://pay.qie.digital/request?to=${myAddr.slice(0, 12)}&amount=${amount}&currency=${currency}&note=${encodeURIComponent(note)}`;
 
   const copy = () => { navigator.clipboard?.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); };
@@ -260,13 +261,13 @@ export function QieRequestPay({ workspace }: { workspace: Workspace }) {
 
 export function QieWalletDashboard({ workspace }: { workspace: Workspace }) {
   const { emitReceipt, receipts } = useAppState();
-  const [balance, setBalance] = useLocalStore("qie.wallet.qie", 142.5);
-  const [usdtBal, setUsdtBal] = useLocalStore("qie.wallet.usdt", 28.3);
+  const [balance, setBalance] = useLocalStore("qie.wallet.qie", 0);
+  const [usdtBal, setUsdtBal] = useLocalStore("qie.wallet.usdt", 0);
   const [to, setTo] = useState("");
   const [amt, setAmt] = useState("5");
   const [token, setToken] = useState<"QIE" | "USDT">("QIE");
   const [notice, setNotice] = useState<{ ok: boolean; msg: string } | null>(null);
-  const addr = "0xqw" + hashId("0xqw", workspace.id, 12);
+  const addr = "0x" + hashId("qw", workspace.id, 40);
 
   const txs = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && (r.kind?.startsWith("qie.wallet") || r.kind?.startsWith("qie."))).slice(0, 10), [receipts, workspace.id]);
 
@@ -291,7 +292,7 @@ export function QieWalletDashboard({ workspace }: { workspace: Workspace }) {
     if (a > bal) { setNotice({ ok: false, msg: "Insufficient balance" }); return; }
     if (token === "QIE") setBalance((b) => +(b - a).toFixed(4));
     else setUsdtBal((b) => +(b - a).toFixed(4));
-    emitReceipt({ workspaceId: workspace.id, serviceName: `QIE Wallet · Send ${token}`, amount: a, currency: token === "QIE" ? "QIE" as const : "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.wallet.send", payload: { to, token, txHash: "0x" + hashId("tx", to + amt + Date.now(), 12) } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: `QIE Wallet · Send ${token}`, amount: a, currency: token === "QIE" ? "QIE" as const : "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.wallet.send", payload: { to, token, txHash: makeTxHash() } });
     setNotice({ ok: true, msg: `Sent ${a} ${token} → ${to.slice(0, 10)}…` });
     setTo(""); setAmt("5");
   };
@@ -759,9 +760,9 @@ export function QieCreatorTipsWidget({ workspace }: { workspace: Workspace }) {
 
 export function AgentWalletConsole({ workspace }: { workspace: Workspace }) {
   const { emitReceipt, receipts } = useAppState();
-  const [w, setW] = useLocalStore<QieWalletState>("qie.wallet", { address: "0xqw" + hashId("0xqw", workspace.id, 12), balance: 12.5, cap: 1.0 });
+  const [w, setW] = useLocalStore<QieWalletState>("qie.wallet", { address: "0x" + hashId("qwagent", workspace.id, 40), balance: 0, cap: 1.0 });
   const [topup, setTopup] = useState("5.00");
-  const [to, setTo] = useState("0xmerch9a2c1e0bf3");
+  const [to, setTo] = useState("");
   const [amount, setAmount] = useState("0.40");
   const [memo, setMemo] = useState("API tool call");
   const [capDraft, setCapDraft] = useState(String(w.cap));
@@ -771,14 +772,14 @@ export function AgentWalletConsole({ workspace }: { workspace: Workspace }) {
   const doTopup = () => {
     const a = parseFloat(topup) || 0; if (a <= 0) return;
     setW((s) => ({ ...s, balance: Number((s.balance + a).toFixed(4)) }));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "QIE Wallet · Deposit", amount: a, currency: "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.wallet.topup", payload: { to: w.address, txHash: "0x" + hashId("tx", "topup" + Date.now(), 12) } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "QIE Wallet · Deposit", amount: a, currency: "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.wallet.topup", payload: { to: w.address, txHash: makeTxHash() } });
     setNotice({ ok: true, text: `Topped up $${a.toFixed(2)}` });
   };
   const doSend = () => {
     const a = parseFloat(amount) || 0; if (a <= 0) return;
     if (a > w.cap) { setNotice({ ok: false, text: `$${a.toFixed(2)} exceeds the per-tx cap $${w.cap.toFixed(2)} — human approval required` }); return; }
     if (a > w.balance) { setNotice({ ok: false, text: "insufficient balance — top up first" }); return; }
-    const txHash = "0x" + hashId("tx", to + amount + Date.now(), 12);
+    const txHash = makeTxHash();
     setW((s) => ({ ...s, balance: Number((s.balance - a).toFixed(4)) }));
     emitReceipt({ workspaceId: workspace.id, serviceName: "QIE Wallet · Transfer", amount: a, currency: "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.wallet.send", payload: { to: to.trim(), memo: memo.trim(), txHash } });
     setNotice({ ok: true, text: `Sent $${a.toFixed(2)} → ${to.slice(0, 12)}… · ${txHash.slice(0, 12)}…` });

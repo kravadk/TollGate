@@ -25,6 +25,8 @@ const {
   QIE_PRIVATE_KEY,
   ARC_RPC_URL,
   ARC_PRIVATE_KEY,
+  POLYGON_RPC_URL,
+  POLYGON_CARDONA_RPC_URL,
 } = process.env;
 
 const ogAccounts = OG_PRIVATE_KEY ? [OG_PRIVATE_KEY] : [];
@@ -94,6 +96,18 @@ module.exports = {
       url: ARC_RPC_URL || "https://rpc.testnet.arc-node.thecanteenapp.com/v1/public",
       chainId: 5042002,
       accounts: arcAccounts,
+    },
+    // Polygon zkEVM mainnet (chainId 1101).
+    polygonMainnet: {
+      url: POLYGON_RPC_URL || "https://zkevm-rpc.com",
+      chainId: 1101,
+      accounts: arbAccounts,
+    },
+    // Polygon Cardona testnet (chainId 2442).
+    polygonCardona: {
+      url: POLYGON_CARDONA_RPC_URL || "https://rpc.cardona.zkevm-rpc.com",
+      chainId: 2442,
+      accounts: arbAccounts,
     },
   },
 };
