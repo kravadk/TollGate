@@ -5,7 +5,9 @@
  */
 const { ethers } = require("ethers");
 
-const PK = "0x4a28f919d9481615ed05819469b842e90a7869d7547b62170b53fa86dd36a6c5";
+require("dotenv").config();
+const PK = process.env.OG_PRIVATE_KEY || process.env.PRIVATE_KEY;
+if (!PK) { console.error("Set OG_PRIVATE_KEY in contracts/.env"); process.exit(1); }
 const DEPLOYER = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
 const TS = Date.now();
 
