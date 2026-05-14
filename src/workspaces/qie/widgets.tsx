@@ -38,10 +38,12 @@ import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "../../componen
 import { QieCreditWidget } from "./widgets/QieCreditWidget";
 import { QieOracleFeedWidget } from "./widgets/QieOracleFeedWidget";
 import { QieSubscriptionWidget } from "./widgets/QieSubscriptionWidget";
+import { QieWalletConnectPanel } from "./widgets/QieWalletConnectPanel";
 
 export { QiePosWidget, GameItemShop, MerchantPayoutsPanel };
 export { QieCreditWidget };
 export { QieOracleFeedWidget };
+export { QieWalletConnectPanel };
 export { QieSubscriptionWidget };
 
 // ---------------------------------------------------------------------------
@@ -878,6 +880,7 @@ export function renderTab(
       {(t.includes("gaming") || t.includes("game")) && <GameItemShop workspace={ws} />}
       {(t.includes("social") || t.includes("creator")) && <QieCreatorTipsWidget workspace={ws} />}
       {(t.includes("social") || t.includes("creator")) && <QieCreatorSubscriptions workspace={ws} />}
+      {t.includes("wallet") && <QieWalletConnectPanel />}
       {t.includes("wallet") && <QieWalletDashboard workspace={ws} />}
       {t.includes("merchant") && <MerchantPayoutsPanel workspace={ws} />}
       {t.includes("credit") && <QieCreditWidget workspace={ws} />}

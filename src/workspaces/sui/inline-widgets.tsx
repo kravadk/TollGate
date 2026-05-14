@@ -238,29 +238,20 @@ export function SuiLiveContractsPanel() {
         <span style={{ fontSize: ".63rem", color: "#4DA2FF", fontWeight: 700, background: "rgba(77,162,255,.12)", padding: "2px 7px", borderRadius: 5 }}>Sui mainnet + testnet</span>
       </div>
       {SUI_ECOSYSTEM.map((c) => {
-        const isPending = c.badge === "pending";
-        const short = isPending ? "deploy pending" : `${c.pkg.slice(0, 10)}…${c.pkg.slice(-6)}`;
+        const short = `${c.pkg.slice(0, 10)}…${c.pkg.slice(-6)}`;
         const bs = BADGE_STYLE[c.badge];
         return (
           <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
             <ShieldCheck width={13} height={13} style={{ color: bs.color, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
-              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>
-                {isPending ? "—" : c.pkg}
-              </div>
+              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{c.pkg}</div>
             </div>
-            {isPending ? (
-              <span style={{ fontSize: ".6rem", fontWeight: 700, padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap", ...bs }}>
-                pending ↗
-              </span>
-            ) : (
-              <a
-                href={`${c.explorer}/object/${c.pkg}`}
-                target="_blank" rel="noreferrer"
-                style={{ fontSize: ".6rem", fontWeight: 700, textDecoration: "none", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap", ...bs }}
-              >{short} ↗</a>
-            )}
+            <a
+              href={`${c.explorer}/object/${c.pkg}`}
+              target="_blank" rel="noreferrer"
+              style={{ fontSize: ".6rem", fontWeight: 700, textDecoration: "none", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap", ...bs }}
+            >{short} ↗</a>
           </div>
         );
       })}
