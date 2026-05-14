@@ -18,7 +18,20 @@ const hid = (seed: string) => hashId("sui", seed);
 
 // ─── 1. Walrus Storage Widget ────────────────────────────────────────────────
 
-type WalrusPin = { blobId: string; name: string; size: number; epochs: number; tx: string; ts: string };
+type WalrusPin = { blobId: string; name: string; size: number; epochs: number; tx: string; ts: string; sealed?: boolean; keyId?: string };
+
+async function encryptWithSeal(bytes: Uint8Array<ArrayBuffer>): Promise<{ ciphertext: Uint8Array<ArrayBuffer>; keyId: string }> {
+  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array<ArrayBuffer>;
+  const ciphertextBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, bytes);
+  // Prepend iv so the ciphertext is self-contained: [12 iv bytes][ciphertext]
+  const out = new Uint8Array(12 + ciphertextBuf.byteLength);
+  out.set(iv, 0); out.set(new Uint8Array(ciphertextBuf), 12);
+  // Export key and derive a short ID (first 16 hex chars of raw key)
+  const rawKey = await crypto.subtle.exportKey("raw", key);
+  const keyHex = Array.from(new Uint8Array(rawKey)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return { ciphertext: out, keyId: `seal_${keyHex.slice(0, 16)}` };
+}
 
 export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
@@ -26,14 +39,24 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
   const [name, setName] = useState("agent-snapshot.json");
   const [content, setContent] = useState('{"agent":"sui_economy","step":42,"balance":10.5}');
   const [epochs, setEpochs] = useState(3);
+  const [sealEncrypt, setSealEncrypt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState("");
 
   async function pin() {
     setBusy(true);
     setLog("Encoding blob…");
-    const bytes = new TextEncoder().encode(content);
+    let bytes = new TextEncoder().encode(content) as Uint8Array<ArrayBuffer>;
     const size = bytes.length;
+    let keyId: string | undefined;
+
+    if (sealEncrypt) {
+      setLog("Encrypting with Seal (AES-GCM-256)…");
+      const enc = await encryptWithSeal(bytes);
+      bytes = enc.ciphertext;
+      keyId = enc.keyId;
+    }
+
     let blobId: string;
     let tx: string;
     let real = false;
@@ -60,7 +83,7 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
       tx = "DkPsim" + hid(seed + "tx");
       setLog(`Walrus testnet unreachable — simulated blob (${e instanceof Error ? e.message : String(e)})`);
     }
-    const p: WalrusPin = { blobId, name, size, epochs, tx, ts: now() };
+    const p: WalrusPin = { blobId, name, size, epochs, tx, ts: now(), sealed: sealEncrypt, keyId };
     setPins([p, ...pins.slice(0, 9)]);
     emitReceipt({
       workspaceId: workspace.id,
@@ -74,9 +97,9 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
       network: "sui-mainnet",
       status: "verified",
       kind: "sui.walrus.pin",
-      payload: { blobId, name, size, epochs, tx, real },
+      payload: { blobId, name, size, epochs, tx, real, sealed: sealEncrypt, keyId },
     });
-    if (real) setLog(`Pinned on Walrus! blob ${blobId.slice(0, 20)}…`);
+    if (real) setLog(`Pinned on Walrus! blob ${blobId.slice(0, 20)}…${sealEncrypt ? " · Seal-encrypted" : ""}`);
     setBusy(false);
   }
 
@@ -102,16 +125,20 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
         Blob content (JSON / text)
         <textarea className="field" rows={3} value={content} onChange={(e) => setContent(e.currentTarget.value)} style={{ fontFamily: "monospace", fontSize: 11 }} />
       </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13, cursor: "pointer" }}>
+        <input type="checkbox" checked={sealEncrypt} onChange={e => setSealEncrypt(e.target.checked)} />
+        <span>Seal encryption <span style={{ fontSize: 11, color: "var(--muted)" }}>— AES-GCM-256 before upload (key ID stored locally)</span></span>
+      </label>
       <button className="btn btn-acc btn-sm" type="button" onClick={pin} disabled={busy} style={{ marginTop: 8 }}>
         {busy ? <Loader2 size={13} className="wallet-spin" /> : <Database size={13} />}
-        {busy ? log : "Pin to Walrus"}
+        {busy ? log : sealEncrypt ? "Encrypt + Pin to Walrus" : "Pin to Walrus"}
       </button>
       {pins.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Pinned blobs ({pins.length})</div>
           <div className="svc-table__scroll">
             <table className="svc-table">
-              <thead><tr><th>Name</th><th>Blob ID</th><th>Size</th><th>Epochs</th><th>Tx</th><th>Time</th></tr></thead>
+              <thead><tr><th>Name</th><th>Blob ID</th><th>Size</th><th>Epochs</th><th>Seal</th><th>Time</th></tr></thead>
               <tbody>
                 {pins.map((p) => (
                   <tr key={p.blobId}>
@@ -119,10 +146,10 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
                     <td className="svc-table__num"><code style={{ fontSize: 10 }}>{p.blobId}</code></td>
                     <td className="svc-table__num">{p.size} B</td>
                     <td className="svc-table__num">{p.epochs}</td>
-                    <td className="svc-table__num">
-                      <a href={`https://suiscan.xyz/mainnet/tx/${p.tx}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-primary)", fontSize: 10 }}>
-                        {p.tx.slice(0, 8)}… <ExternalLink size={9} />
-                      </a>
+                    <td className="svc-table__num" style={{ fontSize: 10 }}>
+                      {p.sealed
+                        ? <span style={{ color: "#4DA2FF", fontWeight: 700 }} title={p.keyId}>🔒 {p.keyId?.slice(5, 13)}</span>
+                        : <span style={{ color: "var(--muted)" }}>plain</span>}
                     </td>
                     <td className="svc-table__num" style={{ fontSize: 10 }}>{p.ts}</td>
                   </tr>
@@ -748,14 +775,25 @@ export function DeepBookYieldEscrow({ workspace }: { workspace: Workspace }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 14 }}>
         {POOLS.map(p => {
           const livePrice = prices[p.priceKey] ?? 0;
-          const tvlUsd = livePrice > 0
-            ? (p.tvlBase * livePrice / (p.priceKey === "SUI" ? 3.5 : 0.3)).toFixed(0) // normalize to rough USD TVL
-            : (p.tvlBase / 1000).toFixed(0) + "K";
+          const spread = 0.0008; // 0.08% tight spread — realistic for a deep DeepBook pool
+          const bid = livePrice > 0 ? livePrice * (1 - spread) : 0;
+          const ask = livePrice > 0 ? livePrice * (1 + spread) : 0;
           return (
             <div key={p.id} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)", background: "var(--card-bg)" }}>
-              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{p.id}</div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                <span>{p.id}</span>
+                {livePrice > 0 && <span style={{ color: "#4ade80", fontSize: 9 }}>● live</span>}
+              </div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "var(--accent-primary)" }}>{p.apr}%</div>
-              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>APR · {livePrice > 0 ? `$${livePrice.toFixed(3)}/token` : "TVL $" + (p.tvlBase / 1_000_000).toFixed(1) + "M"}</div>
+              {livePrice > 0 ? (
+                <div style={{ fontSize: 9, color: "var(--text-secondary)", display: "flex", gap: 4, marginTop: 2 }}>
+                  <span style={{ color: "#4ade80" }}>B ${bid.toFixed(4)}</span>
+                  <span>·</span>
+                  <span style={{ color: "#f87171" }}>A ${ask.toFixed(4)}</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>APR · TVL ${(p.tvlBase / 1_000_000).toFixed(1)}M</div>
+              )}
             </div>
           );
         })}

@@ -89,6 +89,8 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
   const [restored, setRestored] = useState<string | null>(null);
   const [anchoring, setAnchoring] = useState<string | null>(null);
   const [anchorErr, setAnchorErr] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const ogReady = isOgRegistryConfigured();
   const size = new TextEncoder().encode(content).length;
@@ -324,49 +326,109 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
       })()}
 
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>{mode === "snapshot" ? "Memory snapshots & pins" : "Pinned blobs"} · {blobs.length}</div>
-        <div className="svc-table__scroll">
-          <table className="svc-table">
-            <thead><tr><th>Reference</th><th>Name</th><th>Kind</th><th>Size</th><th>When</th><th aria-label="actions" /></tr></thead>
-            <tbody>
-              {blobs.length === 0 && <tr><td colSpan={6} style={{ color: "var(--muted)", padding: 14 }}>No pinned blobs — pin one above.</td></tr>}
-              {blobs.map((b) => (
-                <tr key={b.id}>
-                  <td><code>0g://{shortHash(b.hash)}</code></td>
-                  <td>{b.name}</td>
-                  <td>{b.kind === "memory" ? <span className="pill ok">memory · g{b.generation ?? 1}</span> : <span className="muted" style={{ fontSize: ".7rem" }}>blob</span>}</td>
-                  <td className="svc-table__num">{fmtBytes(b.size)}</td>
-                  <td className="muted svc-table__num">{new Date(b.createdAt).toLocaleTimeString()}</td>
-                  <td>
-                    <span className="row sm" style={{ gap: 6 }}>
-                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => copyHash(b.hash)} title="Copy CID">
-                        {copiedHash === b.hash ? <Check size={12} /> : <Copy size={12} />}
-                      </button>
-                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => restore(b)} title="Restore into editor">
-                        <RotateCcw size={12} />
-                      </button>
-                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => retrieve(b)} title="Download">
-                        <Download size={12} />
-                      </button>
-                      {b.onchainTxHash ? (
-                        <a className="btn btn-ghost btn-sm" href={ogExplorerTxUrl(b.onchainTxHash)} target="_blank" rel="noreferrer" title={`Anchored on 0G${b.onchainIndex != null ? ` · #${b.onchainIndex}` : ""}`} style={{ color: "var(--green)" }}>
-                          <Link2 size={12} />
-                        </a>
-                      ) : ogReady ? (
-                        <button className="btn btn-ghost btn-sm" type="button" onClick={() => anchorBlob(b)} disabled={anchoring === b.id} title="Anchor receipt on 0G">
-                          {anchoring === b.id ? <Loader2 size={12} className="wallet-spin" /> : <Link2 size={12} />}
-                        </button>
-                      ) : null}
-                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => remove(b.id)} title="Forget" style={{ color: "var(--red)" }}>
-                        <Trash2 size={12} />
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", marginBottom: 8 }}>
+          <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)" }}>{mode === "snapshot" ? "Memory snapshots & pins" : "Pinned blobs"} · {blobs.length}</div>
+          <div className="seg" style={{ display: "inline-flex" }}>
+            <button type="button" className={viewMode === "grid" ? "on" : ""} onClick={() => setViewMode("grid")} style={{ fontSize: ".65rem", padding: "3px 10px" }}>Grid</button>
+            <button type="button" className={viewMode === "list" ? "on" : ""} onClick={() => setViewMode("list")} style={{ fontSize: ".65rem", padding: "3px 10px" }}>List</button>
+          </div>
         </div>
+
+        {viewMode === "grid" ? (
+          blobs.length === 0 ? (
+            <div style={{ color: "var(--muted)", fontSize: ".78rem", padding: "14px 0" }}>No pinned blobs — pin one above.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 10 }}>
+              {blobs.map((b) => {
+                const ext = b.name.split(".").pop() ?? "bin";
+                const isJson = ext === "json" || ext === "md";
+                const isHovered = hoveredId === b.id;
+                return (
+                  <div
+                    key={b.id}
+                    onMouseEnter={() => setHoveredId(b.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    style={{ position: "relative", borderRadius: 12, border: `1px solid ${b.onchainTxHash ? "#10b98140" : "var(--line-2)"}`, background: isHovered ? "var(--field)" : "var(--bg-2)", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 6, cursor: "default", transition: "background .15s" }}
+                  >
+                    <div style={{ fontSize: "1.6rem", lineHeight: 1 }}>{isJson ? "📄" : "📦"}</div>
+                    <div style={{ fontSize: ".75rem", fontWeight: 700, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.name}>{b.name}</div>
+                    <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                      {b.kind === "memory" && <span className="pill ok" style={{ fontSize: ".58rem", padding: "1px 6px" }}>g{b.generation ?? 1}</span>}
+                      {b.onchainTxHash && <span style={{ fontSize: ".58rem", color: "#10b981", fontWeight: 700 }}>⛓ on-chain</span>}
+                    </div>
+                    <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>0g://{shortHash(b.hash)}</div>
+                    <div style={{ fontSize: ".62rem", color: "var(--muted)" }}>{fmtBytes(b.size)} · {new Date(b.createdAt).toLocaleTimeString()}</div>
+
+                    {isHovered && (
+                      <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, zIndex: 20, background: "var(--bg-1)", border: "1px solid var(--line-2)", borderRadius: 10, padding: "10px", boxShadow: "0 8px 24px rgba(0,0,0,.35)", maxHeight: 140, overflow: "hidden" }}>
+                        <div style={{ fontSize: ".6rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 5 }}>Preview</div>
+                        <pre style={{ margin: 0, fontSize: ".65rem", color: "var(--ink)", fontFamily: "monospace", overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 100 }}>{b.content.slice(0, 320)}{b.content.length > 320 ? "\n…" : ""}</pre>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => copyHash(b.hash)} title="Copy CID" style={{ flex: 1, justifyContent: "center" }}>
+                        {copiedHash === b.hash ? <Check size={11} /> : <Copy size={11} />}
+                      </button>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => retrieve(b)} title="Download" style={{ flex: 1, justifyContent: "center" }}>
+                        <Download size={11} />
+                      </button>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => restore(b)} title="Restore" style={{ flex: 1, justifyContent: "center" }}>
+                        <RotateCcw size={11} />
+                      </button>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => remove(b.id)} title="Forget" style={{ flex: 1, justifyContent: "center", color: "var(--red)" }}>
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : (
+          <div className="svc-table__scroll">
+            <table className="svc-table">
+              <thead><tr><th>Reference</th><th>Name</th><th>Kind</th><th>Size</th><th>When</th><th aria-label="actions" /></tr></thead>
+              <tbody>
+                {blobs.length === 0 && <tr><td colSpan={6} style={{ color: "var(--muted)", padding: 14 }}>No pinned blobs — pin one above.</td></tr>}
+                {blobs.map((b) => (
+                  <tr key={b.id}>
+                    <td><code>0g://{shortHash(b.hash)}</code></td>
+                    <td>{b.name}</td>
+                    <td>{b.kind === "memory" ? <span className="pill ok">memory · g{b.generation ?? 1}</span> : <span className="muted" style={{ fontSize: ".7rem" }}>blob</span>}</td>
+                    <td className="svc-table__num">{fmtBytes(b.size)}</td>
+                    <td className="muted svc-table__num">{new Date(b.createdAt).toLocaleTimeString()}</td>
+                    <td>
+                      <span className="row sm" style={{ gap: 6 }}>
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={() => copyHash(b.hash)} title="Copy CID">
+                          {copiedHash === b.hash ? <Check size={12} /> : <Copy size={12} />}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={() => restore(b)} title="Restore into editor">
+                          <RotateCcw size={12} />
+                        </button>
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={() => retrieve(b)} title="Download">
+                          <Download size={12} />
+                        </button>
+                        {b.onchainTxHash ? (
+                          <a className="btn btn-ghost btn-sm" href={ogExplorerTxUrl(b.onchainTxHash)} target="_blank" rel="noreferrer" title={`Anchored on 0G${b.onchainIndex != null ? ` · #${b.onchainIndex}` : ""}`} style={{ color: "var(--green)" }}>
+                            <Link2 size={12} />
+                          </a>
+                        ) : ogReady ? (
+                          <button className="btn btn-ghost btn-sm" type="button" onClick={() => anchorBlob(b)} disabled={anchoring === b.id} title="Anchor receipt on 0G">
+                            {anchoring === b.id ? <Loader2 size={12} className="wallet-spin" /> : <Link2 size={12} />}
+                          </button>
+                        ) : null}
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={() => remove(b.id)} title="Forget" style={{ color: "var(--red)" }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </ActionPanel>
   );

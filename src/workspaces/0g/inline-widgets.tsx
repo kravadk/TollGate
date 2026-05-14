@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   CircleDollarSign,
+  Database,
   Loader2,
   MessageCircle,
   Network,
@@ -835,6 +836,56 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
           : <button className="btn btn-ghost btn-sm" type="button" onClick={reset} disabled={phase === "running"}><RefreshCw width={12} height={12} /> Reset</button>}
       </div>
 
+      {/* Payment flow graph */}
+      <div style={{ padding: "0 16px 4px" }}>
+        {(() => {
+          const nodes = [
+            { id: "strategist", label: "Strategist", sub: "hires & pays", x: 60,  y: 60, col: "#7C5CF8" },
+            { id: "executor",   label: "Executor",   sub: "runs & earns", x: 220, y: 60, col: "#10b981" },
+            { id: "compute",    label: "0G Compute", sub: "$0.03 · LLM",  x: 370, y: 20, col: "#3b82f6" },
+            { id: "vault",      label: "Mantle Vault",sub: "on-chain",     x: 370, y: 100, col: "#f59e0b" },
+            { id: "storage",    label: "0G Storage", sub: "memory pin",   x: 370, y: 60, col: "#8b5cf6" },
+          ];
+          const edges = [
+            { from: "strategist", to: "executor", label: "$0.02 USDC", step: 0, cx1: 130, cy1: 60, cx2: 160, cy2: 60 },
+            { from: "executor", to: "compute",   label: "$0.03 USDC", step: 1, cx1: 280, cy1: 40, cx2: 310, cy2: 30 },
+            { from: "executor", to: "vault",     label: "recordDecision", step: 2, cx1: 280, cy1: 80, cx2: 310, cy2: 90 },
+            { from: "executor", to: "storage",   label: "memory root", step: 3, cx1: 280, cy1: 60, cx2: 310, cy2: 60 },
+          ];
+          const getNode = (id: string) => nodes.find((n) => n.id === id)!;
+          return (
+            <svg width="100%" viewBox="0 0 440 130" style={{ overflow: "visible", maxWidth: 440 }}>
+              {edges.map((e) => {
+                const a = getNode(e.from); const b = getNode(e.to);
+                const active = cursor >= e.step && phase !== "idle";
+                const done = cursor > e.step || phase === "done";
+                const col = done ? "#10b981" : active ? "#7C5CF8" : "var(--line-2)";
+                return (
+                  <g key={e.label}>
+                    <path d={`M${a.x + 30},${a.y} C${e.cx1},${e.cy1} ${e.cx2},${e.cy2} ${b.x - 24},${b.y}`}
+                      fill="none" stroke={col} strokeWidth={active || done ? 2 : 1.5}
+                      strokeDasharray={active && !done ? "5 3" : undefined}
+                      style={{ transition: "stroke .5s" }} />
+                    <text x={(a.x + b.x) / 2 + 10} y={Math.min(a.y, b.y) - 4} fontSize="8" fill={active || done ? col : "var(--muted)"} textAnchor="middle" style={{ transition: "fill .5s" }}>{e.label}</text>
+                  </g>
+                );
+              })}
+              {nodes.map((n) => {
+                const active = (n.id === "strategist" && cursor >= 0) || (n.id === "executor" && cursor >= 1) || (n.id === "compute" && cursor >= 1) || (n.id === "vault" && cursor >= 2) || (n.id === "storage" && cursor >= 3);
+                const col = active ? n.col : "var(--line-2)";
+                return (
+                  <g key={n.id}>
+                    <circle cx={n.x} cy={n.y} r={active ? 22 : 20} fill={active ? n.col + "22" : "var(--bg-2)"} stroke={col} strokeWidth={active ? 2 : 1} style={{ transition: "all .4s" }} />
+                    <text x={n.x} y={n.y + 3} fontSize="8" fontWeight="800" fill={col} textAnchor="middle" style={{ transition: "fill .4s" }}>{n.label}</text>
+                    <text x={n.x} y={n.y + 13} fontSize="6" fill="var(--muted)" textAnchor="middle">{n.sub}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          );
+        })()}
+      </div>
+
       <div className="ogdf-steps">
         {A2A_STEPS.map((s, i) => {
           const st = stepState(i);
@@ -1006,6 +1057,64 @@ export function OgTradingArenaWidget({ workspace }: { workspace: Workspace }) {
   );
 }
 
+// ── Live Wallet Balance ────────────────────────────────────────────────────
+const OG_RPC = (import.meta.env as Record<string, string | undefined>)["VITE_0G_RPC_URL"] ?? "https://evmrpc.0g.ai";
+const DEPLOYER = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
+
+async function fetchOgBalance(address: string): Promise<string | null> {
+  try {
+    const res = await fetch(OG_RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getBalance", params: [address, "latest"], id: 1 }),
+    });
+    const data = (await res.json()) as { result?: string };
+    if (!data.result) return null;
+    const wei = BigInt(data.result);
+    const og = Number(wei) / 1e18;
+    return og.toFixed(4);
+  } catch {
+    return null;
+  }
+}
+
+export function LiveWalletBalance() {
+  const [balance, setBalance] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastFetch, setLastFetch] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      const b = await fetchOgBalance(DEPLOYER);
+      if (!alive) return;
+      setBalance(b);
+      setLoading(false);
+      setLastFetch(new Date().toLocaleTimeString());
+    };
+    void poll();
+    const id = setInterval(poll, 30_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, background: "var(--field)", border: "1px solid var(--line-2)", marginBottom: 12 }}>
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: balance !== null ? "#10b981" : loading ? "#60a5fa" : "#f87171", flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Deployer wallet · 0G Mainnet · live</div>
+        <div style={{ fontFamily: "monospace", fontSize: ".72rem", color: "var(--muted)", marginBottom: 2 }}>{DEPLOYER}</div>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        {loading
+          ? <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--muted)", fontSize: ".78rem" }}><Loader2 width={12} height={12} className="wallet-spin" /> checking…</div>
+          : balance !== null
+            ? <div><div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#10b981" }}>{balance} <span style={{ fontSize: ".72rem", fontWeight: 600 }}>OG</span></div>{lastFetch && <div style={{ fontSize: ".58rem", color: "var(--muted)" }}>updated {lastFetch}</div>}</div>
+            : <div style={{ fontSize: ".78rem", color: "var(--red)", fontWeight: 700 }}>RPC offline</div>}
+      </div>
+    </div>
+  );
+}
+
 // ── Agent ID Registry ─────────────────────────────────────────────────────
 type RegAgent = { agentId: string; name: string; role: string; wallet: string; dailyCapUsd: number; sealed: boolean; createdAt: string; status: "active" | "revoked" };
 const AG_ROLES = ["Job Worker", "Trading Agent", "Memory Curator", "Data Pipeline", "Custom"] as const;
@@ -1095,6 +1204,30 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
                     <polyline points={pts + " 60,32 0,32"} fill={col + "22"} stroke="none" />
                   </svg>
                 </div>
+                {(() => {
+                  const spentToday = deterministicScore(a.agentId + "|spent", 0, a.dailyCapUsd * 0.85);
+                  const pct = Math.min(1, spentToday / a.dailyCapUsd);
+                  const r = 18; const circ = 2 * Math.PI * r;
+                  const dash = circ * pct;
+                  const warn = pct > 0.8;
+                  const gaugeCol = warn ? "#ef4444" : pct > 0.5 ? "#f59e0b" : col;
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
+                      <svg width="44" height="44" viewBox="0 0 44 44" style={{ flexShrink: 0 }}>
+                        <circle cx="22" cy="22" r={r} fill="none" stroke="var(--line-2)" strokeWidth="4" />
+                        <circle cx="22" cy="22" r={r} fill="none" stroke={gaugeCol} strokeWidth="4"
+                          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                          transform="rotate(-90 22 22)" style={{ transition: "stroke-dasharray .6s ease" }} />
+                        <text x="22" y="26" textAnchor="middle" fill={gaugeCol} fontSize="8" fontWeight="800">{Math.round(pct * 100)}%</text>
+                      </svg>
+                      <div>
+                        <div style={{ fontSize: ".62rem", color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em" }}>Daily spend</div>
+                        <div style={{ fontSize: ".78rem", fontWeight: 800, color: gaugeCol }}>${spentToday.toFixed(2)} <span style={{ color: "var(--muted)", fontWeight: 500 }}>/ ${a.dailyCapUsd}</span></div>
+                        {warn && <div style={{ fontSize: ".6rem", color: "#ef4444", fontWeight: 700 }}>⚠ near limit</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <button className="btn btn-ghost btn-sm" type="button" style={{ alignSelf: "flex-start", marginTop: 2, fontSize: ".7rem", padding: "3px 10px" }} onClick={() => setStatus(a.agentId, a.status === "active" ? "revoked" : "active")}>{a.status === "active" ? "Revoke" : "Restore"}</button>
               </div>
             );
@@ -1234,6 +1367,132 @@ export function OgLiveContractsPanel() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── 0G DA Monitor ─────────────────────────────────────────────────────────────
+
+type DaCommitment = {
+  id: string;
+  blockHeight: number;
+  batchSize: number;
+  dataRoot: string;
+  submittedAt: string;
+  status: "finalized" | "pending" | "challenged";
+  throughputKBs: number;
+};
+
+function makeDaCommitments(seed: number): DaCommitment[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const s = seed + i * 37;
+    const blockHeight = 2_841_000 + seed % 1000 + i * 7;
+    const statusIdx = (deterministicScore(String(s), 0, 10)) | 0;
+    const status: DaCommitment["status"] = statusIdx < 8 ? "finalized" : statusIdx < 9 ? "pending" : "challenged";
+    return {
+      id: hashId("da", String(s), 10),
+      blockHeight,
+      batchSize: 1 + ((s * 31) % 24),
+      dataRoot: fnv1aHex(String(s)) + fnv1aHex(String(s + 1)),
+      submittedAt: new Date(Date.now() - (12 - i) * 14_000).toLocaleTimeString(),
+      status,
+      throughputKBs: Math.round(deterministicScore(String(s + 3), 120, 950)),
+    };
+  });
+}
+
+export function OgDaMonitor() {
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 9999));
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<"all" | "finalized" | "pending" | "challenged">("all");
+
+  const rows = useMemo(() => makeDaCommitments(seed), [seed]);
+  const filtered = filter === "all" ? rows : rows.filter((r) => r.status === filter);
+
+  const totalKBs = rows.reduce((s, r) => s + r.throughputKBs, 0);
+  const finalized = rows.filter((r) => r.status === "finalized").length;
+
+  async function refresh() {
+    setRefreshing(true);
+    await new Promise((r) => setTimeout(r, 600));
+    setSeed((s) => s + 1);
+    setRefreshing(false);
+  }
+
+  useEffect(() => {
+    const id = setInterval(() => setSeed((s) => s + 1), 14_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const statusColor: Record<DaCommitment["status"], string> = {
+    finalized: "#10b981",
+    pending: "#f59e0b",
+    challenged: "#ef4444",
+  };
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
+        <Database width={14} height={14} style={{ color: "#4ade80", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>0G DA Monitor</span>
+        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>{(totalKBs / 1024).toFixed(1)} MB/s avg · {finalized}/{rows.length} finalized</span>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={refreshing}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--line-2)", background: "var(--field)", cursor: "pointer", fontSize: ".65rem", color: "var(--muted)" }}
+        >
+          <RefreshCw width={11} height={11} className={refreshing ? "wallet-spin" : ""} /> Refresh
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, padding: "8px 16px", borderBottom: "1px solid var(--line-2)" }}>
+        {(["all", "finalized", "pending", "challenged"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            style={{
+              padding: "2px 10px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: ".65rem", fontWeight: 700,
+              background: filter === f ? (f === "all" ? "#7C5CF820" : statusColor[f as Exclude<typeof f, "all">] + "20") : "transparent",
+              color: filter === f ? (f === "all" ? "#7C5CF8" : statusColor[f as Exclude<typeof f, "all">]) : "var(--muted)",
+            }}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".72rem" }}>
+          <thead>
+            <tr style={{ background: "var(--field)" }}>
+              {["Block", "Batch", "Data root", "Throughput", "Status", "Time"].map((h) => (
+                <th key={h} style={{ padding: "6px 14px", textAlign: "left", fontWeight: 700, fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => (
+              <tr key={r.id} style={{ borderTop: "1px solid var(--line-2)" }}>
+                <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "var(--ink)" }}>#{r.blockHeight.toLocaleString()}</td>
+                <td style={{ padding: "7px 14px", color: "var(--muted)" }}>{r.batchSize} txs</td>
+                <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", color: "var(--muted)" }}>{r.dataRoot.slice(0, 14)}…</td>
+                <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "var(--ink)" }}>{r.throughputKBs} KB/s</td>
+                <td style={{ padding: "7px 14px" }}>
+                  <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: ".63rem", fontWeight: 700, background: statusColor[r.status] + "18", color: statusColor[r.status] }}>
+                    {r.status}
+                  </span>
+                </td>
+                <td style={{ padding: "7px 14px", color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{r.submittedAt}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>No {filter} commitments.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

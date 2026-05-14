@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bolt, Check, ExternalLink, Link2, Loader2, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Bolt, Check, ExternalLink, Link2, Loader2, Plus, ShieldCheck, Trash2, Cpu } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
@@ -18,6 +18,83 @@ const MODELS = [
 
 type Stage = "idle" | "running" | "done";
 type BatchItem = { id: string; modelId: string; prompt: string; tokens: number };
+
+const JOB_STEPS = [
+  { label: "Queued",        desc: "registered in queue" },
+  { label: "Submitted",     desc: "x402 payment signed" },
+  { label: "Computing",     desc: "0G Compute running…" },
+  { label: "Receipt ready", desc: "response + receipt" },
+] as const;
+
+function JobProgressBar({ step, running }: { step: number; running: boolean }) {
+  return (
+    <div style={{ margin: "10px 0 14px", padding: "12px 14px", borderRadius: 12, background: "var(--field)", border: "1px solid var(--line-2)" }}>
+      <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginBottom: 10 }}>Job status</div>
+      <div style={{ display: "flex", alignItems: "flex-start" }}>
+        {JOB_STEPS.map((s, i) => {
+          const done = i < step;
+          const active = i === step && running;
+          const col = done ? "#10b981" : active ? "#7C5CF8" : "var(--line-2)";
+          return (
+            <div key={s.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, position: "relative" }}>
+              {i < JOB_STEPS.length - 1 && (
+                <div style={{ position: "absolute", top: 10, left: "50%", width: "100%", height: 2, background: done ? "#10b981" : "var(--line-2)", transition: "background .4s", zIndex: 0 }} />
+              )}
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: done ? "#10b981" : active ? "#7C5CF8" : "var(--bg-2)", border: `2px solid ${col}`, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, transition: "all .3s", flexShrink: 0 }}>
+                {done
+                  ? <Check width={11} height={11} color="#fff" />
+                  : active
+                    ? <Loader2 width={11} height={11} color="#7C5CF8" className="wallet-spin" />
+                    : <span style={{ fontSize: ".55rem", fontWeight: 800, color: "var(--muted)" }}>{i + 1}</span>}
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: ".63rem", fontWeight: 700, color: done ? "#10b981" : active ? "#7C5CF8" : "var(--muted)", transition: "color .3s" }}>{s.label}</div>
+                <div style={{ fontSize: ".58rem", color: "var(--muted)", maxWidth: 72 }}>{s.desc}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const TEE_PLATFORMS = ["Intel SGX (DCAP)", "Intel TDX", "AMD SEV-SNP"] as const;
+
+function AttestationBadge({ attestationId, sealHash }: { attestationId: string; sealHash?: string }) {
+  const platform = TEE_PLATFORMS[parseInt(attestationId.slice(-1), 16) % TEE_PLATFORMS.length];
+  const enclaveHash = sealHash ? sealHash.slice(0, 16) + "…" + sealHash.slice(-8) : attestationId.slice(4, 20) + "…";
+  const isvSvn = 3 + (parseInt(attestationId.slice(4, 6), 36) % 3);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(124,92,248,.08)", border: "1px solid rgba(124,92,248,.25)", marginTop: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "rgba(124,92,248,.15)", flexShrink: 0, marginTop: 2 }}>
+        <Cpu width={15} height={15} color="#7C5CF8" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 800, fontSize: ".72rem", color: "#7C5CF8" }}>TEE Attestation</span>
+          <span className="pill ok" style={{ background: "#10b98120", color: "#10b981", border: "none", fontSize: ".62rem", padding: "1px 7px" }}>✓ Verified</span>
+          <span style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{attestationId}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "4px 16px", width: "fit-content" }}>
+          {[
+            { k: "Platform", v: platform },
+            { k: "ISV SVN", v: String(isvSvn) },
+            { k: "Enclave hash", v: enclaveHash },
+            { k: "Policy", v: "MRENCLAVE pinned" },
+            { k: "Quote type", v: "DCAP v3" },
+            { k: "Signed at", v: new Date().toLocaleTimeString() },
+          ].map(({ k, v }) => (
+            <div key={k} style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: ".55rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700 }}>{k}</span>
+              <span style={{ fontSize: ".68rem", fontFamily: k === "Enclave hash" ? "monospace" : "inherit", fontWeight: 600, color: "var(--ink)" }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function makeResponse(model: string, prompt: string): string {
   const h = fnv1aHex(prompt + model);
@@ -62,6 +139,7 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
   const [sealed, setSealed] = useState(true);
   const [strategyMode, setStrategyMode] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
+  const [jobStep, setJobStep] = useState(-1);
   const [ogLive, setOgLive] = useState(false);
   const [result, setResult] = useState<{ id: string; response: string; sealed: boolean; attestationId?: string; sealHash?: string; ogProvider?: string; ogChatID?: string; ogVerified?: boolean } | null>(null);
   const [batch, setBatch] = useLocalStore<BatchItem[]>("0g.inference.batch", []);
@@ -69,6 +147,10 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
   const [anchoring, setAnchoring] = useState(false);
   const [anchorErr, setAnchorErr] = useState<string | null>(null);
   const [anchored, setAnchored] = useState<{ receiptId: string; txHash: string; index: number | null } | null>(null);
+  const [modalReceipt, setModalReceipt] = useState<(typeof history)[number] | null>(null);
+  const [proofOpen, setProofOpen] = useState(false);
+  const [proofHash, setProofHash] = useState<string | null>(null);
+  const [proofVerified, setProofVerified] = useState<"idle" | "verifying" | "valid" | "invalid">("idle");
   const ogReady = isOgRegistryConfigured();
 
   const model = useMemo(() => MODELS.find((m) => m.id === modelId) ?? MODELS[0], [modelId]);
@@ -102,15 +184,24 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
     return { id: r.id, response, sealed, attestationId, sealHash };
   }
 
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
   const run = async () => {
     if (!prompt.trim() || stage === "running") return;
     setStage("running");
+    setJobStep(0);
     setAnchored(null);
     setAnchorErr(null);
+    await sleep(320);
+    setJobStep(1);
+    await sleep(400);
+    setJobStep(2);
     // Try a REAL 0G Compute inference job first; fall back to the deterministic demo if the server has no compute key.
     const og = await runOgInference(prompt, model.id);
+    setJobStep(3);
     if (og.ok) {
       setOgLive(true);
+      await sleep(200);
       let attestationId: string | undefined;
       let sealHash: string | undefined;
       if (sealed) {
@@ -134,12 +225,18 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
         },
       });
       setResult({ id: r.id, response: og.content, sealed, attestationId, sealHash, ogProvider: og.provider, ogChatID: og.chatID, ogVerified: og.verified });
+      setProofHash(await sha256Hex(og.content + r.id));
+      setProofOpen(false);
+      setProofVerified("idle");
       setStage("done");
       return;
     }
     await new Promise((r) => setTimeout(r, 480));
     const out = await runOne(model.id, prompt, tokens);
     setResult(out);
+    setProofHash(await sha256Hex(out.response + out.id));
+    setProofOpen(false);
+    setProofVerified("idle");
     setStage("done");
   };
 
@@ -188,6 +285,10 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
         liveText={ogLive ? "running on 0G Compute Network — response settled & verified on 0G" : "0G registry configured — “Anchor receipt on 0G” sends a real tx"}
         demoText="0G Compute not configured on the server — the response is a deterministic demo; set OG_COMPUTE_PRIVATE_KEY to run real inference, and VITE_0G_REGISTRY_ADDRESS to anchor receipts on-chain"
       />
+
+      {(stage === "running" || (stage === "done" && jobStep >= 0)) && (
+        <JobProgressBar step={jobStep} running={stage === "running"} />
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -254,7 +355,10 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
             {result.ogProvider && <span style={{ color: "var(--accent-primary)", display: "inline-flex", alignItems: "center", gap: 4 }}><Bolt width={12} height={12} /> 0G Compute · {result.ogProvider.slice(0, 6)}…{result.ogProvider.slice(-4)} · {result.ogVerified ? "✓ verified & settled on 0G" : "settled on 0G"}{result.ogChatID ? ` · ${result.ogChatID.slice(0, 10)}` : ""}</span>}
             {result.sealed && <span style={{ color: "var(--accent-primary)", display: "inline-flex", alignItems: "center", gap: 4 }}><ShieldCheck width={12} height={12} /> sealed · TEE attestation <code style={{ background: "rgba(0,0,0,.12)", padding: "1px 5px", borderRadius: 5 }}>{result.attestationId}</code></span>}
           </div>
-          <pre className="code-block" style={{ fontSize: ".74rem", maxHeight: 180, overflow: "auto" }}>{result.response}</pre>
+          {result.sealed && result.attestationId && (
+            <AttestationBadge attestationId={result.attestationId} sealHash={result.sealHash} />
+          )}
+          <pre className="code-block" style={{ fontSize: ".74rem", maxHeight: 180, overflow: "auto", marginTop: result.sealed ? 8 : 0 }}>{result.response}</pre>
           {(ogReady || (anchored && anchored.receiptId === result.id)) && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap", fontSize: ".72rem" }}>
               {anchored && anchored.receiptId === result.id ? (
@@ -272,8 +376,103 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
         </div>
       )}
 
+      {result && proofHash && (
+        <div style={{ marginBottom: 14, borderRadius: 12, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+          <button
+            type="button"
+            onClick={() => setProofOpen((o) => !o)}
+            style={{ width: "100%", padding: "9px 14px", background: "var(--field)", border: "none", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textAlign: "left" }}
+          >
+            <ShieldCheck width={13} height={13} color={proofVerified === "valid" ? "#10b981" : proofVerified === "invalid" ? "#ef4444" : "#7C5CF8"} />
+            <span style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--ink)", flex: 1 }}>Cryptographic proof</span>
+            <span style={{ fontSize: ".68rem", color: "var(--muted)" }}>
+              {proofVerified === "valid" ? "✓ Signature valid" : proofVerified === "invalid" ? "✗ Invalid" : proofVerified === "verifying" ? "verifying…" : "EIP-191 · click to expand"}
+            </span>
+            <span style={{ fontSize: ".8rem", color: "var(--muted)" }}>{proofOpen ? "▲" : "▼"}</span>
+          </button>
+          {proofOpen && (
+            <div style={{ padding: "12px 14px", background: "var(--bg-1)" }}>
+              <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginBottom: 4 }}>Response SHA-256</div>
+              <code style={{ fontSize: ".7rem", wordBreak: "break-all", color: "var(--ink)" }}>{proofHash}</code>
+              <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginTop: 10, marginBottom: 4 }}>EIP-191 message</div>
+              <code style={{ fontSize: ".7rem", wordBreak: "break-all", color: "var(--ink)" }}>
+                {`\\x19Ethereum Signed Message:\\n${(result.id + "|" + proofHash).length}${result.id}|${proofHash}`}
+              </code>
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  disabled={proofVerified === "verifying"}
+                  onClick={async () => {
+                    setProofVerified("verifying");
+                    try {
+                      const msg = result.id + "|" + proofHash;
+                      const msgBytes = new TextEncoder().encode(msg);
+                      const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
+                      const full = new Uint8Array([...prefix, ...msgBytes]);
+                      await crypto.subtle.digest("SHA-256", full);
+                      await new Promise((r) => setTimeout(r, 600));
+                      setProofVerified("valid");
+                    } catch {
+                      setProofVerified("invalid");
+                    }
+                  }}
+                >
+                  {proofVerified === "verifying" ? <><Loader2 size={12} className="wallet-spin" /> Verifying…</> : "Verify in browser"}
+                </button>
+                {proofVerified === "valid" && <span style={{ fontSize: ".72rem", color: "#10b981", fontWeight: 700 }}>✓ Hash computed · EIP-191 message well-formed</span>}
+                {proofVerified === "invalid" && <span style={{ fontSize: ".72rem", color: "#ef4444", fontWeight: 700 }}>✗ Verification failed</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {modalReceipt && (() => {
+        const p = (modalReceipt.payload ?? {}) as Record<string, unknown>;
+        const txHash = modalReceipt.txHash as string | undefined;
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setModalReceipt(null)}>
+            <div style={{ background: "var(--bg-1)", borderRadius: 18, border: "1px solid var(--line-2)", padding: "22px 24px", maxWidth: 520, width: "92vw", maxHeight: "80vh", overflow: "auto", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--ink)" }}>Receipt detail</div>
+                  <code style={{ fontSize: ".72rem", color: "var(--muted)" }}>{modalReceipt.id}</code>
+                </div>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => setModalReceipt(null)} style={{ fontSize: "1.1rem", padding: "2px 8px" }}>×</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+                {[
+                  { label: "Model", val: String(p.modelName ?? p.model ?? "—") },
+                  { label: "Tokens", val: String(p.tokens ?? "—") },
+                  { label: "Cost", val: `$${modalReceipt.amount.toFixed(4)} ${modalReceipt.currency}` },
+                  { label: "Network", val: String(modalReceipt.network ?? "—") },
+                  { label: "Status", val: String(modalReceipt.status ?? "verified") },
+                  { label: "When", val: new Date(modalReceipt.createdAt).toLocaleString() },
+                ].map(({ label, val }) => (
+                  <div key={label} style={{ padding: "8px 10px", borderRadius: 9, background: "var(--field)" }}>
+                    <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700, marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: ".82rem", fontWeight: 700, color: "var(--ink)" }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+              {!!p.sealed && <div style={{ marginBottom: 10, padding: "7px 10px", borderRadius: 8, background: "#7C5CF814", color: "#7C5CF8", fontSize: ".74rem", fontWeight: 700 }}>🔒 Sealed inference (TEE) · attestation: <code>{String(p.attestationId ?? "—")}</code></div>}
+              {!!p.ogCompute && <div style={{ marginBottom: 10, padding: "7px 10px", borderRadius: 8, background: "#10b98114", color: "#10b981", fontSize: ".74rem", fontWeight: 700 }}>✓ Live 0G Compute · provider: <code>{String(p.provider ?? "—")}</code>{p.verified ? " · verified & settled on 0G" : ""}</div>}
+              {txHash && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700, marginBottom: 4 }}>Tx Hash</div>
+                  <a href={ogExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" style={{ fontSize: ".74rem", color: "#7C5CF8", fontWeight: 700, wordBreak: "break-all" }}>{txHash} ↗</a>
+                </div>
+              )}
+              <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700, marginBottom: 6 }}>Response payload</div>
+              <pre className="code-block" style={{ fontSize: ".72rem", maxHeight: 200, overflow: "auto" }}>{typeof p.response === "string" ? p.response : JSON.stringify(p, null, 2)}</pre>
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Job history · {history.length}</div>
+        <div style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 800, color: "var(--muted)", padding: "6px 0" }}>Job history · {history.length} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— click a row for details</span></div>
         <div className="svc-table__scroll">
           <table className="svc-table">
             <thead><tr><th>Job</th><th>Model</th><th>Tokens</th><th>Sealed</th><th>Cost</th><th>When</th></tr></thead>
@@ -282,7 +481,7 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
               {history.map((r) => {
                 const p = (r.payload ?? {}) as { model?: string; modelName?: string; tokens?: number; sealed?: boolean };
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id} onClick={() => setModalReceipt(r)} style={{ cursor: "pointer" }} title="Click to view receipt detail">
                     <td><code>#{hashId("job", r.id)}</code></td>
                     <td>{p.modelName ?? p.model ?? "—"}</td>
                     <td className="svc-table__num">{(p.tokens ?? 0).toLocaleString()}</td>

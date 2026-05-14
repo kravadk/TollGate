@@ -25,6 +25,8 @@ import {
   AgentIdRegistry,
   RevenueSplitConsole,
   OgLiveContractsPanel,
+  LiveWalletBalance,
+  OgDaMonitor,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -59,6 +61,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
     nodes.push(<InferenceJobRunner key="inference" workspace={workspace} />);
     nodes.push(<OgComputeKanban key="kanban" workspace={workspace} />);
     nodes.push(<TeeAttestationVerifier key="tee" workspace={workspace} />);
+    nodes.push(<OgDaMonitor key="da" />);
   }
   if (t.includes("storage")) {
     nodes.push(<OgStorageEstimator key="storagecalc" />);
@@ -79,6 +82,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
 export function renderAgentExtra(workspace: Workspace): ReactNode | null {
   return (
     <>
+      <LiveWalletBalance />
       <OgIntegrationStatus />
       <OpenClawSkillConsole workspace={workspace} />
       <AgentIdRegistry workspace={workspace} />
