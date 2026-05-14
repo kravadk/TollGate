@@ -1,12 +1,14 @@
-/* QIE testnet on-chain glue for the frontend.
+/* QIE on-chain glue for the frontend.
  *
- * Two contracts (see contracts/): QieCheckout — invoice/payment/split settlement —
- * and QiePass — tiered ERC-721-like membership pass (Bronze / Silver / Gold).
- * Everything here is real-but-optional: present only when the addresses are configured
- * (deploy with `cd contracts && npm run deploy:qie`), otherwise the app degrades
- * gracefully — same pattern as src/lib/og.ts and src/lib/mantle.ts.
+ * Two networks:
+ *   Mainnet v3: chainId 1990 (0x7C6) — VITE_QIE_*
+ *   Testnet:    chainId 1983 (0x7BF) — VITE_QIE_TESTNET_*
+ *
+ * Everything here is real-but-optional: present only when addresses are configured.
+ * Same graceful-degradation pattern as src/lib/og.ts and src/lib/mantle.ts.
  */
 import { BrowserProvider, Contract } from "ethers";
+import type { NetworkMode } from "./chains";
 
 function env(key: string): string | undefined {
   const v = (import.meta.env as Record<string, string | undefined>)[key];
@@ -24,33 +26,47 @@ const QIE_ADD_CHAIN: Record<string, unknown> = {
     rpcUrls: ["https://rpc1testnet.qie.digital/"],
     blockExplorerUrls: ["https://testnet.qie.digital"],
   },
+  "0x7c6": {
+    chainId: "0x7c6",
+    chainName: "QIE Mainnet",
+    nativeCurrency: { name: "QIE", symbol: "QIE", decimals: 18 },
+    rpcUrls: ["https://rpc1mainnet.qie.digital/"],
+    blockExplorerUrls: ["https://mainnet.qie.digital"],
+  },
 };
 
 export type QieConfig = {
   checkoutAddress: string | null;
   passAddress: string | null;
-  explorerBase: string;     // no trailing slash
-  chainHex: string;         // lowercase 0x…
+  agentCreditAddress: string | null;
+  oracleFeedAddress: string | null;
+  explorerBase: string;   // no trailing slash
+  chainHex: string;       // lowercase 0x…
+  rpcUrl: string;
 };
 
-export function getQieConfig(): QieConfig {
-  const explorer = (env("VITE_QIE_EXPLORER") ?? "https://testnet.qie.digital").replace(/\/+$/, "");
-  const chainRaw = env("VITE_QIE_CHAIN_ID");
-  let chainHex = QIE_DEFAULT_CHAIN_HEX;
-  if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
+export function getQieConfig(mode?: NetworkMode): QieConfig {
+  const isMainnet = mode === "mainnet";
+  const prefix = isMainnet ? "" : "TESTNET_";
+  const defaultExplorer = isMainnet ? "https://mainnet.qie.digital" : "https://testnet.qie.digital";
+  const defaultChainHex = isMainnet ? "0x7c6" : QIE_DEFAULT_CHAIN_HEX;
+  const rpcUrl = isMainnet ? "https://rpc1mainnet.qie.digital/" : "https://rpc1testnet.qie.digital/";
   return {
-    checkoutAddress: env("VITE_QIE_CHECKOUT_ADDRESS") ?? null,
-    passAddress: env("VITE_QIE_PASS_ADDRESS") ?? null,
-    explorerBase: explorer,
-    chainHex,
+    checkoutAddress:    env(`VITE_QIE_${prefix}CHECKOUT_ADDRESS`) ?? null,
+    passAddress:        env(`VITE_QIE_${prefix}PASS_ADDRESS`) ?? null,
+    agentCreditAddress: env(`VITE_QIE_${prefix}AGENT_CREDIT_ADDRESS`) ?? null,
+    oracleFeedAddress:  env(`VITE_QIE_${prefix}ORACLE_FEED_ADDRESS`) ?? null,
+    explorerBase: defaultExplorer,
+    chainHex: defaultChainHex,
+    rpcUrl,
   };
 }
 
-export function isQieCheckoutConfigured(): boolean { return getQieConfig().checkoutAddress !== null; }
-export function isQiePassConfigured(): boolean { return getQieConfig().passAddress !== null; }
+export function isQieCheckoutConfigured(mode?: NetworkMode): boolean { return getQieConfig(mode).checkoutAddress !== null; }
+export function isQiePassConfigured(mode?: NetworkMode): boolean { return getQieConfig(mode).passAddress !== null; }
 
-export function qieExplorerTxUrl(txHash: string): string { return `${getQieConfig().explorerBase}/tx/${txHash}`; }
-export function qieExplorerAddrUrl(addr: string): string { return `${getQieConfig().explorerBase}/address/${addr}`; }
+export function qieExplorerTxUrl(txHash: string, mode?: NetworkMode): string { return `${getQieConfig(mode).explorerBase}/tx/${txHash}`; }
+export function qieExplorerAddrUrl(addr: string, mode?: NetworkMode): string { return `${getQieConfig(mode).explorerBase}/address/${addr}`; }
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 
@@ -87,8 +103,8 @@ function getEth(): Eip1193 {
   return eth;
 }
 
-async function getQieSigner() {
-  const cfg = getQieConfig();
+async function getQieSigner(mode?: NetworkMode) {
+  const cfg = getQieConfig(mode);
   const eth = getEth();
   const current = (await eth.request({ method: "eth_chainId" })) as string;
   if (current.toLowerCase() !== cfg.chainHex) {
@@ -99,9 +115,9 @@ async function getQieSigner() {
       const addParams = QIE_ADD_CHAIN[cfg.chainHex];
       if (code === 4902 && addParams) {
         try { await eth.request({ method: "wallet_addEthereumChain", params: [addParams] }); }
-        catch { throw new Error(`Add the QIE testnet (${cfg.chainHex}) to your wallet and retry.`); }
+        catch { throw new Error(`Add the QIE network (${cfg.chainHex}) to your wallet and retry.`); }
       } else {
-        throw new Error(`Wallet is on ${current}; switch it to QIE testnet (${cfg.chainHex}) and retry.`);
+        throw new Error(`Wallet is on ${current}; switch it to QIE (${cfg.chainHex}) and retry.`);
       }
     }
   }
@@ -113,10 +129,10 @@ async function getQieSigner() {
 
 export type InvoiceResult = { txHash: string; explorerUrl: string; invoiceId: number | null };
 
-export async function createInvoice(payee: string, amountWei: bigint): Promise<InvoiceResult> {
-  const cfg = getQieConfig();
+export async function createInvoice(payee: string, amountWei: bigint, mode?: NetworkMode): Promise<InvoiceResult> {
+  const cfg = getQieConfig(mode);
   if (!cfg.checkoutAddress) throw new Error("QIE checkout not configured (set VITE_QIE_CHECKOUT_ADDRESS).");
-  const signer = await getQieSigner();
+  const signer = await getQieSigner(mode);
   const c = new Contract(cfg.checkoutAddress, CHECKOUT_ABI, signer);
   const tx = await c.createInvoice(payee, amountWei);
   const receipt = await tx.wait();
@@ -127,31 +143,31 @@ export async function createInvoice(payee: string, amountWei: bigint): Promise<I
       if (parsed?.name === "InvoiceCreated") { invoiceId = Number(parsed.args.id); break; }
     }
   } catch { /* invoiceId stays null */ }
-  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string), invoiceId };
+  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string, mode), invoiceId };
 }
 
 // ── payInvoice ────────────────────────────────────────────────────────────────
 
-export async function payInvoice(invoiceId: number, amountWei: bigint): Promise<{ txHash: string; explorerUrl: string }> {
-  const cfg = getQieConfig();
+export async function payInvoice(invoiceId: number, amountWei: bigint, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string }> {
+  const cfg = getQieConfig(mode);
   if (!cfg.checkoutAddress) throw new Error("QIE checkout not configured.");
-  const signer = await getQieSigner();
+  const signer = await getQieSigner(mode);
   const c = new Contract(cfg.checkoutAddress, CHECKOUT_ABI, signer);
   const tx = await c.payInvoice(invoiceId, { value: amountWei });
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string, mode) };
 }
 
 // ── splitPayout ───────────────────────────────────────────────────────────────
 
-export async function splitPayout(payees: string[], amountsWei: bigint[], totalWei: bigint): Promise<{ txHash: string; explorerUrl: string }> {
-  const cfg = getQieConfig();
+export async function splitPayout(payees: string[], amountsWei: bigint[], totalWei: bigint, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string }> {
+  const cfg = getQieConfig(mode);
   if (!cfg.checkoutAddress) throw new Error("QIE checkout not configured.");
-  const signer = await getQieSigner();
+  const signer = await getQieSigner(mode);
   const c = new Contract(cfg.checkoutAddress, CHECKOUT_ABI, signer);
   const tx = await c.splitPayout(payees, amountsWei, { value: totalWei });
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string, mode) };
 }
 
 // ── mintPass ──────────────────────────────────────────────────────────────────
@@ -164,10 +180,10 @@ const TIER_PRICE_WEI: Record<0 | 1 | 2, bigint> = {
   2: 500000000000000000n,  // 0.50 QIE
 };
 
-export async function mintPass(to: string, tier: 0 | 1 | 2): Promise<MintPassResult> {
-  const cfg = getQieConfig();
+export async function mintPass(to: string, tier: 0 | 1 | 2, mode?: NetworkMode): Promise<MintPassResult> {
+  const cfg = getQieConfig(mode);
   if (!cfg.passAddress) throw new Error("QIE pass not configured (set VITE_QIE_PASS_ADDRESS).");
-  const signer = await getQieSigner();
+  const signer = await getQieSigner(mode);
   const c = new Contract(cfg.passAddress, PASS_ABI, signer);
   const price = TIER_PRICE_WEI[tier];
   const tx = await c.mintPass(to, tier, { value: price });
@@ -179,13 +195,13 @@ export async function mintPass(to: string, tier: 0 | 1 | 2): Promise<MintPassRes
       if (parsed?.name === "PassMinted") { tokenId = Number(parsed.args.tokenId); break; }
     }
   } catch { /* tokenId stays null */ }
-  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string), tokenId };
+  return { txHash: tx.hash as string, explorerUrl: qieExplorerTxUrl(tx.hash as string, mode), tokenId };
 }
 
 // ── checkPassTier / isValidPass ───────────────────────────────────────────────
 
-export async function checkPassTier(holder: string): Promise<number> {
-  const cfg = getQieConfig();
+export async function checkPassTier(holder: string, mode?: NetworkMode): Promise<number> {
+  const cfg = getQieConfig(mode);
   if (!cfg.passAddress) return 255;
   const eth = getEth();
   const provider = new BrowserProvider(eth as never);
@@ -193,8 +209,8 @@ export async function checkPassTier(holder: string): Promise<number> {
   try { return Number(await c.checkTier(holder)); } catch { return 255; }
 }
 
-export async function isValidPass(holder: string, minTier: 0 | 1 | 2): Promise<boolean> {
-  const cfg = getQieConfig();
+export async function isValidPass(holder: string, minTier: 0 | 1 | 2, mode?: NetworkMode): Promise<boolean> {
+  const cfg = getQieConfig(mode);
   if (!cfg.passAddress) return false;
   const eth = getEth();
   const provider = new BrowserProvider(eth as never);

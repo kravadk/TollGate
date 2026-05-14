@@ -4,17 +4,19 @@ import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { hashId } from "../../../lib/util-hash";
+import { getQieConfig } from "../../../lib/qie";
 
-const QIE_MAINNET_RPC = "https://rpc1mainnet.qie.digital/";
-const QIE_ORACLE_ADDR = "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142";
 const SERVICE_COUNT_SELECTOR = "0x06237526"; // keccak256("serviceCount()")[0:4]
 
 async function fetchOnChainFeedCount(): Promise<number> {
+  const cfg = getQieConfig("mainnet");
+  const addr = cfg.oracleFeedAddress;
+  if (!addr) return 0;
   try {
-    const res = await fetch(QIE_MAINNET_RPC, {
+    const res = await fetch(cfg.rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: QIE_ORACLE_ADDR, data: SERVICE_COUNT_SELECTOR }, "latest"] }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: addr, data: SERVICE_COUNT_SELECTOR }, "latest"] }),
       signal: AbortSignal.timeout(8000),
     });
     const json = await res.json() as { result?: string };

@@ -4,23 +4,25 @@ import type { Workspace } from "../../../types";
 import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { hashId } from "../../../lib/util-hash";
+import { getQieConfig } from "../../../lib/qie";
 
 // AgentScore → QIElend credit line widget.
 // Beats NeuroCred (2025 QIE winner): real x402 receipts as score basis, no off-chain ML.
 
-const QIE_MAINNET_RPC = "https://rpc1mainnet.qie.digital/";
-const QIE_CREDIT_ADDR = "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6";
 // keccak256("getLine(address)")[0:4] = 0x60116863
 const GET_LINE_SEL = "0x60116863";
 const DEMO_AGENT = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
 
 async function fetchOnChainCreditLine(): Promise<number> {
+  const cfg = getQieConfig("mainnet");
+  const addr = cfg.agentCreditAddress;
+  if (!addr) return 0;
   try {
     const padded = DEMO_AGENT.slice(2).toLowerCase().padStart(64, "0");
-    const res = await fetch(QIE_MAINNET_RPC, {
+    const res = await fetch(cfg.rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: QIE_CREDIT_ADDR, data: GET_LINE_SEL + padded }, "latest"] }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: addr, data: GET_LINE_SEL + padded }, "latest"] }),
       signal: AbortSignal.timeout(8000),
     });
     const json = await res.json() as { result?: string };

@@ -1,9 +1,14 @@
 {
   "network": "og",
-  "address": "0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
-  "txHash": "0xe9ae97bb7304d5a162e6d361a066f0492b7628076eb1b19bf35abf872bc3b167",
   "chainId": 16661,
   "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
-  "explorer": "https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
-  "deployedAt": "2026-05-12T13:51:40.986Z"
+  "explorer": "https://chainscan.0g.ai",
+  "deployedAt": "2026-05-12T13:51:40.986Z",
+  "contracts": {
+    "AgentIdentityRegistry": "0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
+    "ServiceRegistry":       "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8",
+    "AgentBudgetController": "0xA8302734081F26b8a3E42f90DCf07b3E063441de",
+    "DeliveryVerifier":      "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6"
+  },
+  "txHash": "0xe9ae97bb7304d5a162e6d361a066f0492b7628076eb1b19bf35abf872bc3b167"
 }

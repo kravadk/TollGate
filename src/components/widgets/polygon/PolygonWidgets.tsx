@@ -8,6 +8,7 @@ import {
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId } from "../../../lib/util-hash";
+import { getPolygonConfig } from "../../../lib/polygon";
 
 // ── Trade Finance — SME Invoice Factoring ───────────────────────────────────────
 
@@ -392,8 +393,9 @@ export function PolygonStatsWidget({ workspace: _ }: { workspace: Workspace }) {
 }
 
 function PolygonDeployedContracts() {
-  const escrow = import.meta.env.VITE_POLYGON_MAINNET_ESCROW_ADDRESS as string | undefined;
-  const explorer = (import.meta.env.VITE_POLYGON_EXPLORER as string | undefined) ?? "https://zkevm.polygonscan.com";
+  const cfg = getPolygonConfig("mainnet");
+  const escrow = cfg.escrowAddress ?? undefined;
+  const explorer = cfg.explorerBase;
   return (
     <div style={{ marginTop: 10, background: "var(--bg-2)", borderRadius: 12, border: "1px solid var(--line-2)", overflow: "hidden" }}>
       <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -436,7 +438,7 @@ export function PolygonMerchantOnboardingWidget({ workspace }: { workspace: Work
   async function deploy() {
     setDeploying(true);
     await new Promise(r => setTimeout(r, 2000));
-    const escrow = (import.meta.env.VITE_POLYGON_MAINNET_ESCROW_ADDRESS as string | undefined) ?? `0x${hashId("merchant", `${name}`).slice(0, 40)}`;
+    const escrow = getPolygonConfig("mainnet").escrowAddress ?? `0x${hashId("merchant", `${name}`).slice(0, 40)}`;
     setDeployed({ name, address: escrow, endpoint: `/api/${name.toLowerCase().replace(/\s/g, "-")}`, ts: new Date().toLocaleTimeString() });
     setDeploying(false);
     setStep(3);

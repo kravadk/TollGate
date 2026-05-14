@@ -1,0 +1,13 @@
+{
+  "network": "qieTestnet",
+  "chainId": 1983,
+  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "explorer": "https://testnet.qie.digital",
+  "deployedAt": "2026-05-14T00:00:00.000Z",
+  "contracts": {
+    "QieCheckout":    "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142",
+    "QiePass":        "0x42a14858Da4B2f75DB5C581bA5579786A12d97b4",
+    "QieAgentCredit": "0xBA4721Df33C3f32d8d35dEE21745cDC2B5b2Db81",
+    "QieOracleFeed":  "0x455cfBf7053d9E1c47306A7B7e53559ea73eeF1A"
+  }
+}

@@ -48,9 +48,11 @@ export function getArbitrumConfig(mode?: NetworkMode): ArbitrumConfig {
   const defaultExplorer = isMainnet ? "https://arbiscan.io" : "https://sepolia.arbiscan.io";
   const defaultChainHex = isMainnet ? "0xa4b1" : ARBITRUM_DEFAULT_CHAIN_HEX;
   const escrowVar = isMainnet ? "VITE_ARBITRUM_MAINNET_ESCROW_ADDRESS" : "VITE_ARBITRUM_ESCROW_ADDRESS";
-  const budgetVar = isMainnet ? "VITE_ARB_MAINNET_AGENT_BUDGET_ADDRESS" : "VITE_ARB_BUDGET_ADDRESS";
+  const budgetVar = isMainnet ? "VITE_ARB_MAINNET_AGENT_BUDGET_ADDRESS" : "VITE_ARB_AGENT_BUDGET_ADDRESS";
   const registryVar = isMainnet ? "VITE_ARB_MAINNET_SERVICE_REGISTRY_ADDRESS" : "VITE_ARB_SERVICE_REGISTRY_ADDRESS";
-  const explorer = (env("VITE_ARBITRUM_EXPLORER") ?? defaultExplorer).replace(/\/+$/, "");
+  const settlerVar = isMainnet ? "VITE_ARB_MAINNET_INTENT_SETTLER_ADDRESS" : "VITE_ARB_INTENT_SETTLER_ADDRESS";
+  const explorerEnv = isMainnet ? env("VITE_ARBITRUM_MAINNET_EXPLORER") : env("VITE_ARBITRUM_EXPLORER");
+  const explorer = (explorerEnv ?? defaultExplorer).replace(/\/+$/, "");
   const chainRaw = env("VITE_ARBITRUM_CHAIN_ID");
   let chainHex = defaultChainHex;
   if (chainRaw && !isMainnet) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
@@ -58,7 +60,7 @@ export function getArbitrumConfig(mode?: NetworkMode): ArbitrumConfig {
     escrowAddress: env(escrowVar) ?? null,
     budgetAddress: env(budgetVar) ?? null,
     serviceRegistryAddress: env(registryVar) ?? null,
-    intentSettlerAddress: env("VITE_ARB_INTENT_SETTLER_ADDRESS") ?? null,
+    intentSettlerAddress: env(settlerVar) ?? null,
     explorerBase: explorer,
     chainHex,
   };
@@ -226,8 +228,8 @@ export type AgentBudget = {
   autoPay: boolean;
 };
 
-function budgetContract(signerOrProvider: unknown) {
-  const cfg = getArbitrumConfig("mainnet");
+function budgetContract(signerOrProvider: unknown, mode?: NetworkMode) {
+  const cfg = getArbitrumConfig(mode ?? "mainnet");
   const addr = cfg.budgetAddress ?? "0x68c17e2e69DD79651457D440B5f5DCE77B9ad732";
   return new Contract(addr, BUDGET_ABI, signerOrProvider as never);
 }
@@ -269,8 +271,8 @@ export type OnChainService = {
   priceUsdc: number; provider: string; active: boolean; agentCardUri: string;
 };
 
-function registryContract(signerOrProvider: unknown) {
-  const cfg = getArbitrumConfig("mainnet");
+function registryContract(signerOrProvider: unknown, mode?: NetworkMode) {
+  const cfg = getArbitrumConfig(mode ?? "mainnet");
   const addr = cfg.serviceRegistryAddress ?? "0x8403F655Cb8750012D443c135840185691039236";
   return new Contract(addr, REGISTRY_ABI, signerOrProvider as never);
 }
