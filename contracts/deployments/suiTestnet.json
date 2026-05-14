@@ -1,0 +1,10 @@
+{
+  "network": "sui-testnet",
+  "deployedAt": "2026-05-14",
+  "txDigest": "GaTkxy34VAvxYHpxtQSZKgtBAfRGwddVy93gcWZaWgJ3",
+  "packageId": "0x0303d4cc900dc43c64fe523352b9dfb8672ba238bb28c036941ecb5df6f1ffa6",
+  "AgentRegistry": "0xfb7fba86c457e2ecb9873ba1d7325d9f5d154997551177566fce4348a37ae588",
+  "AdminCap": "0xf00ae044a069f267d85f93c95b86677ba4e9213bc8c11f2873374e53a66a56ec",
+  "explorerUrl": "https://suiscan.xyz/testnet/object/0x0303d4cc900dc43c64fe523352b9dfb8672ba238bb28c036941ecb5df6f1ffa6",
+  "gasUsed": "~0.025 SUI"
+}

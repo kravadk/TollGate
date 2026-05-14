@@ -211,10 +211,10 @@ const SUI_ECOSYSTEM = [
     badge: "testnet",
   },
   {
-    label: "SuiAgentPay Move Pkg",
-    pkg: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    label: "AgentReputation Move Pkg (Testnet)",
+    pkg: "0x0303d4cc900dc43c64fe523352b9dfb8672ba238bb28c036941ecb5df6f1ffa6",
     explorer: SUI_TESTNET_EXPLORER,
-    badge: "pending",
+    badge: "testnet",
   },
   {
     label: "Sui Framework (0x2)",
