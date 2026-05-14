@@ -590,3 +590,128 @@ export function MerchantPayoutsPanel({ workspace }: { workspace: Workspace }) {
     </div>
   );
 }
+
+// ── QieCheckoutPhoneMockup ────────────────────────────────────────────────────
+// Live-preview phone mockup: edit fields on the left, see the checkout page
+// update instantly on the right. "Payment link in 30 seconds" demo.
+
+const ACCENT_PRESETS = ["#00C389", "#4DA2FF", "#f59e0b", "#a855f7", "#ef4444"] as const;
+
+export function QieCheckoutPhoneMockup() {
+  const [product, setProduct] = useState("Premium AI Report");
+  const [desc, setDesc] = useState("Monthly market intelligence powered by QIE AI agents.");
+  const [price, setPrice] = useState("5.00");
+  const [currency, setCurrency] = useState<"QIE" | "USDT">("QIE");
+  const [accent, setAccent] = useState("#00C389");
+  const [copied, setCopied] = useState(false);
+
+  const link = `https://pay.qie.digital/checkout?product=${encodeURIComponent(product)}&price=${price}&currency=${currency}`;
+
+  function copyLink() {
+    navigator.clipboard.writeText(link).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }
+
+  return (
+    <div className="panel block svc-flavor" style={{ marginBottom: 14 }}>
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft"><ShoppingCart width={15} height={15} /></span>
+          <div>
+            <h3>Checkout Link Builder</h3>
+            <div className="sub">Generate a QIE payment link in 30 seconds · live phone preview</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 20, padding: "12px 16px 16px", alignItems: "start" }}>
+
+        {/* Form */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800, display: "block", marginBottom: 4 }}>Product name</label>
+            <input className="inp" value={product} onChange={(e) => setProduct(e.target.value)} placeholder="Premium AI Report" />
+          </div>
+          <div>
+            <label style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800, display: "block", marginBottom: 4 }}>Description</label>
+            <input className="inp" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Short description" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div>
+              <label style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800, display: "block", marginBottom: 4 }}>Price</label>
+              <input className="inp" type="number" min="0.01" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800, display: "block", marginBottom: 4 }}>Currency</label>
+              <select className="inp" value={currency} onChange={(e) => setCurrency(e.target.value as "QIE" | "USDT")}>
+                <option value="QIE">QIE</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: ".62rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 800, display: "block", marginBottom: 6 }}>Brand colour</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {ACCENT_PRESETS.map((c) => (
+                <button key={c} type="button" onClick={() => setAccent(c)}
+                  style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: accent === c ? "2.5px solid var(--ink)" : "2.5px solid transparent", cursor: "pointer" }} />
+              ))}
+            </div>
+          </div>
+          <div style={{ padding: "8px 10px", background: "var(--bg-3)", borderRadius: 8, fontFamily: "monospace", fontSize: ".63rem", color: "var(--muted)", wordBreak: "break-all", lineHeight: 1.6 }}>
+            {link}
+          </div>
+          <button className="btn btn-acc btn-sm" type="button" onClick={copyLink} style={{ alignSelf: "flex-start" }}>
+            {copied ? <CheckCircle2 width={12} height={12} /> : <ClipboardCopy width={12} height={12} />}
+            {copied ? "Copied!" : "Copy checkout link"}
+          </button>
+        </div>
+
+        {/* Phone mockup */}
+        <div style={{
+          width: 160, flexShrink: 0,
+          border: "2.5px solid var(--line-2)", borderRadius: 24,
+          overflow: "hidden", background: "#fff",
+          boxShadow: "0 8px 32px rgba(0,0,0,.18)",
+        }}>
+          {/* notch */}
+          <div style={{ background: "#111", height: 20, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 40, height: 6, background: "#333", borderRadius: 3 }} />
+          </div>
+          {/* screen */}
+          <div style={{ padding: "10px 10px 14px", display: "flex", flexDirection: "column", gap: 8, background: "#fafafa" }}>
+            {/* header */}
+            <div style={{ background: accent, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: "#fff", letterSpacing: ".04em" }}>QIE Pay</div>
+            </div>
+            {/* product card */}
+            <div style={{ background: "#fff", borderRadius: 8, padding: "8px 8px", border: "1px solid #e5e7eb" }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: "#111", marginBottom: 3, lineHeight: 1.3, wordBreak: "break-word" }}>
+                {product || "Product name"}
+              </div>
+              <div style={{ fontSize: 7.5, color: "#6b7280", lineHeight: 1.4, wordBreak: "break-word" }}>
+                {desc.slice(0, 60) || "Description"}
+              </div>
+            </div>
+            {/* price */}
+            <div style={{ textAlign: "center", fontSize: 16, fontWeight: 900, color: "#111" }}>
+              {parseFloat(price || "0").toFixed(2)} <span style={{ fontSize: 9, fontWeight: 600, color: "#6b7280" }}>{currency}</span>
+            </div>
+            {/* pay button */}
+            <div style={{ background: accent, borderRadius: 7, padding: "6px 0", textAlign: "center" }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: "#fff" }}>Pay with QIE Wallet</span>
+            </div>
+            {/* footer */}
+            <div style={{ textAlign: "center", fontSize: 7, color: "#9ca3af" }}>Secured by QIE testnet · chainId 1983</div>
+          </div>
+          {/* home bar */}
+          <div style={{ background: "#f3f4f6", height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 36, height: 4, background: "#d1d5db", borderRadius: 2 }} />
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}

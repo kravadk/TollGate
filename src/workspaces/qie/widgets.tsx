@@ -34,13 +34,13 @@ import type { SigBlock, CardDef, CardCtx } from "../_types";
 // ---------------------------------------------------------------------------
 // Re-exports from widget sub-files (also imported into scope for renderTab)
 // ---------------------------------------------------------------------------
-import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "../../components/widgets/qie-extra/QieExtraWidgets";
+import { QiePosWidget, GameItemShop, MerchantPayoutsPanel, QieCheckoutPhoneMockup } from "../../components/widgets/qie-extra/QieExtraWidgets";
 import { QieCreditWidget } from "./widgets/QieCreditWidget";
 import { QieOracleFeedWidget } from "./widgets/QieOracleFeedWidget";
 import { QieSubscriptionWidget } from "./widgets/QieSubscriptionWidget";
 import { QieWalletConnectPanel } from "./widgets/QieWalletConnectPanel";
 
-export { QiePosWidget, GameItemShop, MerchantPayoutsPanel };
+export { QiePosWidget, GameItemShop, MerchantPayoutsPanel, QieCheckoutPhoneMockup };
 export { QieCreditWidget };
 export { QieOracleFeedWidget };
 export { QieWalletConnectPanel };
@@ -872,6 +872,7 @@ export function renderTab(
 ): ReactNode {
   return (
     <>
+      {t.includes("checkout") && <QieCheckoutPhoneMockup />}
       {t.includes("checkout") && <QiePosWidget workspace={ws} />}
       {t.includes("checkout") && <QieBillSplitter workspace={ws} />}
       {t.includes("checkout") && <QieRequestPay workspace={ws} />}
