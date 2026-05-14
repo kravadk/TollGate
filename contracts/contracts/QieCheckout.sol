@@ -9,11 +9,14 @@ contract QieCheckout {
     event InvoicePaid(uint256 indexed id, address indexed payer, uint256 amount);
     event SplitPayout(address[] payees, uint256[] amounts);
     function createInvoice(address payee, uint256 amount) external returns (uint256 id) {
+        require(payee != address(0), "zero payee");
+        require(amount > 0, "zero amount");
         id = nextId++;
         invoices[id] = Invoice(payable(payee), amount, false, uint64(block.timestamp));
         emit InvoiceCreated(id, payee, amount);
     }
     function payInvoice(uint256 id) external payable {
+        require(id < nextId, "no such invoice");
         Invoice storage inv = invoices[id];
         require(!inv.paid, "already paid");
         require(msg.value >= inv.amount, "insufficient payment");

@@ -2,12 +2,18 @@
   "network": "qieTestnet",
   "chainId": 1983,
   "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
-  "explorer": "https://testnet.qie.digital",
-  "deployedAt": "2026-05-14T00:00:00.000Z",
+  "explorer": "https://scan-testnet.qie.digital",
+  "deployedAt": "2026-05-14T23:08:00.986Z",
   "contracts": {
-    "QieCheckout":    "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142",
-    "QiePass":        "0x42a14858Da4B2f75DB5C581bA5579786A12d97b4",
-    "QieAgentCredit": "0xBA4721Df33C3f32d8d35dEE21745cDC2B5b2Db81",
-    "QieOracleFeed":  "0x455cfBf7053d9E1c47306A7B7e53559ea73eeF1A"
+    "QieCheckout": "0x0551b255Cb74F004e872034a5a906ffaA7DD58Eb",
+    "QiePass": "0xbf3a9577cc405FC819ce859c53ef3c6c4e5bFb4F",
+    "QieAgentCredit": "0xB697adbf0eB3850D9cA1072Fe3d1122639B7D314",
+    "QieOracleFeed": "0xe54c65E750bD7cce5faadD48893F28acd50AA187"
+  },
+  "txHashes": {
+    "QieCheckout": "0xfbff343256e409793bc1c33b148835930b3f569872e773593e2a79b25033e4e0",
+    "QiePass": "0x6511a060a85fa4ca0336d1f14f82d69ed7a720229ae29a65ed96f04996a2d579",
+    "QieAgentCredit": "0xebceb7178ecdfa2f26490571c5bacd384cb79ad9f1c885bf3114477cffe62b35",
+    "QieOracleFeed": "0xd360da1981cffaf061f8f5e73a6adee3e1ec4efc8a2a7ed0f6a810efc93577e8"
   }
 }

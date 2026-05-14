@@ -25,7 +25,7 @@ contract QieAgentCredit {
     constructor() { owner = msg.sender; }
 
     function updateScore(address agent, uint256 score) external onlyOwner {
-        require(score <= 1000, "score out of range");
+        require(score > 0 && score <= 1000, "score out of range");
         uint256 limit = _scoreToLimit(score);
         lines[agent] = CreditLine({ score: score, limitWei: limit, borrowedWei: lines[agent].borrowedWei, updatedAt: block.timestamp, active: true });
         emit ScoreUpdated(agent, score, limit);

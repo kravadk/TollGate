@@ -905,10 +905,10 @@ export function renderAgentPanel(ws: Workspace): ReactNode {
 // ---------------------------------------------------------------------------
 
 const QIE_CONTRACTS = [
-  { label: "QieCheckout (Mainnet v3)",    addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_CHECKOUT_ADDRESS"]     ?? "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8" },
-  { label: "QiePass (Mainnet v3)",        addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_PASS_ADDRESS"]          ?? "0xA8302734081F26b8a3E42f90DCf07b3E063441de" },
-  { label: "QieAgentCredit (Mainnet v3)", addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_AGENT_CREDIT_ADDRESS"]  ?? "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6" },
-  { label: "QieOracleFeed (Mainnet v3)",  addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_ORACLE_FEED_ADDRESS"]   ?? "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142" },
+  { label: "QieCheckout (Mainnet v3)",    addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_CHECKOUT_ADDRESS"]     ?? "0xBa7348e57F124B1163c8356Cf7294fa6Dfb7Ea0E" },
+  { label: "QiePass (Mainnet v3)",        addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_PASS_ADDRESS"]          ?? "0x6260Ff7701a97A49Cb5c9816Bd025181dBbe4605" },
+  { label: "QieAgentCredit (Mainnet v3)", addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_AGENT_CREDIT_ADDRESS"]  ?? "0x83E980569D3db24dA0fd7B1B362255118756264A" },
+  { label: "QieOracleFeed (Mainnet v3)",  addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_ORACLE_FEED_ADDRESS"]   ?? "0x0551b255Cb74F004e872034a5a906ffaA7DD58Eb" },
 ] as const;
 
 export function renderOverviewExtra(_ws: Workspace): ReactNode {

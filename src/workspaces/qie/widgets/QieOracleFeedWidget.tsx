@@ -126,10 +126,10 @@ export function QieOracleFeedWidget({ workspace }: { workspace: Workspace }) {
           <div style={{ fontSize: ".73rem", color: "var(--muted)" }}>TollGate service demand → on-chain oracle · beats YesNo Markets 2025</div>
         </div>
         <a
-          href="https://mainnet.qie.digital/address/0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142"
+          href="https://scan.qie.digital/address/0x0551b255Cb74F004e872034a5a906ffaA7DD58Eb"
           target="_blank" rel="noreferrer"
           style={{ fontSize: ".6rem", color: "#7c3aed", fontWeight: 700, textDecoration: "none", background: "#7c3aed11", padding: "3px 7px", borderRadius: 6, whiteSpace: "nowrap" }}
-        >on-chain 0xAe3D…7142</a>
+        >on-chain 0x0551…58Eb</a>
       </div>
 
       {/* Live on-chain + market stats bar */}
