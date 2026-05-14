@@ -37,6 +37,7 @@ import {
 } from "./store.js";
 import { withX402 } from "./x402.js";
 import { mintReceiptNFT } from "./receipt-nft.js";
+import { mantleRecordDecision, mantleRecordPayment, ogAnchorReceipt } from "./chain-signer.js";
 import type { Service, WorkspaceId } from "./types.js";
 
 const WORKSPACE_IDS: WorkspaceId[] = ["0g", "qie", "arbitrum", "mantle", "sui", "agora", "polygon"];
@@ -193,8 +194,13 @@ async function unlockedResponse(req: Request, res: Response): Promise<void> {
     paidAt: new Date().toISOString(),
     verifiedAt: x.txHash ? new Date().toISOString() : undefined,
   });
-  // Fire-and-forget NFT mint — does not block the response
+  // Fire-and-forget on-chain audit trail — does not block the response
+  void mantleRecordDecision(receipt.id, JSON.stringify({ serviceId: service.id, amount: service.priceUsd }));
+  void ogAnchorReceipt(receipt.id, JSON.stringify({ id: receipt.id, serviceId: service.id, paidAt: receipt.paidAt }));
   const payerAddr = /^0x[0-9a-fA-F]{40}$/.test(x.payer) ? x.payer : "";
+  if (payerAddr) void mantleRecordPayment(payerAddr, service.priceUsd);
+
+  // Fire-and-forget NFT mint — does not block the response
   let nftTokenId: number | undefined;
   let nftTxHash: string | undefined;
   if (payerAddr) {
