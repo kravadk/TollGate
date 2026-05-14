@@ -29,6 +29,9 @@ import {
   OgDaMonitor,
   OgGasFeeEstimator,
   OgAllowlistManager,
+  OgComputeLeaderboard,
+  OgJobScheduler,
+  OgSlashingAlert,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -65,6 +68,8 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
     nodes.push(<OgComputeKanban key="kanban" workspace={workspace} />);
     nodes.push(<TeeAttestationVerifier key="tee" workspace={workspace} />);
     nodes.push(<OgDaMonitor key="da" />);
+    nodes.push(<OgComputeLeaderboard key="leaderboard" />);
+    nodes.push(<OgJobScheduler key="scheduler" workspace={workspace} />);
   }
   if (t.includes("storage")) {
     nodes.push(<OgStorageEstimator key="storagecalc" />);
@@ -96,5 +101,10 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
 }
 
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
-  return <OgLiveContractsPanel />;
+  return (
+    <>
+      <OgSlashingAlert />
+      <OgLiveContractsPanel />
+    </>
+  );
 }

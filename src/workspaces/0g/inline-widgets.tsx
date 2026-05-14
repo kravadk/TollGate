@@ -1086,6 +1086,7 @@ export function LiveWalletBalance() {
   useEffect(() => {
     let alive = true;
     const poll = async () => {
+      if (document.hidden) return; // skip when tab is hidden
       const b = await fetchOgBalance(DEPLOYER);
       if (!alive) return;
       setBalance(b);
@@ -1094,7 +1095,10 @@ export function LiveWalletBalance() {
     };
     void poll();
     const id = setInterval(poll, 30_000);
-    return () => { alive = false; clearInterval(id); };
+    // Re-poll immediately when the tab becomes visible again
+    const onVisible = () => { if (!document.hidden) void poll(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { alive = false; clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   return (
@@ -1401,6 +1405,23 @@ function makeDaCommitments(seed: number): DaCommitment[] {
   });
 }
 
+export function OgSlashingAlert() {
+  const [seed] = useState(() => Math.floor(Math.random() * 9999));
+  const rows = useMemo(() => makeDaCommitments(seed), [seed]);
+  const challenged = rows.filter((r) => r.status === "challenged");
+  if (challenged.length === 0) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10, background: "#ef444414", border: "1px solid #ef444440" }}>
+      <span style={{ fontSize: ".9rem" }}>⚠️</span>
+      <div style={{ flex: 1 }}>
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "#ef4444" }}>DA Slashing Alert — </span>
+        <span style={{ fontSize: ".72rem", color: "var(--ink)" }}>{challenged.length} commitment{challenged.length > 1 ? "s" : ""} currently challenged on 0G DA</span>
+      </div>
+      <span style={{ fontSize: ".62rem", color: "#ef4444", fontWeight: 700, background: "#ef444420", padding: "2px 8px", borderRadius: 20 }}>View in DA Monitor ↓</span>
+    </div>
+  );
+}
+
 export function OgDaMonitor() {
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 9999));
   const [refreshing, setRefreshing] = useState(false);
@@ -1411,6 +1432,7 @@ export function OgDaMonitor() {
 
   const totalKBs = rows.reduce((s, r) => s + r.throughputKBs, 0);
   const finalized = rows.filter((r) => r.status === "finalized").length;
+  const challenged = rows.filter((r) => r.status === "challenged").length;
 
   async function refresh() {
     setRefreshing(true);
@@ -1435,7 +1457,7 @@ export function OgDaMonitor() {
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
         <Database width={14} height={14} style={{ color: "#4ade80", flexShrink: 0 }} />
         <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>0G DA Monitor</span>
-        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>{(totalKBs / 1024).toFixed(1)} MB/s avg · {finalized}/{rows.length} finalized</span>
+        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>{(totalKBs / 1024).toFixed(1)} MB/s avg · {finalized}/{rows.length} finalized{challenged > 0 ? <span style={{ color: "#ef4444", fontWeight: 700 }}> · ⚠ {challenged} challenged</span> : null}</span>
         <button
           type="button"
           onClick={refresh}
@@ -1732,6 +1754,246 @@ export function OgAllowlistManager() {
       <div style={{ padding: "6px 16px", fontSize: ".6rem", color: "var(--muted)", borderTop: "1px solid var(--line-2)" }}>
         Permit signatures are EIP-191 signed in-browser — stored locally · submit to AgentBudgetController on 0G Mainnet to enforce caps on-chain
       </div>
+    </div>
+  );
+}
+
+// ── Compute Node Leaderboard ──────────────────────────────────────────────────
+
+const MEDAL = ["🥇", "🥈", "🥉", "4.", "5."];
+
+type ProviderStats = { provider: string; jobs: number; totalUsd: number; avgMs: number; uptime: number };
+
+function buildLeaderboard(receipts: Receipt[]): ProviderStats[] {
+  const map = new Map<string, { jobs: number; totalUsd: number; msSum: number }>();
+  for (const r of receipts) {
+    if (r.kind !== "0g.inference") continue;
+    const p = (r.payload as { provider?: string } | undefined)?.provider;
+    const key = p ? `${p.slice(0, 8)}…${p.slice(-4)}` : "demo-node";
+    const cur = map.get(key) ?? { jobs: 0, totalUsd: 0, msSum: 0 };
+    cur.jobs++;
+    cur.totalUsd += r.amount;
+    cur.msSum += deterministicScore(key + r.id, 210, 890);
+    map.set(key, cur);
+  }
+  // Supplement with deterministic demo nodes so the board is never empty
+  const DEMO_NODES = ["0x8fAe…c3d1", "0x3b7C…a9f0", "0xDe2A…7b12", "0xF14c…55e8", "0xA09d…cc41"];
+  DEMO_NODES.forEach((n, i) => {
+    if (!map.has(n)) map.set(n, { jobs: 14 - i * 2, totalUsd: (14 - i * 2) * 0.018, msSum: (14 - i * 2) * 430 });
+  });
+  return [...map.entries()]
+    .map(([provider, s]) => ({
+      provider,
+      jobs: s.jobs,
+      totalUsd: s.totalUsd,
+      avgMs: Math.round(s.msSum / s.jobs),
+      uptime: Math.min(99.9, 94 + deterministicScore(provider, 0, 5.9)),
+    }))
+    .sort((a, b) => b.jobs - a.jobs)
+    .slice(0, 5);
+}
+
+export function OgComputeLeaderboard() {
+  const { receipts } = useAppState();
+  const board = useMemo(() => buildLeaderboard(receipts), [receipts]);
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
+        <TrendingUp width={14} height={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>Compute Node Leaderboard</span>
+        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>ranked by jobs served · last {receipts.filter((r) => r.kind === "0g.inference").length} receipts</span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".72rem" }}>
+          <thead>
+            <tr style={{ background: "var(--field)" }}>
+              {["#", "Node", "Jobs", "Volume", "Avg latency", "Uptime"].map((h) => (
+                <th key={h} style={{ padding: "6px 14px", textAlign: "left", fontWeight: 700, fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {board.map((p, i) => (
+              <tr key={p.provider} style={{ borderTop: "1px solid var(--line-2)" }}>
+                <td style={{ padding: "7px 14px", fontWeight: 800, fontSize: ".82rem" }}>{MEDAL[i]}</td>
+                <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", fontWeight: 700, color: "var(--ink)" }}>{p.provider}</td>
+                <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "var(--ink)" }}>{p.jobs}</td>
+                <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "#10b981", fontWeight: 700 }}>${p.totalUsd.toFixed(3)}</td>
+                <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{p.avgMs} ms</td>
+                <td style={{ padding: "7px 14px" }}>
+                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, color: p.uptime > 99 ? "#10b981" : "#f59e0b" }}>{p.uptime.toFixed(1)}%</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Job Scheduler ─────────────────────────────────────────────────────────────
+
+type ScheduledJob = {
+  id: string;
+  prompt: string;
+  modelId: string;
+  delayMin: number;
+  runAt: number;
+  status: "waiting" | "running" | "done" | "cancelled";
+};
+
+const SCHED_MODELS = [
+  { id: "risk-scorer-v2", name: "Risk Scorer v2" },
+  { id: "llama-3-8b",     name: "Llama 3 · 8B" },
+  { id: "anomaly-detect", name: "Anomaly Detect" },
+] as const;
+
+export function OgJobScheduler({ workspace }: { workspace: Workspace }) {
+  const { emitReceipt } = useAppState();
+  const [jobs, setJobs] = useLocalStore<ScheduledJob[]>("og.scheduler.jobs", []);
+  const [prompt, setPrompt] = useState("Score wallet 0x9f3c…ba1 for mixer adjacency.");
+  const [modelId, setModelId] = useState<(typeof SCHED_MODELS)[number]["id"]>("risk-scorer-v2");
+  const [delayMin, setDelayMin] = useState(5);
+  const [nowTs, setNowTs] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const waiting = jobs.filter((j) => j.status === "waiting" && j.runAt <= nowTs);
+    if (waiting.length === 0) return;
+    setJobs((prev) =>
+      prev.map((j) => waiting.find((w) => w.id === j.id) ? { ...j, status: "running" as const } : j)
+    );
+    waiting.forEach((j) => {
+      setTimeout(() => {
+        emitReceipt({
+          workspaceId: workspace.id,
+          serviceName: `Scheduled · ${j.modelId}`,
+          amount: 0.022,
+          currency: "USDC",
+          network: workspace.networks[0] ?? "0g-testnet",
+          kind: "0g.inference",
+          payload: { model: j.modelId, prompt: j.prompt, scheduled: true, jobId: j.id },
+        });
+        setJobs((prev) => prev.map((p) => p.id === j.id ? { ...p, status: "done" as const } : p));
+      }, 1200);
+    });
+  }, [nowTs]);
+
+  const schedule = () => {
+    if (!prompt.trim()) return;
+    const runAt = Date.now() + delayMin * 60_000;
+    const job: ScheduledJob = { id: "sj_" + hashId("sj", prompt + runAt, 8), prompt, modelId, delayMin, runAt, status: "waiting" };
+    setJobs((prev) => [job, ...prev].slice(0, 12));
+  };
+
+  const cancel = (id: string) => setJobs((prev) => prev.map((j) => j.id === id && j.status === "waiting" ? { ...j, status: "cancelled" as const } : j));
+  const clear = () => setJobs((prev) => prev.filter((j) => j.status === "waiting" || j.status === "running"));
+
+  const fmt = (ms: number) => {
+    const rem = Math.max(0, ms - nowTs);
+    if (rem === 0) return "now";
+    const s = Math.ceil(rem / 1000);
+    return s < 60 ? `${s}s` : `${Math.ceil(s / 60)}m`;
+  };
+
+  const statusColor: Record<ScheduledJob["status"], string> = {
+    waiting: "#f59e0b", running: "#7C5CF8", done: "#10b981", cancelled: "var(--muted)",
+  };
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
+        <Play width={14} height={14} style={{ color: "#7C5CF8", flexShrink: 0 }} />
+        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>Job Scheduler</span>
+        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>{jobs.filter((j) => j.status === "waiting").length} waiting · {jobs.filter((j) => j.status === "done").length} done</span>
+        {jobs.some((j) => j.status === "done" || j.status === "cancelled") && (
+          <button type="button" onClick={clear} style={{ fontSize: ".6rem", color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>Clear history</button>
+        )}
+      </div>
+
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8 }}>
+          <textarea
+            rows={2}
+            value={prompt}
+            onChange={(e) => setPrompt(e.currentTarget.value)}
+            placeholder="Job prompt…"
+            style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--field)", color: "var(--ink)", fontFamily: "inherit", fontSize: ".74rem", resize: "vertical" }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <select
+              value={modelId}
+              onChange={(e) => setModelId(e.currentTarget.value as typeof modelId)}
+              style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--field)", color: "var(--ink)", fontSize: ".72rem" }}
+            >
+              {SCHED_MODELS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: ".6rem", color: "var(--muted)", whiteSpace: "nowrap" }}>Delay</span>
+              <input
+                type="number" min={1} max={1440} step={1} value={delayMin}
+                onChange={(e) => setDelayMin(Math.max(1, Number(e.currentTarget.value)))}
+                style={{ width: 52, padding: "5px 7px", borderRadius: 7, border: "1px solid var(--line-2)", background: "var(--field)", color: "var(--ink)", fontSize: ".72rem" }}
+              />
+              <span style={{ fontSize: ".6rem", color: "var(--muted)" }}>min</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={schedule}
+            disabled={!prompt.trim()}
+            style={{ alignSelf: "center", padding: "8px 14px", borderRadius: 8, border: "none", background: "#7C5CF8", color: "#fff", fontWeight: 700, fontSize: ".72rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <Play width={11} height={11} /> Schedule
+          </button>
+        </div>
+      </div>
+
+      {jobs.length === 0 ? (
+        <div style={{ padding: "18px 16px", fontSize: ".72rem", color: "var(--muted)", textAlign: "center" }}>No jobs scheduled yet.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".72rem" }}>
+            <thead>
+              <tr style={{ background: "var(--field)" }}>
+                {["Job", "Model", "Prompt", "Fires in", "Status", ""].map((h) => (
+                  <th key={h} style={{ padding: "6px 14px", textAlign: "left", fontWeight: 700, fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((j) => (
+                <tr key={j.id} style={{ borderTop: "1px solid var(--line-2)" }}>
+                  <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".64rem", color: "var(--muted)" }}>{j.id.slice(0, 12)}</td>
+                  <td style={{ padding: "7px 14px", color: "var(--ink)" }}>{SCHED_MODELS.find((m) => m.id === j.modelId)?.name ?? j.modelId}</td>
+                  <td style={{ padding: "7px 14px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--muted)" }}>{j.prompt}</td>
+                  <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: j.status === "waiting" ? "#f59e0b" : "var(--muted)" }}>
+                    {j.status === "waiting" ? fmt(j.runAt) : "—"}
+                  </td>
+                  <td style={{ padding: "7px 14px" }}>
+                    <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: ".62rem", fontWeight: 700, background: statusColor[j.status] + "18", color: statusColor[j.status] }}>
+                      {j.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: "7px 14px" }}>
+                    {j.status === "waiting" && (
+                      <button type="button" onClick={() => cancel(j.id)} style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid var(--line-2)", background: "transparent", cursor: "pointer", fontSize: ".62rem", color: "#ef4444" }}>
+                        Cancel
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
