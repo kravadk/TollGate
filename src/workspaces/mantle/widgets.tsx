@@ -71,6 +71,36 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
   );
 }
 
+const MANTLE_CONTRACTS = [
+  { label: "AgentVault (Mainnet)",         addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_VAULT_ADDRESS"] ?? "0xCbBcFc657787Fef2702ae6E35CA5a809a68480da", explorer: "https://explorer.mantle.xyz" },
+  { label: "AgentIdentityRegistry (Main)", addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_IDENTITY_ADDRESS"] ?? "0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB", explorer: "https://explorer.mantle.xyz" },
+  { label: "AgentCreditRegistry (Main)",   addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_CREDIT_ADDRESS"] ?? "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9", explorer: "https://explorer.mantle.xyz" },
+  { label: "IdentityRegistry (Sepolia)",   addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_IDENTITY_ADDRESS"] ?? "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6", explorer: "https://explorer.sepolia.mantle.xyz" },
+  { label: "CreditRegistry (Sepolia)",     addr: (import.meta.env as Record<string,string|undefined>)["VITE_MANTLE_TESTNET_CREDIT_ADDRESS"] ?? "0xA8302734081F26b8a3E42f90DCf07b3E063441de", explorer: "https://explorer.sepolia.mantle.xyz" },
+] as const;
+
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
-  return null;
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
+        <span style={{ fontSize: ".63rem", color: "#1A9AFF", fontWeight: 700, background: "#1A9AFF18", padding: "2px 7px", borderRadius: 5 }}>Mantle Mainnet + Sepolia</span>
+      </div>
+      {MANTLE_CONTRACTS.map((c) => {
+        const short = `${c.addr.slice(0, 8)}…${c.addr.slice(-6)}`;
+        return (
+          <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
+            <Database width={13} height={13} style={{ color: "#1A9AFF", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
+              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{c.addr}</div>
+            </div>
+            <a href={`${c.explorer}/address/${c.addr}`} target="_blank" rel="noreferrer"
+              style={{ fontSize: ".6rem", color: "#1A9AFF", fontWeight: 700, textDecoration: "none", background: "#1A9AFF14", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap" }}
+            >{short} ↗</a>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
