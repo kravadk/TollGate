@@ -6,7 +6,7 @@ export type { NetworkMode };
 export function useNetworkMode(workspaceId: string) {
   const key = `tollgate.network.${workspaceId}`;
   const [mode, setModeState] = useState<NetworkMode>(
-    () => (localStorage.getItem(key) as NetworkMode | null) ?? "testnet",
+    () => (localStorage.getItem(key) as NetworkMode | null) ?? "mainnet",
   );
 
   const setMode = useCallback(
