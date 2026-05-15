@@ -79,6 +79,8 @@ export type Receipt = {
   createdAt: string;
   paidAt?: string;
   verifiedAt?: string;
+  nftTokenId?: number;
+  nftTxHash?: string;
 };
 
 export type X402CallLogEntry = {

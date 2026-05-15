@@ -32,6 +32,8 @@ import {
   receiptById,
   receiptStats,
   onReceipt,
+  onNftUpdate,
+  updateReceiptNft,
   recordActivity,
   x402Log,
 } from "./store.js";
@@ -201,8 +203,6 @@ async function unlockedResponse(req: Request, res: Response): Promise<void> {
   if (payerAddr) void mantleRecordPayment(payerAddr, service.priceUsd);
 
   // Fire-and-forget NFT mint — does not block the response
-  let nftTokenId: number | undefined;
-  let nftTxHash: string | undefined;
   if (payerAddr) {
     mintReceiptNFT({
       to: payerAddr,
@@ -213,7 +213,9 @@ async function unlockedResponse(req: Request, res: Response): Promise<void> {
       paidAt: receipt.paidAt ?? new Date().toISOString(),
       txHash: x.txHash,
     }).then((r) => {
-      if (r.ok) { nftTokenId = r.tokenId; nftTxHash = r.txHash; }
+      if (r.ok && r.tokenId != null && r.txHash) {
+        updateReceiptNft(receipt.id, r.tokenId, r.txHash);
+      }
     }).catch(() => {/* non-critical */});
   }
 
@@ -223,8 +225,6 @@ async function unlockedResponse(req: Request, res: Response): Promise<void> {
     data: service.sampleResponse,
     receiptId: receipt.id,
     receipt,
-    nftTokenId,
-    nftTxHash,
     note: x.devBypass
       ? "dev-bypass: this response simulates a settled x402 payment. Production verifies a real on-chain proof."
       : "x402 payment verified.",
@@ -289,9 +289,12 @@ apiRouter.get("/events/payments", (req: Request, res: Response) => {
   const unsub = onReceipt((r) => {
     res.write(`data: ${JSON.stringify({ type: "receipt", receipt: r })}\n\n`);
   });
+  const unsubNft = onNftUpdate((receiptId, tokenId, txHash) => {
+    res.write(`data: ${JSON.stringify({ type: "nft_update", receiptId, tokenId, txHash })}\n\n`);
+  });
 
   const keepalive = setInterval(() => res.write(": ping\n\n"), 20_000);
-  req.on("close", () => { unsub(); clearInterval(keepalive); });
+  req.on("close", () => { unsub(); unsubNft(); clearInterval(keepalive); });
 });
 
 // ─── Status / observability ────────────────────────────────────────────────

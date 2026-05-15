@@ -34,9 +34,14 @@ db.exec(`
     errorCode      TEXT,
     createdAt      TEXT NOT NULL,
     paidAt         TEXT,
-    verifiedAt     TEXT
+    verifiedAt     TEXT,
+    nftTokenId     INTEGER,
+    nftTxHash      TEXT
   );
 `);
+// Migration: add NFT columns to pre-existing DBs
+try { db.exec("ALTER TABLE receipts ADD COLUMN nftTokenId INTEGER"); } catch { /* already exists */ }
+try { db.exec("ALTER TABLE receipts ADD COLUMN nftTxHash TEXT"); } catch { /* already exists */ }
 
 // Notify SSE listeners on every new receipt.
 export type ReceiptListener = (r: Receipt) => void;
@@ -217,4 +222,16 @@ export function receiptStats(): { total: number; today: number; uniqueAgents: nu
   const agents     = (db.prepare("SELECT COUNT(DISTINCT agentId) as n FROM receipts").get() as { n: number }).n;
   const avg        = (db.prepare("SELECT AVG(amount) as a FROM receipts").get() as { a: number | null }).a ?? 0;
   return { total, today, uniqueAgents: agents, avgAmount: Math.round(avg * 10000) / 10000 };
+}
+
+export type NftUpdateListener = (receiptId: string, tokenId: number, txHash: string) => void;
+const nftListeners = new Set<NftUpdateListener>();
+export function onNftUpdate(cb: NftUpdateListener): () => void {
+  nftListeners.add(cb);
+  return () => nftListeners.delete(cb);
+}
+
+export function updateReceiptNft(receiptId: string, tokenId: number, txHash: string): void {
+  db.prepare("UPDATE receipts SET nftTokenId = ?, nftTxHash = ? WHERE id = ?").run(tokenId, txHash, receiptId);
+  for (const cb of nftListeners) { try { cb(receiptId, tokenId, txHash); } catch { /* ignore */ } }
 }

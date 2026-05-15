@@ -2,7 +2,7 @@
  * 0G-specific inline widget components extracted from WorkspaceDashboard.tsx.
  * Imported by WorkspaceDashboard.tsx and workspaces/0g/widgets.tsx.
  */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   CircleDollarSign,
   Database,
@@ -40,11 +40,15 @@ import * as api from "../../lib/api";
 
 // ── Economy Dashboard ──────────────────────────────────────────────────────
 type EconStats = { total: number; today: number; uniqueAgents: number; avgAmount: number };
-type EconEvent = { type: "snapshot"; receipts: Receipt[] } | { type: "receipt"; receipt: Receipt };
+type EconEvent =
+  | { type: "snapshot"; receipts: Receipt[] }
+  | { type: "receipt"; receipt: Receipt }
+  | { type: "nft_update"; receiptId: string; tokenId: number; txHash: string };
+type FeedEntry = Receipt & { nftTokenId?: number; nftTxHash?: string };
 
 export function EconomyDashboard() {
   const [stats, setStats] = useState<EconStats | null>(null);
-  const [feed, setFeed] = useState<Receipt[]>([]);
+  const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [fetchError, setFetchError] = useState(false);
   const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -67,6 +71,8 @@ export function EconomyDashboard() {
               total: prev.total + 1, today: prev.today + 1, uniqueAgents: prev.uniqueAgents,
               avgAmount: Math.round(((prev.avgAmount * prev.total + ev.receipt.amount) / (prev.total + 1)) * 10000) / 10000,
             } : prev);
+          } else if (ev.type === "nft_update") {
+            setFeed(prev => prev.map(r => r.id === ev.receiptId ? { ...r, nftTokenId: ev.tokenId, nftTxHash: ev.txHash } : r));
           }
         } catch { /* ignore parse errors */ }
       };
@@ -108,7 +114,13 @@ export function EconomyDashboard() {
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", borderBottom: i < Math.min(feed.length - 1, 5) ? "1px solid var(--line-2)" : undefined, fontSize: ".74rem" }}>
               <span style={{ color: "#22c55e", fontWeight: 700, minWidth: 52 }}>${r.amount.toFixed(3)}</span>
               <span style={{ color: "var(--muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.serviceName}</span>
-              <span style={{ color: "var(--muted)", fontSize: ".65rem" }}>{new Date(r.createdAt).toLocaleTimeString()}</span>
+              {r.nftTokenId != null && r.nftTxHash ? (
+                <a href={`https://explorer.mantle.xyz/tx/${r.nftTxHash}`} target="_blank" rel="noreferrer"
+                  style={{ fontSize: ".6rem", fontWeight: 700, color: "#7C5CF8", background: "rgba(124,92,248,.12)", borderRadius: 4, padding: "1px 6px", textDecoration: "none", flexShrink: 0 }}>
+                  NFT #{r.nftTokenId}
+                </a>
+              ) : null}
+              <span style={{ color: "var(--muted)", fontSize: ".65rem", flexShrink: 0 }}>{new Date(r.createdAt).toLocaleTimeString()}</span>
             </div>
           ))}
         </div>
@@ -729,6 +741,10 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
   const [selfFunding, setSelfFunding] = useState<{ earned: number; spent: number } | null>(null);
   const [rows, setRows] = useState<A2AReceiptRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [autoCycle, setAutoCycle] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const cycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
   const stepState = (i: number): "done" | "live" | "todo" => (i < cursor ? "done" : i === cursor ? (phase === "done" ? "done" : "live") : "todo");
@@ -821,6 +837,18 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
   }
   function reset() { setCursor(-1); setPhase("idle"); setSignal(null); setDecision(null); setMemoryPin(null); setSelfFunding(null); setRows([]); setErr(null); }
 
+  const CYCLE_DELAY = 5;
+  useEffect(() => {
+    if (!autoCycle || phase !== "done") return;
+    setCountdown(CYCLE_DELAY);
+    countRef.current = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
+    cycleRef.current = setTimeout(() => {
+      clearInterval(countRef.current!); countRef.current = null;
+      reset(); run();
+    }, CYCLE_DELAY * 1000);
+    return () => { clearTimeout(cycleRef.current!); clearInterval(countRef.current!); };
+  }, [autoCycle, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const vColor = (v: "BUY" | "SELL" | "HOLD") => (v === "BUY" ? "#1fb58a" : v === "SELL" ? "#e63946" : "var(--muted)");
 
   return (
@@ -833,9 +861,23 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
             <div className="sub">x402 micropayment → 0G Compute signal → AgentVault on-chain → 0G Storage memory. Self-funding: Executor earns, pays own compute.</div>
           </div>
         </div>
-        {phase === "idle"
-          ? <button className="btn btn-acc btn-sm" type="button" onClick={run}><Play width={13} height={13} /> Run the loop</button>
-          : <button className="btn btn-ghost btn-sm" type="button" onClick={reset} disabled={phase === "running"}><RefreshCw width={12} height={12} /> Reset</button>}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {phase === "idle"
+            ? <button className="btn btn-acc btn-sm" type="button" onClick={run}><Play width={13} height={13} /> {autoCycle ? "Start Economy" : "Run the loop"}</button>
+            : phase === "running"
+              ? <button className="btn btn-ghost btn-sm" type="button" disabled><Loader2 width={12} height={12} className="wallet-spin" /> Running…</button>
+              : countdown > 0
+                ? <span style={{ fontSize: ".7rem", color: "var(--muted)", fontWeight: 700 }}>Next in {countdown}s…</span>
+                : <button className="btn btn-ghost btn-sm" type="button" onClick={reset}><RefreshCw width={12} height={12} /> Reset</button>}
+          <button
+            className={"btn btn-sm" + (autoCycle ? " btn-acc" : " btn-ghost")}
+            type="button"
+            onClick={() => { setAutoCycle(v => !v); if (autoCycle) { clearTimeout(cycleRef.current!); clearInterval(countRef.current!); setCountdown(0); } }}
+            title={autoCycle ? "Stop auto-cycle" : "Auto-cycle every 5s (like AgentNexus)"}
+          >
+            {autoCycle ? "⏹ Auto" : "▶▶ Auto"}
+          </button>
+        </div>
       </div>
 
       {/* Payment flow graph */}
