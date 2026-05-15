@@ -11,7 +11,7 @@ export const workspace: Workspace = {
   name: "Mantle Agent Wallet Economy",
   route: "/mantle",
   pitch: "Agent wallets with spend policy buy Mantle alpha, mETH/USDY yield signals and RWA risk reports per call.",
-  tracks: ["Agentic Wallets & Economy", "AI Trading & Strategy", "AI Alpha & Data", "AI × RWA", "AI DevTools"],
+  tags: ["Agent Wallets", "Yield Signals", "RWA Data", "Credit Scoring", "A2A Loop"],
   networks: ["mantle-sepolia"],
   tabs: ["Overview", "Agent Economy", "Alpha Data", "Yield Compare", "Yield Optimizer", "RWA Data", "Trading Strategies", "AI DevTools", "Agent Credit Score", "Budget Dashboard", "A2A Loop"],
   accent: "#0FBF7A",

@@ -11,7 +11,7 @@ export const workspace: Workspace = {
   name: "0G Agent Payment Router",
   route: "/0g",
   pitch: "Agents pay per inference job and per storage write; receipts link to verifiable job metadata in 0G Storage.",
-  tracks: ["Agentic Economy", "Agentic Infra", "Agentic Trading Arena", "Privacy & TEE", "Web 4.0"],
+  tags: ["x402 Gateway", "0G Compute", "0G Storage", "TEE & Privacy", "MCP Server"],
   networks: ["0g-testnet", "base-sepolia"],
   tabs: ["Overview", "Agent Identity", "Compute", "Trading Arena", "Storage & Memory", "TEE & Privacy", "Receipts"],
   accent: "#7C5CF8",

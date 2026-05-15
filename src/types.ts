@@ -32,7 +32,7 @@ export type Workspace = {
   name: string;
   route: string;
   pitch: string;
-  tracks: string[];
+  tags: string[];
   networks: string[];
   tabs: string[];
   accent: string;

@@ -11,7 +11,7 @@ export const workspace: Workspace = {
   name: "ArcMind — Autonomous Trading Intelligence",
   route: "/agora",
   pitch: "ArcMind: the first autonomous trading agent that shows you its reasoning, lets you copy-trade with $1, and kills itself when it starts losing — all settled in USDC on Arc L1.",
-  tracks: ["Cross-Platform Arbitrage Agent", "Adaptive Portfolio Manager", "Copy Trading", "Reasoning Traces x402", "Kill Switch Risk Manager"],
+  tags: ["Cross-Chain Arb", "Copy Trading", "Reasoning Traces", "Signal Hub", "Kill Switch"],
   networks: ["arc-mainnet", "arbitrum-one", "base"],
   tabs: ["Overview", "Arbitrage Agent", "Copy Trading", "Reasoning Traces", "Signal Hub", "Portfolio Manager", "Circle Tools", "Receipts"],
   accent: "#1652F0",

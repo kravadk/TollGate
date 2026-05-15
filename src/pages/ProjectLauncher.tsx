@@ -146,7 +146,7 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
                   </h3>
                   <p className="text-[12.5px] text-text-secondary leading-relaxed line-clamp-3 mb-4 flex-1">{ws.pitch}</p>
                   <div className="flex flex-wrap gap-1.5 mb-4">
-                    {ws.tracks.slice(0, 2).map((t) => (
+                    {ws.tags.slice(0, 2).map((t) => (
                       <span key={t} className="text-[10px] px-2 py-0.5 rounded-md bg-surface-2 border border-border-default text-text-muted font-medium">{t}</span>
                     ))}
                   </div>

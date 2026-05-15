@@ -498,7 +498,7 @@ export function OverviewPage({
         withRings
         chips={
           <>
-            {workspace.tracks.map((t) => <span key={t} className="chip grey">{t}</span>)}
+            {workspace.tags.map((t) => <span key={t} className="chip grey">{t}</span>)}
             {workspace.networks.map((n) => <span key={n} className="chip acc">{n}</span>)}
           </>
         }

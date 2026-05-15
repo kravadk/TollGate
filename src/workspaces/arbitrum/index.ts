@@ -11,7 +11,7 @@ export const workspace: Workspace = {
   name: "Arbitrum Agent Services",
   route: "/arbitrum",
   pitch: "Agents pay USDC for API/services on Arbitrum with spend limits, receipts and optional escrowed delivery.",
-  tracks: ["Best Agentic Project", "Overall Prize", "Stylus / Rust", "DeFi / Payments", "Grants"],
+  tags: ["USDC Payments", "Escrow", "Orbit Monitor", "Stylus Contracts", "Budget Control"],
   networks: ["arbitrum-sepolia"],
   tabs: ["Overview", "Agent Marketplace", "USDC Payments", "Stylus Contracts", "Escrow", "Wallet Protection"],
   accent: "#1B4ADD",

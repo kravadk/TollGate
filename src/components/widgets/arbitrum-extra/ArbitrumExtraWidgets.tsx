@@ -501,7 +501,7 @@ export function RobinhoodChainPanel({ workspace }: { workspace: Workspace }) {
           <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Network size={15} /></span>
           <div>
             <h3>Robinhood Chain Deployer</h3>
-            <div className="sub">Deploy agent contracts to Robinhood Chain (Orbit) or Arbitrum One / Sepolia · eligible for the reserved Robinhood prize</div>
+            <div className="sub">Deploy agent contracts to Robinhood Chain (Orbit) or Arbitrum One / Sepolia</div>
           </div>
         </div>
       </div>

@@ -11,7 +11,7 @@ export const workspace: Workspace = {
   name: "QIE Agent Payment Gateway",
   route: "/qie",
   pitch: "Merchants list paid AI/API services; agents settle through the QIE payment rail with QIE Pass gating.",
-  tracks: ["DeFi & Payments", "AI + Web3", "Gaming & Metaverse", "Social & Community", "Infra & Tools"],
+  tags: ["DeFi Payments", "AI + Web3", "Gaming", "Creator Hub", "Oracle Feed"],
   networks: ["qie-testnet"],
   tabs: ["Overview", "Merchant Checkout", "QIE Wallet", "QIE Pass", "Oracle Feed", "Agent Credit", "Game Store", "Creator Hub"],
   accent: "#00C389",

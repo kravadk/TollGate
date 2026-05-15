@@ -11,7 +11,7 @@ export const workspace: Workspace = {
   name: "Polygon Agent Commerce",
   route: "/polygon",
   pitch: "SME merchants publish paid APIs in 30 seconds; agents and buyers settle per call in USDC on Polygon zkEVM — UAE commerce infrastructure.",
-  tracks: ["SME Trade Finance", "Merchant Payments", "Cross-Border Stablecoins", "Agent Infrastructure"],
+  tags: ["Trade Finance", "Merchant Payments", "Cross-Border", "Agent Infrastructure"],
   networks: ["polygon-zkevm", "polygon-pos"],
   tabs: ["Overview", "Merchant Mode", "Trade Finance", "Agent Marketplace", "USDC Payments", "Receipts"],
   accent: "#7B3FE4",

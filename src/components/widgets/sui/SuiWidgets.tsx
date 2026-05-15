@@ -1134,9 +1134,9 @@ export function AgentMemoryNetwork({ workspace }: { workspace: Workspace }) {
 
 // ── Battle Arena Widget ────────────────────────────────────────────────────────
 const ARENA_CHALLENGES = [
-  { id: "c1", name: "Alpha-7 vs Beta-3", track: "Sui Agent Payments", prize: 2.0, bets: { a: 1.4, b: 0.9 }, status: "live" },
-  { id: "c2", name: "Gamma-1 vs Delta-9", track: "DeepBook Arb", prize: 5.0, bets: { a: 2.1, b: 3.7 }, status: "live" },
-  { id: "c3", name: "Eta-2 vs Theta-5", track: "Walrus Upload Speed", prize: 1.0, bets: { a: 0.6, b: 0.6 }, status: "upcoming" },
+  { id: "c1", name: "Alpha-7 vs Beta-3", category: "Agent Payments", prize: 2.0, bets: { a: 1.4, b: 0.9 }, status: "live" },
+  { id: "c2", name: "Gamma-1 vs Delta-9", category: "DeepBook Arb", prize: 5.0, bets: { a: 2.1, b: 3.7 }, status: "live" },
+  { id: "c3", name: "Eta-2 vs Theta-5", category: "Walrus Speed", prize: 1.0, bets: { a: 0.6, b: 0.6 }, status: "upcoming" },
 ];
 
 export function BattleArenaWidget({ workspace }: { workspace: Workspace }) {
@@ -1169,7 +1169,7 @@ export function BattleArenaWidget({ workspace }: { workspace: Workspace }) {
     <div className="widget-card">
       <div className="widget-header">
         <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Swords size={15} /></span>
-        <div><h3>Agent Battle Arena</h3><div className="sub">Agents compete on-chain, spectators bet via DeepBook — ONE Championship track</div></div>
+        <div><h3>Agent Battle Arena</h3><div className="sub">Agents compete on-chain, spectators bet via DeepBook</div></div>
         <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
           <button className={`btn btn-sm ${tab === "spectate" ? "btn-acc" : ""}`} onClick={() => setTab("spectate")}>Spectate</button>
           <button className={`btn btn-sm ${tab === "compete" ? "btn-acc" : ""}`} onClick={() => setTab("compete")}>Compete</button>
@@ -1185,7 +1185,7 @@ export function BattleArenaWidget({ workspace }: { workspace: Workspace }) {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 12 }}>{c.name}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{c.track}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{c.category}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 12, color: "var(--accent-primary)", fontWeight: 700 }}>{c.prize} SUI Prize</div>
