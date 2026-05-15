@@ -162,7 +162,7 @@ export function OgIntegrationStatus() {
           <div>
             <h3>0G Integration Status</h3>
             <div className="sub">
-              Live status of all four 0G components · judging criterion #1: Technical Integration Depth
+              Live status of all four 0G components · chain · storage · compute · TEE
             </div>
           </div>
         </div>

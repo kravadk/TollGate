@@ -41,7 +41,6 @@ import { serviceById, workspaceMetrics, makeServiceId, services as allCatalogSer
 import { BarSpark, WeekBars } from "../charts402";
 import {
   ArrowRight,
-  ArrowUpRight,
   Bolt,
   CAT_ICON,
   Check,
@@ -558,7 +557,6 @@ export function OverviewPage({
               <div className="kt">
                 <span className="sq" style={{ background: catColor(s.category) }}><Ico width={16} height={16} /></span>
                 <div><div className="nm">{s.name}</div><div className="tk">{s.category}</div></div>
-                <ArrowUpRight width={15} height={15} className="ext" />
               </div>
               <div className="kv">{fmtUsd(s.calls * s.priceUsd)}</div>
               <div className="ks"><span className="ch up">+{hashPct(s.id).toFixed(2)}%</span><span className="lbl">vs last month</span></div>

@@ -1361,7 +1361,8 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
       setList((prev) => [reg, ...prev.filter((x) => x.wallet.toLowerCase() !== result.walletAddress.toLowerCase())].slice(0, 20));
       emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.agentid.register", payload: { agentId: reg.agentId, wallet: result.walletAddress, role, dailyCapUsd, sealed, txHash: result.txHash } });
     } catch (e) {
-      setRegError((e as Error).message ?? String(e));
+      const raw = (e as Error).message ?? String(e);
+      setRegError(raw.startsWith("Set VITE") ? "On-chain registration is not available on this network. Connect MetaMask to 0G Mainnet and try again." : raw);
     }
     setBusy(false);
   };
