@@ -90,7 +90,7 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
           </motion.p>
           <motion.div variants={fadeInUpSmall} className="mt-5 flex flex-wrap items-center gap-2">
             <a
-              href="https://chainscan.0g.ai/address/0xF4BFd93061B160Fa376c7F66De207a00225B4e70"
+              href="https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 transition-colors"

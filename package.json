@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:flow": "node scripts/test-flow.js",
     "analyze": "cross-env ANALYZE=true vite build"
   },
   "dependencies": {

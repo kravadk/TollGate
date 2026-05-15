@@ -363,7 +363,7 @@ export function FleetView() {
         </div>
 
         <p style={{ marginTop: 20, fontSize: ".68rem", color: "var(--muted)", textAlign: "center" }}>
-          Click any row to peek at the last receipts · inspired by Claude Code Agent View
+          Click any row to expand receipts and budget details
         </p>
       </div>
     </div>
