@@ -16,6 +16,7 @@ dist/
 screenshots/
 *.png
 !public/logotollgate.png
+!public/logo0g.png
 .github/workflows/
 
 # All markdown files are local only — only root README is committed
