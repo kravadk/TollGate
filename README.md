@@ -52,26 +52,44 @@ Full details: [src/workspaces/0g/README.md](src/workspaces/0g/README.md) · [man
 
 ## Deployed contracts
 
-| Contract | Network | Address |
-|---|---|---|
-| `AgentReceiptRegistry` | 0G Mainnet | `0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f` |
-| `AgentIdentityRegistry` | 0G Mainnet | `0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446` |
-| `ServiceRegistry` | 0G Mainnet | `0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8` |
-| `AgentBudgetController` | 0G Mainnet | `0x305eF265BD964fBe34913E70Ef6AA8951e6b662e` |
-| `DeliveryVerifier` | 0G Mainnet | `0x5F4999829D57f714497343f5677e66e6A56238E3` |
-| `AgentIdentityRegistry` | Mantle Mainnet | `0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB` |
-| `AgentCreditRegistry` | Mantle Mainnet | `0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9` |
-| `AgentBudgetController` | Mantle Mainnet | via `deploy-mantle.cjs` |
-| `ReceiptNFT` | Mantle Mainnet | via `deploy-mantle.cjs` |
-| `AgentVault` | Mantle Mainnet | via `deploy-mantle.cjs` |
-| `AgentEscrow` | Arbitrum Sepolia | `0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7` |
-| `AgentIntentSettler` | Arbitrum Sepolia | via `deploy-arbitrum.cjs` |
-| `QieCheckout` | QIE Testnet | `0xA8302734081F26b8a3E42f90DCf07b3E063441de` |
-| `QiePass` | QIE Testnet | via `deploy-qie.cjs` |
-| `QieAgentCredit` | QIE Testnet | via `deploy-qie.cjs` |
-| `QieOracleFeed` | QIE Testnet | via `deploy-qie.cjs` |
-| `ArcMindRegistry` | Arc Testnet | `0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8` |
-| `CopyTradeEscrow` | Arc Testnet | via `deploy-arc.cjs` |
+### 0G Mainnet — chainId 16661
+
+| Contract | Address |
+|---|---|
+| `AgentReceiptRegistry` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
+| `AgentIdentityRegistry` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://chainscan.0g.ai/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
+| `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
+| `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
+| `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
+
+### Mantle Mainnet — chainId 5000
+
+| Contract | Address |
+|---|---|
+| `AgentIdentityRegistry` | [`0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB`](https://explorer.mantle.xyz/address/0x4cA80A3af6e0a4E0c85AB31E3B4a86C6BffF17CB) |
+| `AgentCreditRegistry` | [`0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9`](https://explorer.mantle.xyz/address/0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9) |
+| `AgentVault` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://explorer.mantle.xyz/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
+| `AgentBudgetController` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://explorer.mantle.xyz/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
+| `ReceiptNFT` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://explorer.mantle.xyz/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
+
+### Arbitrum Sepolia — chainId 421614
+
+| Contract | Address |
+|---|---|
+| `AgentEscrow` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://sepolia.arbiscan.io/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
+
+### QIE Testnet — chainId 1983
+
+| Contract | Address |
+|---|---|
+| `QieCheckout` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://testnet.qie.digital/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
+| `QiePass` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://testnet.qie.digital/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
+
+### Arc Testnet — chainId 5042002
+
+| Contract | Address |
+|---|---|
+| `ArcMindRegistry` | [`0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8`](https://testnet.arcscan.app/address/0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8) |
 
 ## What makes TollGate different
 
