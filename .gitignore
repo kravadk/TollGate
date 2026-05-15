@@ -15,6 +15,7 @@ dist/
 # local debug artifacts
 screenshots/
 *.png
+!public/logotollgate.png
 .github/workflows/
 
 # All markdown files are local only — only root README is committed

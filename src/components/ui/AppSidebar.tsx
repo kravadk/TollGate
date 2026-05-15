@@ -191,19 +191,13 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
           aria-label="Back to project launcher"
           className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
         >
-          <span
+          <img
+            src="/logotollgate.png"
+            alt="TollGate"
             aria-hidden="true"
-            className="relative grid place-items-center w-9 h-9 rounded-xl shrink-0"
-            style={{
-              background: "conic-gradient(from 205deg, #ff7a18, #ff3d8b, #9b4dff, #2f6bff, #06c2da, #11b886, #ffb01f, #ff7a18)",
-              boxShadow: "0 4px 18px -4px color-mix(in srgb, var(--accent-primary) 50%, rgba(0,0,0,0.6)), 0 0 0 1px color-mix(in srgb, var(--accent-primary) 26%, transparent)",
-            }}
-          >
-            <span
-              className="w-3.5 h-3.5 bg-white/95"
-              style={{ clipPath: "polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%)" }}
-            />
-          </span>
+            className="w-9 h-9 rounded-xl shrink-0 object-cover"
+            style={{ boxShadow: "0 4px 18px -4px rgba(255,100,0,0.5)" }}
+          />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               {CHAIN_LOGOS[workspace.id] && (
@@ -298,14 +292,24 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
         <div className="flex items-center gap-2 px-1">
           <div className="relative shrink-0">
             <div
-              className="w-8 h-8 rounded-xl grid place-items-center text-[11px] font-bold"
+              className="w-8 h-8 rounded-xl grid place-items-center text-[11px] font-bold overflow-hidden"
               style={{
                 background: "color-mix(in srgb, var(--accent-primary) 16%, var(--surface-2))",
                 color: "var(--accent-primary)",
                 border: "1px solid color-mix(in srgb, var(--accent-primary) 24%, transparent)",
               }}
             >
-              {agent.name.split(" ").filter(s => /[a-zA-Z]/.test(s[0])).map((s) => s[0]).slice(0, 2).join("").toUpperCase() || "AG"}
+              {CHAIN_LOGOS[workspace.id] ? (
+                <img
+                  src={CHAIN_LOGOS[workspace.id]}
+                  alt={workspace.shortName}
+                  className="w-5 h-5 object-contain"
+                  onError={(e) => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute("hidden"); }}
+                />
+              ) : null}
+              <span hidden={!!CHAIN_LOGOS[workspace.id]}>
+                {agent.name.split(" ").filter(s => /[a-zA-Z]/.test(s[0])).map((s) => s[0]).slice(0, 2).join("").toUpperCase() || "AG"}
+              </span>
             </div>
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-surface-1" />
           </div>
