@@ -1606,30 +1606,55 @@ export function OgLiveContractsPanel() {
 
 // ── 0G DA Monitor ─────────────────────────────────────────────────────────────
 
+const FIXED_PRICE_FLOW = "0x62d4144db0f0a6fbbaeb6296c785c71b3d57c526";
+// keccak256("Submit(uint256,bytes32,uint256,address,address)")
+const SUBMIT_TOPIC = "0xb0f1b13cf8b3793de7b30921124a19c749ee07ab07baf9d3bef1bec0f1c0cde2";
+const OG_MAINNET_RPC = "https://evmrpc.0g.ai";
+
 type DaCommitment = {
   id: string;
   blockHeight: number;
   batchSize: number;
   dataRoot: string;
   submittedAt: string;
-  status: "finalized" | "pending" | "challenged";
+  status: "finalized" | "pending";
   throughputKBs: number;
 };
 
-function makeDaCommitments(seed: number): DaCommitment[] {
-  return Array.from({ length: 12 }, (_, i) => {
-    const s = seed + i * 37;
-    const blockHeight = 2_841_000 + seed % 1000 + i * 7;
-    const statusIdx = (deterministicScore(String(s), 0, 10)) | 0;
-    const status: DaCommitment["status"] = statusIdx < 8 ? "finalized" : statusIdx < 9 ? "pending" : "challenged";
+async function rpcCall(method: string, params: unknown[]) {
+  const r = await fetch(OG_MAINNET_RPC, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(8000),
+  });
+  const j = await r.json();
+  return j.result;
+}
+
+async function fetchDaLogs(): Promise<DaCommitment[]> {
+  const latestHex: string = await rpcCall("eth_blockNumber", []);
+  const latest = parseInt(latestHex, 16);
+  const fromBlock = "0x" + Math.max(0, latest - 500).toString(16);
+  const logs: Array<{ blockNumber: string; topics: string[]; data: string; transactionHash: string }> = await rpcCall("eth_getLogs", [{
+    address: FIXED_PRICE_FLOW,
+    topics: [SUBMIT_TOPIC],
+    fromBlock,
+    toBlock: "latest",
+  }]);
+  if (!Array.isArray(logs)) return [];
+  return logs.slice(-20).reverse().map((log) => {
+    const blockHeight = parseInt(log.blockNumber, 16);
+    const dataRoot = log.topics[1] ?? log.transactionHash;
+    const status: DaCommitment["status"] = blockHeight < latest - 50 ? "finalized" : "pending";
     return {
-      id: hashId("da", String(s), 10),
+      id: log.transactionHash,
       blockHeight,
-      batchSize: 1 + ((s * 31) % 24),
-      dataRoot: fnv1aHex(String(s)) + fnv1aHex(String(s + 1)),
-      submittedAt: new Date(Date.now() - (12 - i) * 14_000).toLocaleTimeString(),
+      batchSize: 1,
+      dataRoot,
+      submittedAt: new Date().toLocaleTimeString(),
       status,
-      throughputKBs: Math.round(deterministicScore(String(s + 3), 120, 950)),
+      throughputKBs: 0,
     };
   });
 }
@@ -1639,33 +1664,36 @@ export function OgSlashingAlert() {
 }
 
 export function OgDaMonitor() {
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 9999));
+  const [rows, setRows] = useState<DaCommitment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<"all" | "finalized" | "pending" | "challenged">("all");
+  const [filter, setFilter] = useState<"all" | "finalized" | "pending">("all");
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  const rows = useMemo(() => makeDaCommitments(seed), [seed]);
   const filtered = filter === "all" ? rows : rows.filter((r) => r.status === filter);
-
-  const totalKBs = rows.reduce((s, r) => s + r.throughputKBs, 0);
   const finalized = rows.filter((r) => r.status === "finalized").length;
-  const challenged = rows.filter((r) => r.status === "challenged").length;
 
   async function refresh() {
     setRefreshing(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setSeed((s) => s + 1);
-    setRefreshing(false);
+    setLoadErr(null);
+    try {
+      const data = await fetchDaLogs();
+      setRows(data);
+    } catch (e: any) {
+      setLoadErr(e?.message ?? "RPC error");
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   useEffect(() => {
-    const id = setInterval(() => setSeed((s) => s + 1), 14_000);
+    refresh();
+    const id = setInterval(refresh, 14_000);
     return () => clearInterval(id);
   }, []);
 
   const statusColor: Record<DaCommitment["status"], string> = {
     finalized: "#10b981",
     pending: "#f59e0b",
-    challenged: "#ef4444",
   };
 
   return (
@@ -1673,7 +1701,7 @@ export function OgDaMonitor() {
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
         <Database width={14} height={14} style={{ color: "#4ade80", flexShrink: 0 }} />
         <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>0G DA Monitor</span>
-        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>{(totalKBs / 1024).toFixed(1)} MB/s avg · {finalized}/{rows.length} finalized{challenged > 0 ? <span style={{ color: "#ef4444", fontWeight: 700 }}> · ⚠ {challenged} challenged</span> : null}</span>
+        <span style={{ fontSize: ".62rem", color: "var(--muted)" }}>{finalized}/{rows.length} finalized{loadErr ? <span style={{ color: "#ef4444", fontWeight: 700 }}> · error</span> : null}</span>
         <button
           type="button"
           onClick={refresh}
@@ -1685,15 +1713,15 @@ export function OgDaMonitor() {
       </div>
 
       <div style={{ display: "flex", gap: 6, padding: "8px 16px", borderBottom: "1px solid var(--line-2)" }}>
-        {(["all", "finalized", "pending", "challenged"] as const).map((f) => (
+        {(["all", "finalized", "pending"] as const).map((f) => (
           <button
             key={f}
             type="button"
             onClick={() => setFilter(f)}
             style={{
               padding: "2px 10px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: ".65rem", fontWeight: 700,
-              background: filter === f ? (f === "all" ? "#7C5CF820" : statusColor[f as Exclude<typeof f, "all">] + "20") : "transparent",
-              color: filter === f ? (f === "all" ? "#7C5CF8" : statusColor[f as Exclude<typeof f, "all">]) : "var(--muted)",
+              background: filter === f ? (f === "all" ? "#7C5CF820" : statusColor[f] + "20") : "transparent",
+              color: filter === f ? (f === "all" ? "#7C5CF8" : statusColor[f]) : "var(--muted)",
             }}
           >
             {f}
@@ -1705,19 +1733,23 @@ export function OgDaMonitor() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".72rem" }}>
           <thead>
             <tr style={{ background: "var(--field)" }}>
-              {["Block", "Batch", "Data root", "Throughput", "Status", "Time"].map((h) => (
+              {["Block", "Txs", "Data root", "Status", "Time"].map((h) => (
                 <th key={h} style={{ padding: "6px 14px", textAlign: "left", fontWeight: 700, fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", whiteSpace: "nowrap" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            <tr><td colSpan={6} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>No DA data — connect <code>VITE_0G_DA_URL</code> to stream live commitments from the 0G DA layer.</td></tr>
-            {false && filtered.map((r) => (
+            {refreshing && rows.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>Loading DA events from 0G mainnet…</td></tr>
+            )}
+            {!refreshing && rows.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>{loadErr ?? "No recent Submit events on FixedPriceFlow."}</td></tr>
+            )}
+            {filtered.map((r) => (
               <tr key={r.id} style={{ borderTop: "1px solid var(--line-2)" }}>
                 <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "var(--ink)" }}>#{r.blockHeight.toLocaleString()}</td>
-                <td style={{ padding: "7px 14px", color: "var(--muted)" }}>{r.batchSize} txs</td>
-                <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", color: "var(--muted)" }}>{r.dataRoot.slice(0, 14)}...</td>
-                <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "var(--ink)" }}>{r.throughputKBs} KB/s</td>
+                <td style={{ padding: "7px 14px", color: "var(--muted)" }}>{r.batchSize}</td>
+                <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", color: "var(--muted)" }}>{r.dataRoot.slice(0, 18)}…</td>
                 <td style={{ padding: "7px 14px" }}>
                   <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: ".63rem", fontWeight: 700, background: statusColor[r.status] + "18", color: statusColor[r.status] }}>
                     {r.status}
@@ -1726,8 +1758,8 @@ export function OgDaMonitor() {
                 <td style={{ padding: "7px 14px", color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{r.submittedAt}</td>
               </tr>
             ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>No {filter} commitments.</td></tr>
+            {rows.length > 0 && filtered.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: 18, color: "var(--muted)", textAlign: "center" }}>No {filter} commitments.</td></tr>
             )}
           </tbody>
         </table>
@@ -1866,15 +1898,19 @@ export function OgAllowlistManager() {
     if (entries.find((e) => e.address.toLowerCase() === addr.toLowerCase())) { setErr("Address already on allowlist."); return; }
     setErr(null);
     setSigning(true);
-    // Simulate EIP-191 signing: in a real deploy this would call window.ethereum.request({method:"personal_sign"})
-    await new Promise((r) => setTimeout(r, 700));
-    const permitSig = "0x" + (await sha256Hex(addr + dailyCap + Date.now())).slice(0, 130);
-    const entry: AllowEntry = {
-      address: addr, label: label.trim() || "Agent wallet",
-      dailyCapUsd: dailyCap, addedAt: new Date().toLocaleTimeString(), permitSig,
-    };
-    setEntries((prev) => [entry, ...prev].slice(0, 20));
-    setAddress(""); setLabel(""); setSigning(false);
+    try {
+      const accounts: string[] = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+      const from = accounts[0];
+      const msg = `allowlist:${addr}:cap=${dailyCap}:ts=${Date.now()}`;
+      const permitSig: string = await (window as any).ethereum.request({ method: "personal_sign", params: [msg, from] });
+      const entry: AllowEntry = { address: addr, label: label.trim() || "Agent wallet", dailyCapUsd: dailyCap, addedAt: new Date().toLocaleTimeString(), permitSig };
+      setEntries((prev) => [entry, ...prev].slice(0, 20));
+      setAddress(""); setLabel("");
+    } catch (e: any) {
+      setErr(e?.message ?? "Signing rejected.");
+    } finally {
+      setSigning(false);
+    }
   };
 
   const remove = (addr: string) => setEntries((prev) => prev.filter((e) => e.address !== addr));
@@ -2458,12 +2494,18 @@ export function OgMultiSigApprove({ workspace }: { workspace: Workspace }) {
 
   const sign = async (id: string) => {
     setSigning(id);
-    await new Promise((r) => setTimeout(r, 800));
-    const signer = signers.find((s) => s.id === id)!;
-    const msg = `approve:${receiptId}:${signer.wallet}`;
-    const sig = "0x" + (await sha256Hex(msg)).slice(0, 130);
-    setSigners((prev) => prev.map((s) => s.id === id ? { ...s, signed: true, sig } : s));
-    setSigning(null);
+    try {
+      const accounts: string[] = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+      const from = accounts[0];
+      const signer = signers.find((s) => s.id === id)!;
+      const msg = `approve:${receiptId}:${signer.wallet}`;
+      const sig: string = await (window as any).ethereum.request({ method: "personal_sign", params: [msg, from] });
+      setSigners((prev) => prev.map((s) => s.id === id ? { ...s, signed: true, sig } : s));
+    } catch {
+      // user rejected or no wallet
+    } finally {
+      setSigning(null);
+    }
   };
 
   const release = () => {
