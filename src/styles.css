@@ -6526,9 +6526,9 @@ input:focus-visible {
 
 .ap402 .kv + .kv { border-top: 1px solid var(--line); }
 
-.ap402 .kv .k { color: var(--muted); font-size: 11.5px; }
+.ap402 .kv .k { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
 
-.ap402 .kv .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ap402 .kv .v { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
 
 /* AP402 — fixups: container padding, missing atoms, topbar on white panel */

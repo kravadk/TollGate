@@ -2465,8 +2465,8 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
               <div className="kv"><span className="k">Service</span><span className="v">{sel.serviceName}</span></div>
               <div className="kv"><span className="k">Workspace</span><span className="v">{sel.workspaceId}</span></div>
               <div className="kv"><span className="k">Agent</span><span className="v">{sel.agentName}</span></div>
-              <div className="kv"><span className="k">Payer</span><span className="v">{sel.payerWallet}</span></div>
-              <div className="kv"><span className="k">Provider</span><span className="v">{sel.providerWallet}</span></div>
+              <div className="kv"><span className="k">Payer</span><span className="v" title={sel.payerWallet}>{sel.payerWallet.length > 20 ? sel.payerWallet.slice(0, 10) + "…" + sel.payerWallet.slice(-6) : sel.payerWallet}</span></div>
+              <div className="kv"><span className="k">Provider</span><span className="v" title={sel.providerWallet}>{sel.providerWallet.length > 20 ? sel.providerWallet.slice(0, 10) + "…" + sel.providerWallet.slice(-6) : sel.providerWallet}</span></div>
               <div className="kv"><span className="k">Network</span><span className="v">{sel.network}</span></div>
               {(() => {
                 const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
@@ -2474,7 +2474,7 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
                 return realTx ? (
                   <div className="kv"><span className="k">Anchor tx</span><a className="v" href={`https://chainscan.0g.ai/tx/${realTx}`} target="_blank" rel="noreferrer" style={{ color: "#2f6bff", textDecoration: "underline" }}>{realTx.slice(0, 10)}…{realTx.slice(-4)} ↗</a></div>
                 ) : sel.txHash ? (
-                  <div className="kv"><span className="k">Tx hash</span><span className="v" style={{ color: "#9a9a9a", fontWeight: 600 }}>{sel.txHash} · demo</span></div>
+                  <div className="kv"><span className="k">Tx hash</span><span className="v" title={sel.txHash} style={{ color: "#9a9a9a", fontWeight: 600 }}>{sel.txHash.length > 20 ? sel.txHash.slice(0, 14) + "…" : sel.txHash} · demo</span></div>
                 ) : null;
               })()}
               {sel.errorCode ? <div className="kv"><span className="k">Error</span><span className="v" style={{ color: "var(--red)" }}>{sel.errorCode}</span></div> : null}
