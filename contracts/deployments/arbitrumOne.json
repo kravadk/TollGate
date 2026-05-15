@@ -1,10 +1,10 @@
 {
   "network": "arbitrumOne",
   "contract": "AgentEscrow",
-  "address": "0x1dF5382BDb63537cd731A8e3Ee09eF10EA4179a3",
-  "txHash": "0xfa406ba1f4aa25b82cd155e60b358906671493165b05bc2e7a69c76a41fd61cf",
+  "address": "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f",
+  "txHash": "0x1c52cfa96d37aeb4ad671999f0d40e03b615e840a58bcf819c0936d1fb37ca72",
   "chainId": 42161,
-  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "deployer": "0x82736f84Ad234566180F902237e2Fb4c35177bDB",
   "explorer": "https://arbiscan.io",
-  "deployedAt": "2026-05-14T15:13:54.620Z"
+  "deployedAt": "2026-05-15T10:38:52.105Z"
 }

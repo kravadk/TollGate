@@ -86,16 +86,15 @@ async function main() {
 
   // ── ServiceRegistry ────────────────────────────────────────────────────────
   let serviceRegistryAddress = process.env.MANTLE_SERVICE_REGISTRY_ADDRESS?.trim() || null;
-  const treasury = process.env.MANTLE_TREASURY_ADDRESS?.trim() || deployer.address;
   if (serviceRegistryAddress) {
     console.log(`ServiceRegistry: reusing existing ${serviceRegistryAddress}`);
   } else {
     try {
       const ServiceRegistry = await hre.ethers.getContractFactory("ServiceRegistry");
-      const serviceRegistry = await ServiceRegistry.deploy(treasury);
+      const serviceRegistry = await ServiceRegistry.deploy();
       await serviceRegistry.waitForDeployment();
       serviceRegistryAddress = await serviceRegistry.getAddress();
-      console.log(`  ✓ ServiceRegistry: ${serviceRegistryAddress} (treasury: ${treasury})`);
+      console.log(`  ✓ ServiceRegistry: ${serviceRegistryAddress}`);
     } catch (e) {
       console.warn(`  ⚠ ServiceRegistry NOT deployed: ${(e && (e.shortMessage || e.message)) || e}`);
     }

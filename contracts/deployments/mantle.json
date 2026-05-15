@@ -7,10 +7,10 @@
   "receiptNft": "0x5F4999829D57f714497343f5677e66e6A56238E3",
   "creditRegistry": "0x305eF265BD964fBe34913E70Ef6AA8951e6b662e",
   "yieldToken": "0xcDA86A272531e8640cD7F1a92c01839911B90bb0",
-  "identityTxHash": "0x649b20de803274bb7525877fdcbb7fa1bcd67d1cf8cbfcafdf82b10dc71d2c4c",
-  "vaultTxHash": "0x849b8a9567cd3eab34dd9a89971a7d7bdb3ecf85bbf853a8d5797914462946f1",
+  "identityTxHash": null,
+  "vaultTxHash": null,
   "chainId": 5000,
   "deployer": "0x82736f84Ad234566180F902237e2Fb4c35177bDB",
   "explorer": "https://explorer.mantle.xyz",
-  "deployedAt": "2026-05-15T10:31:49.406Z"
+  "deployedAt": "2026-05-15T10:38:48.779Z"
 }
