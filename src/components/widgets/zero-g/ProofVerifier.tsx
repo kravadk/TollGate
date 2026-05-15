@@ -7,7 +7,7 @@ import { useLocalStore } from "../../../lib/storage";
 import { sha256Hex } from "../../../lib/util-hash";
 import {
   signReceipt, recoverReceiptSigner, safeVerifyDelivery, isReceiptRecorded, receiptHashFor,
-  isOgRegistryConfigured, anchorReceiptOnChain, ogExplorerTxUrl,
+  isOgRegistryConfigured, anchorReceiptOnChain, ogExplorerTxUrl, anchorDeliveryOnChain,
 } from "../../../lib/og";
 import { ActionPanel } from "../ActionPanel";
 import { WidgetMeta } from "../../ui/Motion";
@@ -42,6 +42,8 @@ export function ProofVerifier({ workspace }: { workspace: Workspace }) {
   const [dSig, setDSig] = useState("");
   const [dResult, setDResult] = useState<DeliveryResult>({ kind: "idle" });
   const [dBusy, setDBusy] = useState(false);
+  const [dAnchor, setDAnchor] = useState<{ txHash: string; explorerUrl: string } | null>(null);
+  const [dAnchorErr, setDAnchorErr] = useState<string | null>(null);
 
   // Persisted cryptographic attestations: receiptId → { signature, signer } / { txHash, index }
   const [sigs, setSigs] = useLocalStore<Record<string, StoredSig>>("0g.receiptSigs", {});
@@ -116,6 +118,20 @@ export function ProofVerifier({ workspace }: { workspace: Workspace }) {
       setDBusy(false);
     }
   }
+
+  const anchorDelivery = async () => {
+    if (dResult.kind !== "ok" || !dRespHash || !dSig) return;
+    setDBusy(true); setDAnchorErr(null);
+    try {
+      const requestHashHex = await sha256Hex(dReqId);
+      const responseHashHex = dRespHash.startsWith("0x") ? dRespHash.slice(2) : dRespHash;
+      const res = await anchorDeliveryOnChain({ requestHashHex, responseHashHex, signature: dSig });
+      setDAnchor({ txHash: res.txHash, explorerUrl: res.explorerUrl });
+    } catch (e) {
+      setDAnchorErr((e as { message?: string }).message ?? "Anchor failed");
+    }
+    setDBusy(false);
+  };
 
   return (
     <ActionPanel
@@ -252,6 +268,20 @@ export function ProofVerifier({ workspace }: { workspace: Workspace }) {
               </div>
               {eqAddr(dResult.signer, wallet.address ?? undefined) && (
                 <div style={{ fontSize: ".72rem", color: "var(--muted)", paddingLeft: 4 }}>= your connected wallet (this is a self-signed test receipt)</div>
+              )}
+              {!dAnchor && (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={anchorDelivery} disabled={dBusy} style={{ alignSelf: "flex-start" }}>
+                  {dBusy ? <><Loader2 size={12} className="wallet-spin" /> Anchoring on 0G…</> : <><Link2 size={12} /> Anchor on 0G (DeliveryVerifier)</>}
+                </button>
+              )}
+              {dAnchorErr && <div style={{ color: "var(--red)", fontSize: ".73rem" }}>{dAnchorErr}</div>}
+              {dAnchor && (
+                <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--green)", fontWeight: 700, fontSize: ".75rem" }}>
+                  <Link2 size={13} /> Anchored on 0G DeliveryVerifier ·{" "}
+                  <a href={dAnchor.explorerUrl} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    {short(dAnchor.txHash)} <ExternalLink size={11} />
+                  </a>
+                </div>
               )}
               <div style={{ padding: "6px 10px", borderRadius: 9, background: "color-mix(in srgb, var(--green) 10%, transparent)", fontSize: ".72rem", color: "var(--green)", fontWeight: 800 }}>
                 ✓ cryptographic proof of delivery · service committed to this exact response · verifiable in DeliveryVerifier.sol

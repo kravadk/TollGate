@@ -357,3 +357,188 @@ export function verifyDelivery(requestId: string, responseHash: string, signatur
 export function safeVerifyDelivery(requestId: string, responseHash: string, signature: string): string | null {
   try { return verifyDelivery(requestId, responseHash, signature); } catch { return null; }
 }
+
+// ── AgentIdentityRegistry ─────────────────────────────────────────────────
+
+const IDENTITY_REGISTRY_ABI = [
+  "function register(string calldata agentDomain, address agentAddress) external returns (uint256 agentId)",
+  "function agentIdOf(address agentAddress) external view returns (uint256)",
+  "function ownerOf(uint256 agentId) external view returns (address)",
+];
+
+function getIdentityRegistryAddress(): string | null {
+  return env("VITE_0G_IDENTITY_REGISTRY_ADDRESS") ?? null;
+}
+
+export type RegisterAgentResult = {
+  txHash: string;
+  explorerUrl: string;
+  agentId: string;
+  walletAddress: string;
+};
+
+/** Call AgentIdentityRegistry.register(domain, walletAddress) via MetaMask on the 0G chain. */
+export async function registerAgentIdentity(agentDomain: string): Promise<RegisterAgentResult> {
+  const addr = getIdentityRegistryAddress();
+  if (!addr) throw new Error("Set VITE_0G_IDENTITY_REGISTRY_ADDRESS to enable on-chain registration.");
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
+
+  const cfg = getOgConfig();
+  const currentChain = (await eth.request({ method: "eth_chainId" })) as string;
+  if (currentChain.toLowerCase() !== cfg.chainHex) {
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.chainHex }] });
+    } catch (err) {
+      const code = (err as { code?: number }).code;
+      const addParams = (OG_ADD_CHAIN as Record<string, unknown>)[cfg.chainHex];
+      if (code === 4902 && addParams) {
+        await eth.request({ method: "wallet_addEthereumChain", params: [addParams] });
+      } else {
+        throw new Error(`Switch your wallet to the 0G chain (${cfg.chainHex}) and retry.`);
+      }
+    }
+  }
+
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const walletAddress = await signer.getAddress();
+  const contract = new Contract(addr, IDENTITY_REGISTRY_ABI, signer);
+
+  const existingId: bigint = await contract.agentIdOf(walletAddress);
+  if (existingId > 0n) {
+    return { txHash: "already-registered", explorerUrl: ogExplorerAddrUrl(addr), agentId: existingId.toString(), walletAddress };
+  }
+
+  const tx = await contract.register(agentDomain, walletAddress);
+  await tx.wait();
+  const newId: bigint = await contract.agentIdOf(walletAddress);
+
+  return {
+    txHash: tx.hash as string,
+    explorerUrl: ogExplorerTxUrl(tx.hash as string),
+    agentId: newId.toString(),
+    walletAddress,
+  };
+}
+
+// ── DeliveryVerifier.anchor ───────────────────────────────────────────────
+
+const DELIVERY_VERIFIER_ABI = [
+  "function verify(bytes32 responseHash, bytes calldata signature, address expectedProvider) external pure returns (bool)",
+  "function anchor(bytes32 requestHash, bytes32 responseHash, bytes calldata signature) external returns (address provider)",
+  "function isAnchored(bytes32 requestHash) external view returns (bool)",
+];
+
+function getDeliveryVerifierAddress(): string | null {
+  return env("VITE_0G_DELIVERY_VERIFIER_MAINNET_ADDRESS") ?? null;
+}
+
+export type AnchorDeliveryResult = {
+  txHash: string;
+  explorerUrl: string;
+  provider: string;
+};
+
+/** Call DeliveryVerifier.anchor(requestHash, responseHash, sig) via MetaMask. */
+export async function anchorDeliveryOnChain(params: {
+  requestHashHex: string;
+  responseHashHex: string;
+  signature: string;
+}): Promise<AnchorDeliveryResult> {
+  const addr = getDeliveryVerifierAddress();
+  if (!addr) throw new Error("Set VITE_0G_DELIVERY_VERIFIER_MAINNET_ADDRESS to enable on-chain anchoring.");
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
+
+  const cfg = getOgConfig();
+  const currentChain = (await eth.request({ method: "eth_chainId" })) as string;
+  if (currentChain.toLowerCase() !== cfg.chainHex) {
+    await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.chainHex }] });
+  }
+
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const contract = new Contract(addr, DELIVERY_VERIFIER_ABI, signer);
+
+  const tx = await contract.anchor(to0xBytes32(params.requestHashHex), to0xBytes32(params.responseHashHex), params.signature);
+  const receipt = await tx.wait();
+
+  let providerAddr = "unknown";
+  try {
+    for (const log of receipt?.logs ?? []) {
+      const parsed = contract.interface.parseLog(log);
+      if (parsed?.name === "DeliveryAnchored") { providerAddr = String(parsed.args.provider); break; }
+    }
+  } catch { /* ignore */ }
+
+  return { txHash: tx.hash as string, explorerUrl: ogExplorerTxUrl(tx.hash as string), provider: providerAddr };
+}
+
+// ── ServiceRegistry.register ──────────────────────────────────────────────
+
+const SERVICE_REGISTRY_ABI = [
+  "function register(string calldata serviceId, string calldata name, uint256 priceWei, string calldata currency, string calldata network, string calldata endpoint, string calldata agentCardUri) external returns (bytes32 key)",
+  "function getService(string calldata serviceId) external view returns (tuple(address provider, string serviceId, string name, uint256 priceWei, string currency, string network, string endpoint, string agentCardUri, bool active, uint64 registeredAt, uint64 updatedAt))",
+];
+
+function getServiceRegistryAddress(): string | null {
+  return env("VITE_0G_SERVICE_REGISTRY_MAINNET_ADDRESS") ?? null;
+}
+
+export type RegisterServiceResult = {
+  txHash: string;
+  explorerUrl: string;
+  serviceKey: string;
+  provider: string;
+};
+
+/** Call ServiceRegistry.register() via MetaMask on the 0G chain (7-param form). */
+export async function registerOnChainService(params: {
+  serviceId: string;
+  name: string;
+  priceWei: bigint;
+  currency: string;
+  network: string;
+  endpoint: string;
+  agentCardUri: string;
+}): Promise<RegisterServiceResult> {
+  const addr = getServiceRegistryAddress();
+  if (!addr) throw new Error("Set VITE_0G_SERVICE_REGISTRY_MAINNET_ADDRESS to enable on-chain registration.");
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined);
+  if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
+
+  const cfg = getOgConfig();
+  const currentChain = (await eth.request({ method: "eth_chainId" })) as string;
+  if (currentChain.toLowerCase() !== cfg.chainHex) {
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.chainHex }] });
+    } catch (err) {
+      const code = (err as { code?: number }).code;
+      const addParams = (OG_ADD_CHAIN as Record<string, unknown>)[cfg.chainHex];
+      if (code === 4902 && addParams) {
+        await eth.request({ method: "wallet_addEthereumChain", params: [addParams] });
+      } else {
+        throw new Error(`Switch your wallet to the 0G chain (${cfg.chainHex}) and retry.`);
+      }
+    }
+  }
+
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const signerAddr = await signer.getAddress();
+  const contract = new Contract(addr, SERVICE_REGISTRY_ABI, signer);
+
+  const tx = await contract.register(params.serviceId, params.name, params.priceWei, params.currency, params.network, params.endpoint, params.agentCardUri);
+  const receipt = await tx.wait();
+
+  let serviceKey = "";
+  try {
+    for (const log of receipt?.logs ?? []) {
+      const parsed = contract.interface.parseLog(log);
+      if (parsed?.name === "ServiceRegistered") { serviceKey = String(parsed.args.key ?? ""); break; }
+    }
+  } catch { /* ignore */ }
+
+  return { txHash: tx.hash as string, explorerUrl: ogExplorerTxUrl(tx.hash as string), serviceKey, provider: signerAddr };
+}

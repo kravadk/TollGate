@@ -1,14 +1,15 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import { ExternalLink, Search, Plus, Database, Zap } from "lucide-react";
+import { ExternalLink, Search, Plus, Database, Zap, Loader2 } from "lucide-react";
 import { useLocalStore } from "../../lib/storage";
 import { ActionPanel } from "./ActionPanel";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Motion";
 import { toast } from "../ui/Toast";
+import { registerOnChainService } from "../../lib/og";
 
 const CONTRACTS = [
   { label: "Arbitrum Sepolia", addr: "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9", url: "https://sepolia.arbiscan.io/address/0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9" },
-  { label: "0G Galileo",       addr: "0x42a14858Da4B2f75DB5C581bA5579786A12d97b4", url: "https://chainscan-galileo.0g.ai/address/0x42a14858Da4B2f75DB5C581bA5579786A12d97b4" },
+  { label: "0G mainnet",       addr: "0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8", url: "https://chainscan.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8" },
 ];
 
 type RegistryService = {
@@ -50,7 +51,7 @@ export function DiscoveryWidget() {
   const [loading, setLoading] = useState(true);
   useEffect(() => { const t = setTimeout(() => setLoading(false), 420); return () => clearTimeout(t); }, []);
   const [showRegister, setShowRegister] = useState(false);
-  const [form, setForm] = useState({ serviceId: "", name: "", priceUsd: "", network: "arbitrum-sepolia", endpoint: "", provider: "" });
+  const [form, setForm] = useState({ serviceId: "", name: "", priceUsd: "", network: "0g-mainnet", endpoint: "", provider: "" });
   const [registered, setRegistered] = useState(false);
 
   const maxP = parseFloat(maxPrice) || Infinity;
@@ -61,6 +62,7 @@ export function DiscoveryWidget() {
     .sort((a, b) => a.priceUsd - b.priceUsd);
 
   const [regErr, setRegErr] = useState<string | null>(null);
+  const [regBusy, setRegBusy] = useState(false);
 
   function isValidHttpsUrl(s: string): boolean {
     try {
@@ -69,39 +71,48 @@ export function DiscoveryWidget() {
     } catch { return false; }
   }
 
-  function register() {
+  async function register() {
     setRegErr(null);
     const serviceId = form.serviceId.trim();
     const name      = form.name.trim();
     const endpoint  = form.endpoint.trim();
-    const provider  = form.provider.trim();
 
-    if (!serviceId)             return setRegErr("Service ID is required");
-    if (!/^[a-z0-9_]{3,64}$/i.test(serviceId)) return setRegErr("Service ID: 3–64 chars, letters/digits/underscore only");
-    if (!name)                  return setRegErr("Name is required");
-    if (name.length > 80)       return setRegErr("Name too long (max 80 chars)");
-    if (!endpoint)              return setRegErr("Endpoint URL is required");
-    if (!isValidHttpsUrl(endpoint)) return setRegErr("Endpoint must be a valid http(s) URL");
-    if (provider && !/^0x[0-9a-fA-F]{40}$/.test(provider)) return setRegErr("Provider must be a 0x-prefixed 40-hex-char address");
+    if (!serviceId)             { setRegErr("Service ID is required"); return; }
+    if (!/^[a-z0-9_]{3,64}$/i.test(serviceId)) { setRegErr("Service ID: 3–64 chars, letters/digits/underscore only"); return; }
+    if (!name)                  { setRegErr("Name is required"); return; }
+    if (name.length > 80)       { setRegErr("Name too long (max 80 chars)"); return; }
+    if (!endpoint)              { setRegErr("Endpoint URL is required"); return; }
+    if (!isValidHttpsUrl(endpoint)) { setRegErr("Endpoint must be a valid http(s) URL"); return; }
 
     const price = parseFloat(form.priceUsd);
-    if (!Number.isFinite(price) || price < 0) return setRegErr("Price must be ≥ 0");
-    if (price > 10_000)                        return setRegErr("Price too high (max $10,000)");
+    if (!Number.isFinite(price) || price < 0) { setRegErr("Price must be ≥ 0"); return; }
+    if (price > 10_000)                        { setRegErr("Price too high (max $10,000)"); return; }
 
-    const svc: RegistryService = {
-      serviceId,
-      name,
-      priceUsd: Math.round(price * 10000) / 10000,
-      network: form.network,
-      endpoint,
-      provider: provider || "0xAnonymous",
-      registeredAt: new Date().toISOString(),
-    };
-    setServices((prev) => [svc, ...prev.filter((s) => s.serviceId !== svc.serviceId)]);
-    setForm({ serviceId: "", name: "", priceUsd: "", network: "arbitrum-sepolia", endpoint: "", provider: "" });
-    setRegistered(true);
-    toast.success(`Service '${name}' registered — $${price.toFixed(2)}/call on ${form.network}`);
-    setTimeout(() => { setRegistered(false); setShowRegister(false); }, 1800);
+    const priceWei = BigInt(Math.round(price * 1e18));
+    const agentCardUri = `https://tollgate.ai/agents/${serviceId}`;
+
+    setRegBusy(true);
+    try {
+      const result = await registerOnChainService({
+        serviceId, name, priceWei, currency: "OG", network: form.network,
+        endpoint, agentCardUri,
+      });
+      const svc: RegistryService = {
+        serviceId, name,
+        priceUsd: Math.round(price * 10000) / 10000,
+        network: form.network, endpoint,
+        provider: result.provider,
+        registeredAt: new Date().toISOString(),
+      };
+      setServices((prev) => [svc, ...prev.filter((s) => s.serviceId !== svc.serviceId)]);
+      setForm({ serviceId: "", name: "", priceUsd: "", network: "0g-mainnet", endpoint: "", provider: "" });
+      setRegistered(true);
+      toast.success(`Service '${name}' registered on-chain · tx ${result.txHash.slice(0, 10)}…`);
+      setTimeout(() => { setRegistered(false); setShowRegister(false); }, 2200);
+    } catch (e) {
+      setRegErr((e as Error).message ?? String(e));
+    }
+    setRegBusy(false);
   }
 
   return (
@@ -195,17 +206,17 @@ export function DiscoveryWidget() {
             <div style={col}>
               <span style={lbl}>Network</span>
               <select style={inp} value={form.network} onChange={(e) => setForm((f) => ({ ...f, network: e.target.value }))}>
+                <option value="0g-mainnet">0G mainnet</option>
                 <option value="arbitrum-sepolia">Arbitrum Sepolia</option>
                 <option value="mantle-mainnet">Mantle mainnet</option>
-                <option value="0g-mainnet">0G mainnet</option>
                 <option value="qie-mainnet">QIE mainnet</option>
               </select>
             </div>
           </div>
           <div style={col}><span style={lbl}>Endpoint URL</span><input style={inp} value={form.endpoint} onChange={(e) => setForm((f) => ({ ...f, endpoint: e.target.value }))} placeholder="https://my-api.example.com/v1/feature" /></div>
           <div style={col}><span style={lbl}>Provider wallet</span><input style={inp} value={form.provider} onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))} placeholder="0x…" /></div>
-          <button className="btn sm" onClick={register} style={{ alignSelf: "flex-start" }}>
-            {registered ? "✓ Registered" : "Register (simulation)"}
+          <button className="btn sm" onClick={register} disabled={regBusy} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            {regBusy ? <><Loader2 size={12} className="wallet-spin" /> Registering on-chain…</> : registered ? "✓ Registered" : "Register on 0G (MetaMask)"}
           </button>
 
           {regErr && (

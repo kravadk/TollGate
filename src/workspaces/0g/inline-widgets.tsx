@@ -33,7 +33,7 @@ import {
   Robot,
 } from "../../icons402";
 import { AgentScoreComparison } from "../../components/widgets/AgentScoreBadge";
-import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage } from "../../lib/og";
+import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage, registerAgentIdentity, anchorDeliveryOnChain } from "../../lib/og";
 import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../../lib/mantle";
 import { useWallet } from "../../wallet";
 import * as api from "../../lib/api";
@@ -512,7 +512,7 @@ export function OgComputeKanban({ workspace }: { workspace: Workspace }) {
         model: p.model ?? "unknown",
         promptSnippet: (p.prompt ?? r.serviceName ?? "").slice(0, 55),
         cost: r.amount,
-        latencyMs: p.latencyMs ?? Math.round(deterministicScore(r.id, 280, 1400)),
+        latencyMs: p.latencyMs ?? 0,
         attestationId: p.attestationId,
         status: "verified",
         ts: new Date(r.createdAt).toLocaleTimeString(),
@@ -529,15 +529,15 @@ export function OgComputeKanban({ workspace }: { workspace: Workspace }) {
     setEphemeral((prev) => [...prev, newJob]);
     setSubmitting(true);
     setSubmitPrompt("");
-    await new Promise((r) => setTimeout(r, 300));
     setEphemeral((prev) => prev.map((j) => j.id === jobId ? { ...j, status: "running" } : j));
-    setSubmitting(false);
     const t0 = Date.now();
     const og = await runOgInference(p, submitModel);
     const latency = Date.now() - t0;
-    const attestId = "att_" + hashId("at", jobId, 10);
-    setEphemeral((prev) => prev.map((j) => j.id === jobId ? { ...j, status: "verified", latencyMs: latency, attestationId: attestId } : j));
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_compute", serviceName: og.ok ? `0G Compute · ${og.model || submitModel}` : "0G Compute · Inference (demo)", amount: 0.012, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.inference", payload: { model: submitModel, prompt: p, attestationId: attestId, latencyMs: latency, ogCompute: og.ok, response: og.ok ? og.content : undefined } });
+    const attestId = og.ok && og.chatID ? og.chatID : ("att_" + hashId("at", jobId, 10));
+    const cost = og.ok ? parseFloat((latency / 1000 * 0.004 + 0.003).toFixed(4)) : 0.003;
+    setEphemeral((prev) => prev.map((j) => j.id === jobId ? { ...j, status: "verified", latencyMs: latency, cost, attestationId: attestId } : j));
+    setSubmitting(false);
+    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_compute", serviceName: og.ok ? `0G Compute · ${og.model || submitModel}` : "0G Compute · Inference (demo)", amount: cost, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.inference", payload: { model: submitModel, prompt: p, attestationId: attestId, latencyMs: latency, ogCompute: og.ok, response: og.ok ? og.content : undefined } });
   };
 
   const COLS: { key: KanbanJob["status"]; label: string; color: string; jobs: KanbanJob[] }[] = [
@@ -621,17 +621,18 @@ export function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
   const advance = async () => {
     setBusy(true);
     if (stage === 0) {
-      await new Promise((r) => setTimeout(r, 600));
       const hex = await sha256Hex(inputText);
       setEncryptedHex("0x" + hex.slice(0, 40) + "…[AES-GCM-256]");
       setStage(1);
     } else if (stage === 1) {
-      await new Promise((r) => setTimeout(r, 1100));
+      const og = await runOgInference(`Execute this task inside a trusted enclave and summarise the result in 1-2 sentences: ${inputText}`);
+      (window as unknown as Record<string, unknown>)["_ogPrivacyResult"] = og;
       setStage(2);
     } else if (stage === 2) {
-      await new Promise((r) => setTimeout(r, 800));
-      const aid = "att_0g_" + hashId("at", inputText + Date.now(), 10);
-      const quote = "SGX_QUOTE:v3·" + hashId("qt", aid, 16).toUpperCase();
+      const prev = (window as unknown as Record<string, unknown>)["_ogPrivacyResult"] as Awaited<ReturnType<typeof runOgInference>> | undefined;
+      const prevOk = prev?.ok ? prev : null;
+      const aid = prevOk?.chatID ?? ("att_0g_" + hashId("at", inputText + Date.now(), 10));
+      const quote = prevOk?.verified ? `SGX_QUOTE:v3·${aid.slice(-16).toUpperCase()}·verified` : `SGX_QUOTE:v3·${hashId("qt", aid, 16).toUpperCase()}·demo`;
       setAttestId(aid);
       setTeeQuote(quote);
       setStage(3);
@@ -985,14 +986,26 @@ export function OgTradingArenaWidget({ workspace }: { workspace: Workspace }) {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 800 + Math.random() * 400));
     const pair = OG_TRADE_PAIRS[pairIdx] ?? OG_TRADE_PAIRS[0];
     const strategy = OG_STRATEGIES[stratIdx] ?? OG_STRATEGIES[0];
-    const rnd = Math.random();
-    const signal: "BUY" | "SELL" | "HOLD" = rnd > 0.55 ? "BUY" : rnd > 0.3 ? "HOLD" : "SELL";
-    const confidence = Math.round((0.65 + Math.random() * 0.3) * 100);
-    const attestationId = "tee_" + hashId("0g", pair + strategy + Date.now(), 16);
-    const s: TradingSignal = { id: "sig_" + hashId("0g", attestationId, 8), pair, strategy, signal, confidence, attestationId, sealed: sealedMode, ts: new Date().toLocaleTimeString() };
+    const prompt = `You are a crypto trading signal generator. For the ${pair} pair using ${strategy} strategy, respond with exactly one word on line 1: BUY, SELL, or HOLD. On line 2 give an integer confidence between 65 and 95.`;
+    const og = await runOgInference(prompt);
+    let signal: "BUY" | "SELL" | "HOLD" = "HOLD";
+    let confidence = 70;
+    if (og.ok && og.content) {
+      const lines = og.content.trim().split(/\n+/);
+      const raw = (lines[0] ?? "").trim().toUpperCase();
+      if (raw === "BUY" || raw === "SELL" || raw === "HOLD") signal = raw;
+      const conf = parseInt(lines[1] ?? "", 10);
+      if (!isNaN(conf) && conf >= 50 && conf <= 99) confidence = conf;
+    } else {
+      const d = deterministicScore("0g_" + pair + strategy, 0, 100);
+      signal = d > 55 ? "BUY" : d > 30 ? "HOLD" : "SELL";
+      confidence = 65 + (d % 30);
+    }
+    const attestationId = og.ok && og.chatID ? og.chatID : "local_" + hashId("0g", pair + strategy + Date.now(), 16);
+    const sealed = og.ok && og.verified ? true : sealedMode && og.ok;
+    const s: TradingSignal = { id: "sig_" + hashId("0g", attestationId, 8), pair, strategy, signal, confidence, attestationId, sealed, ts: new Date().toLocaleTimeString() };
     setSignals((prev) => [s, ...prev].slice(0, 20));
     emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Trading Arena · ${pair}`, amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.trading.signal", payload: { pair, strategy, signal, confidence, attestationId, sealed: sealedMode } });
     setBusy(false);
@@ -1060,7 +1073,7 @@ export function OgTradingArenaWidget({ workspace }: { workspace: Workspace }) {
 
 // ── Live Wallet Balance ────────────────────────────────────────────────────
 const OG_RPC = (import.meta.env as Record<string, string | undefined>)["VITE_0G_RPC_URL"] ?? "https://evmrpc.0g.ai";
-const DEPLOYER = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
+const DEPLOYER = "0x82736f84Ad234566180F902237e2Fb4c35177bDB";
 
 async function fetchOgBalance(address: string): Promise<string | null> {
   try {
@@ -1121,29 +1134,44 @@ export function LiveWalletBalance() {
 }
 
 // ── Agent ID Registry ─────────────────────────────────────────────────────
-type RegAgent = { agentId: string; name: string; role: string; wallet: string; dailyCapUsd: number; sealed: boolean; createdAt: string; status: "active" | "revoked" };
+type RegAgent = { agentId: string; name: string; role: string; wallet: string; dailyCapUsd: number; sealed: boolean; createdAt: string; status: "active" | "revoked"; txHash?: string };
 const AG_ROLES = ["Job Worker", "Trading Agent", "Memory Curator", "Data Pipeline", "Custom"] as const;
-const SEED_REG_AGENTS: RegAgent[] = [
-  { agentId: "agid_0g_a1f3", name: "Yield Researcher", role: "Trading Agent", wallet: "0xag9c2a1e0bf3", dailyCapUsd: 10, sealed: true, createdAt: new Date(Date.now() - 5 * 864e5).toISOString(), status: "active" },
-  { agentId: "agid_0g_77bd", name: "Memory Curator", role: "Memory Curator", wallet: "0xag4f1d77aac0", dailyCapUsd: 4, sealed: false, createdAt: new Date(Date.now() - 2 * 864e5).toISOString(), status: "active" },
-];
 
 export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
   const { emitReceipt, receipts } = useAppState();
-  const [list, setList] = useLocalStore<RegAgent[]>("0g.agentIds", SEED_REG_AGENTS);
+  const [list, setList] = useLocalStore<RegAgent[]>("0g.agentIds", []);
   const [name, setName] = useState("Inference Worker");
   const [role, setRole] = useState<typeof AG_ROLES[number]>("Job Worker");
   const [cap, setCap] = useState("8");
   const [sealed, setSealed] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [regError, setRegError] = useState<string | null>(null);
   const recent = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id && r.kind === "0g.agentid.register").slice(0, 6), [receipts, workspace.id]);
 
-  const register = () => {
-    const agentId = "agid_0g_" + hashId("agid", name + role, 4);
-    const wallet = "0x" + hashId("agid", name + role + workspace.id, 40);
-    const dailyCapUsd = parseFloat(cap) || 5;
-    const reg: RegAgent = { agentId, name: name.trim() || "Unnamed agent", role, wallet, dailyCapUsd, sealed, createdAt: new Date().toISOString(), status: "active" };
-    setList((prev) => [reg, ...prev.filter((x) => x.agentId !== agentId)].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.agentid.register", payload: { agentId, wallet, role, dailyCapUsd, sealed } });
+  const register = async () => {
+    setRegError(null);
+    setBusy(true);
+    try {
+      const dailyCapUsd = parseFloat(cap) || 5;
+      const domain = `${name.trim().toLowerCase().replace(/\s+/g, "-")}-${role.toLowerCase().replace(/\s+/g, "-")}.tollgate.0g`;
+      const result = await registerAgentIdentity(domain);
+      const reg: RegAgent = {
+        agentId: `agid_0g_${result.agentId}`,
+        name: name.trim() || "Unnamed agent",
+        role,
+        wallet: result.walletAddress,
+        dailyCapUsd,
+        sealed,
+        createdAt: new Date().toISOString(),
+        status: "active",
+        txHash: result.txHash === "already-registered" ? undefined : result.txHash,
+      };
+      setList((prev) => [reg, ...prev.filter((x) => x.wallet.toLowerCase() !== result.walletAddress.toLowerCase())].slice(0, 20));
+      emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.agentid.register", payload: { agentId: reg.agentId, wallet: result.walletAddress, role, dailyCapUsd, sealed, txHash: result.txHash } });
+    } catch (e) {
+      setRegError((e as Error).message ?? String(e));
+    }
+    setBusy(false);
   };
   const setStatus = (id: string, status: RegAgent["status"]) => setList((prev) => prev.map((x) => x.agentId === id ? { ...x, status } : x));
 
@@ -1171,9 +1199,10 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
   return (
     <div className="panel block svc-flavor">
       <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Robot width={15} height={15} /></span><div><h3>Agent ID registry</h3><div className="sub">your on-chain agent identities · wallet · spend policy · TEE flag · 7-day activity</div></div></div>
-        <button className="btn btn-acc btn-sm" type="button" onClick={register}><Plus width={13} height={13} /> Register agent</button>
+        <div className="ttl"><span className="sq soft"><Robot width={15} height={15} /></span><div><h3>Agent ID registry</h3><div className="sub">on-chain agent identities via AgentIdentityRegistry · MetaMask required · 0G mainnet</div></div></div>
+        <button className="btn btn-acc btn-sm" type="button" onClick={register} disabled={busy}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Registering…</> : <><Plus width={13} height={13} /> Register agent</>}</button>
       </div>
+      {regError && <div style={{ margin: "0 16px 8px", padding: "8px 12px", borderRadius: 8, background: "color-mix(in srgb,var(--red) 12%,transparent)", color: "var(--red)", fontSize: ".75rem" }}>{regError}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1fr auto", gap: 10, padding: "0 16px 12px", alignItems: "end" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Agent name</span>
@@ -1209,7 +1238,10 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
                     <div style={{ fontSize: ".68rem", color: roleColor[a.role] ?? "var(--muted)", fontWeight: 700, marginTop: 2 }}>{a.role}</div>
                   </div>
                 </div>
-                <div style={{ fontFamily: "var(--mono)", fontSize: ".68rem", color: "var(--muted)", background: "var(--bg-1)", padding: "4px 8px", borderRadius: 7, letterSpacing: ".03em" }}>{a.wallet.slice(0, 18)}…</div>
+                <div style={{ fontFamily: "var(--mono)", fontSize: ".68rem", color: "var(--muted)", background: "var(--bg-1)", padding: "4px 8px", borderRadius: 7, letterSpacing: ".03em", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>{a.wallet.slice(0, 10)}…{a.wallet.slice(-6)}</span>
+                  {a.txHash && <a href={ogExplorerTxUrl(a.txHash)} target="_blank" rel="noreferrer" style={{ color: "var(--accent-primary)", fontSize: ".6rem", textDecoration: "none" }}>tx↗</a>}
+                </div>
                 <div className="row sm" style={{ gap: 6, flexWrap: "wrap" }}>
                   <span className="pill" style={{ background: col + "18", color: col, fontWeight: 800, fontSize: ".62rem" }}>${a.dailyCapUsd}/day</span>
                   {a.sealed ? <span className="pill ok" style={{ fontSize: ".62rem" }}>TEE sealed</span> : <span className="pill" style={{ color: "var(--muted)", fontSize: ".62rem" }}>open exec</span>}
@@ -2350,6 +2382,136 @@ export function OgMultiSigApprove({ workspace }: { workspace: Workspace }) {
       </div>
       <div style={{ padding: "6px 16px", fontSize: ".6rem", color: "var(--muted)", borderTop: "1px solid var(--line-2)" }}>
         EIP-191 signatures computed in-browser · {THRESHOLD}-of-{signers.length} threshold · submit all sigs to AgentBudgetController to release on 0G Mainnet
+      </div>
+    </div>
+  );
+}
+
+// ── Agent Budget Controller ───────────────────────────────────────────────
+
+const BUDGET_CTRL_ABI = [
+  "function setBudget(address agent, uint128 dailyLimitCents, uint128 perRequestMaxCents, bool autoPay, bytes32 allowlistRoot) external",
+  "function getBudget(address agent) external view returns (uint128 dailyLimitCents, uint128 perRequestMaxCents, uint128 spentToday, uint128 remainingToday, bool autoPay)",
+];
+
+const BUDGET_CTRL_ADDR = (import.meta.env as Record<string, string | undefined>)["VITE_0G_AGENT_BUDGET_MAINNET_ADDRESS"] ?? "0x305eF265BD964fBe34913E70Ef6AA8951e6b662e";
+
+async function callBudgetCtrl<T>(method: string, args: unknown[], signer?: boolean): Promise<T> {
+  const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum : undefined);
+  if (!eth) throw new Error("MetaMask not found");
+  const { BrowserProvider, Contract } = await import("ethers");
+  const provider = new BrowserProvider(eth as never);
+  const signerOrProvider = signer ? await provider.getSigner() : provider;
+  const c = new Contract(BUDGET_CTRL_ADDR, BUDGET_CTRL_ABI, signerOrProvider);
+  return c[method]!(...args) as Promise<T>;
+}
+
+export function OgBudgetControllerWidget({ workspace }: { workspace: Workspace }) {
+  const [agentAddr, setAgentAddr] = useState("");
+  const [dailyLimit, setDailyLimit] = useState("100");
+  const [perRequest, setPerRequest] = useState("10");
+  const [autoPay, setAutoPay] = useState(false);
+  const [busy, setBusy] = useState<null | "set" | "get">(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [setTx, setSetTx] = useState<string | null>(null);
+  const [budget, setBudget] = useState<{ daily: string; perReq: string; spentToday: string; remaining: string; autoPay: boolean } | null>(null);
+
+  const switchToOg = async () => {
+    const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum : undefined);
+    if (!eth) return;
+    const cfg = getOgConfig();
+    const cur = await eth.request({ method: "eth_chainId" }) as string;
+    if (cur.toLowerCase() !== cfg.chainHex) {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.chainHex }] });
+    }
+  };
+
+  const handleSet = async () => {
+    setErr(null); setBusy("set");
+    try {
+      await switchToOg();
+      const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum : undefined);
+      if (!eth) throw new Error("MetaMask not found");
+      const { BrowserProvider, Contract, ZeroHash } = await import("ethers");
+      const provider = new BrowserProvider(eth as never);
+      const signer = await provider.getSigner();
+      const addr = agentAddr.trim() || (await signer.getAddress());
+      const c = new Contract(BUDGET_CTRL_ADDR, BUDGET_CTRL_ABI, signer);
+      const tx = await c["setBudget"](addr, BigInt(dailyLimit), BigInt(perRequest), autoPay, ZeroHash);
+      await tx.wait();
+      setSetTx(tx.hash as string);
+    } catch (e) { setErr((e as Error).message ?? String(e)); }
+    setBusy(null);
+  };
+
+  const handleGet = async () => {
+    setErr(null); setBusy("get");
+    try {
+      await switchToOg();
+      const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum : undefined);
+      if (!eth) throw new Error("MetaMask not found");
+      const { BrowserProvider, Contract } = await import("ethers");
+      const provider = new BrowserProvider(eth as never);
+      const signer = await provider.getSigner();
+      const addr = agentAddr.trim() || (await signer.getAddress());
+      const c = new Contract(BUDGET_CTRL_ADDR, BUDGET_CTRL_ABI, provider);
+      const b = await c["getBudget"](addr);
+      setBudget({ daily: b.dailyLimitCents.toString(), perReq: b.perRequestMaxCents.toString(), spentToday: b.spentToday.toString(), remaining: b.remainingToday.toString(), autoPay: Boolean(b.autoPay) });
+    } catch (e) { setErr((e as Error).message ?? String(e)); }
+    setBusy(null);
+  };
+
+  void callBudgetCtrl; // suppress unused warning
+
+  return (
+    <div className="panel block svc-flavor">
+      <div className="block-head">
+        <div className="ttl"><span className="sq soft"><ShieldCheck width={15} height={15} /></span><div><h3>Agent Budget Controller</h3><div className="sub">Set & query on-chain spend limits for any agent · {BUDGET_CTRL_ADDR.slice(0, 10)}… · 0G mainnet</div></div></div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 16px 14px" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Agent address (leave blank to use connected wallet)</span>
+          <input value={agentAddr} onChange={(e) => setAgentAddr(e.currentTarget.value)} placeholder="0x…" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".82rem", fontFamily: "var(--mono)" }} />
+        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Daily limit (¢)</span>
+            <input value={dailyLimit} onChange={(e) => setDailyLimit(e.currentTarget.value)} inputMode="numeric" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".82rem" }} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Max per request (¢)</span>
+            <input value={perRequest} onChange={(e) => setPerRequest(e.currentTarget.value)} inputMode="numeric" style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--ink)", fontSize: ".82rem" }} />
+          </label>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".8rem", cursor: "pointer" }}>
+          <input type="checkbox" checked={autoPay} onChange={(e) => setAutoPay(e.currentTarget.checked)} />
+          <span>Auto-pay enabled</span>
+        </label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-acc btn-sm" type="button" onClick={handleSet} disabled={busy !== null}>
+            {busy === "set" ? <><Loader2 size={13} className="wallet-spin" /> Setting budget…</> : "Set budget (MetaMask)"}
+          </button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={handleGet} disabled={busy !== null}>
+            {busy === "get" ? <><Loader2 size={13} className="wallet-spin" /> Querying…</> : "Get budget"}
+          </button>
+        </div>
+        {err && <div style={{ color: "var(--red)", fontSize: ".75rem", padding: "6px 10px", background: "color-mix(in srgb,var(--red) 10%,transparent)", borderRadius: 8 }}>{err}</div>}
+        {setTx && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--green)", fontSize: ".75rem", fontWeight: 700 }}>
+            ✓ Budget set ·{" "}
+            <a href={ogExplorerTxUrl(setTx)} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>tx {setTx.slice(0, 10)}…↗</a>
+          </div>
+        )}
+        {budget && (
+          <div style={{ background: "var(--bg-2)", borderRadius: 10, padding: "10px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div><div style={{ fontSize: ".6rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".07em" }}>Daily limit</div><div style={{ fontWeight: 800, fontSize: ".9rem" }}>${(parseInt(budget.daily) / 100).toFixed(2)}</div></div>
+            <div><div style={{ fontSize: ".6rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".07em" }}>Per request max</div><div style={{ fontWeight: 800, fontSize: ".9rem" }}>${(parseInt(budget.perReq) / 100).toFixed(2)}</div></div>
+            <div><div style={{ fontSize: ".6rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".07em" }}>Spent today</div><div style={{ fontWeight: 800, fontSize: ".9rem", color: parseInt(budget.spentToday) > parseInt(budget.daily) * 0.8 ? "var(--red)" : "var(--ink)" }}>${(parseInt(budget.spentToday) / 100).toFixed(2)}</div></div>
+            <div><div style={{ fontSize: ".6rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".07em" }}>Remaining</div><div style={{ fontWeight: 800, fontSize: ".9rem", color: "var(--green)" }}>${(parseInt(budget.remaining) / 100).toFixed(2)}</div></div>
+            <div style={{ gridColumn: "1 / -1" }}><span className="pill" style={{ fontSize: ".62rem", ...(budget.autoPay ? { color: "var(--green)" } : { color: "var(--muted)" }) }}>{budget.autoPay ? "Auto-pay ON" : "Auto-pay OFF"}</span></div>
+          </div>
+        )}
       </div>
     </div>
   );

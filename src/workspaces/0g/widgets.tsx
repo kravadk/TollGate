@@ -35,6 +35,7 @@ import {
   OgNetworkTopology,
   OgBlockExplorerEmbed,
   OgMultiSigApprove,
+  OgBudgetControllerWidget,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -90,6 +91,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
   }
   if (t.includes("agent") || t.includes("identity")) {
     nodes.push(<LiveWalletBalance key="wallet" />);
+    nodes.push(<OgBudgetControllerWidget key="budget" workspace={workspace} />);
     nodes.push(<AgentIdRegistry key="identity" workspace={workspace} />);
     nodes.push(<OgAllowlistManager key="allowlist" />);
   }
