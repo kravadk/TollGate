@@ -2350,7 +2350,7 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       </div>
       {workspace.id === "0g" && <AgentIdRegistry workspace={workspace} />}
       {workspace.id === "0g" && <RevenueSplitConsole workspace={workspace} />}
-      {workspace.id === "0g" && <ErrorBoundary label="0G Integration Status"><OgIntegrationStatus /></ErrorBoundary>}
+
       {workspace.id === "0g" && <OpenClawSkillConsole workspace={workspace} />}
       {workspace.id === "0g" && <ErrorBoundary label="A2A Marketplace"><A2AMarketplaceWidget /></ErrorBoundary>}
       {workspace.id === "0g" && <BudgetWidget />}

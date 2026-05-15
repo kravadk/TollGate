@@ -113,7 +113,7 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
       <LiveWalletBalance />
       <OgMultiSigApprove workspace={workspace} />
       <OgAllowlistManager />
-      <OgIntegrationStatus />
+
       <OpenClawSkillConsole workspace={workspace} />
       <AgentIdRegistry workspace={workspace} />
       <RevenueSplitConsole workspace={workspace} />
