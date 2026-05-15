@@ -16,8 +16,6 @@ type ProjectLauncherProps = {
   onToggleTheme: () => void;
 };
 
-const RAINBOW = "conic-gradient(from 205deg, #ff7a18, #ff3d8b, #9b4dff, #2f6bff, #06c2da, #11b886, #ffb01f, #ff7a18)";
-const STAR_CLIP = "polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%)";
 
 
 function prettyChain(net: string): string {
@@ -41,13 +39,12 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
       {/* Header strip */}
       <header className="relative z-10 flex items-center justify-between px-6 md:px-10 py-5 border-b border-border-default backdrop-blur-sm bg-bg-base/60">
         <div className="flex items-center gap-3">
-          <span
+          <img
+            src="/logo.png"
+            alt="TollGate"
             aria-hidden="true"
-            className="grid place-items-center w-10 h-10 rounded-xl shrink-0"
-            style={{ background: RAINBOW, boxShadow: "0 8px 28px -10px rgba(155,77,255,.55), inset 0 1px 0 rgba(255,255,255,.35)" }}
-          >
-            <span style={{ width: "44%", height: "44%", background: "rgba(255,255,255,.95)", clipPath: STAR_CLIP }} />
-          </span>
+            className="w-10 h-10 rounded-xl shrink-0 object-contain"
+          />
           <div className="flex flex-col leading-tight">
             <span className="text-base font-extrabold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>TollGate</span>
             <span className="text-[10px] text-text-muted uppercase tracking-[0.25em]">x402 launcher</span>
