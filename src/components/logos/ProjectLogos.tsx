@@ -5,14 +5,17 @@ type LogoProps = { size?: number; className?: string; style?: React.CSSPropertie
 // ─── 0G Labs ────────────────────────────────────────────────────────────────
 export function ZeroGLogo({ size = 20, className, style }: LogoProps) {
   return (
-    <img
-      src="/logo0g.png"
-      alt="0G"
-      width={size}
-      height={size}
-      className={className}
-      style={{ objectFit: "contain", borderRadius: 4, ...style }}
-    />
+    <svg
+      width={size} height={size} viewBox="0 0 28 28" fill="none"
+      xmlns="http://www.w3.org/2000/svg" className={className} style={style}
+    >
+      <circle cx="9.5" cy="14" r="7" stroke="currentColor" strokeWidth="2.6" />
+      <circle cx="9.5" cy="14" r="2.4" fill="currentColor" />
+      <path
+        d="M22.5 8.5 C18.5 8.5 16 11 16 14 C16 17 18.5 19.5 22.5 19.5 L25 19.5 L25 13.5 L21.5 13.5 L21.5 16 L22.5 16"
+        stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

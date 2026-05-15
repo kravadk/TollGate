@@ -40,7 +40,7 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
       <header className="relative z-10 flex items-center justify-between px-6 md:px-10 py-5 border-b border-border-default backdrop-blur-sm bg-bg-base/60">
         <div className="flex items-center gap-3">
           <img
-            src="/logotollgate.png"
+            src="/logo0g.png"
             alt="TollGate"
             aria-hidden="true"
             className="w-10 h-10 rounded-xl shrink-0 object-contain"

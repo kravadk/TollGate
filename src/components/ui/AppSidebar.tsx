@@ -192,11 +192,11 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
           className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
         >
           <img
-            src="/logotollgate.png"
+            src="/logo0g.png"
             alt="TollGate"
             aria-hidden="true"
-            className="w-9 h-9 rounded-xl shrink-0 object-cover"
-            style={{ boxShadow: "0 4px 18px -4px rgba(255,100,0,0.5)" }}
+            className="w-9 h-9 rounded-xl shrink-0 object-contain"
+            style={{ boxShadow: "0 4px 18px -4px rgba(30,80,255,0.5)" }}
           />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">

@@ -40,7 +40,7 @@ export function Preloader() {
               className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden"
               style={{ boxShadow: "0 12px 40px -8px rgba(255,100,0,.5)" }}
             >
-              <img src="/logotollgate.png" alt="TollGate" className="w-full h-full object-cover" />
+              <img src="/logo0g.png" alt="TollGate" className="w-full h-full object-cover" />
             </motion.div>
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
