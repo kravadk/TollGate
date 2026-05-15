@@ -805,8 +805,9 @@ export function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
 
   const reset = () => { setStage(0); setEncryptedHex(null); setAttestId(null); setTeeQuote(null); };
 
-  const stepColor = (n: number) => stage > n ? "#1fb58a" : stage === n - 1 ? "var(--accent-primary)" : "var(--line-2)";
-  const stepInk = (n: number) => stage > n ? "#1fb58a" : stage === n - 1 ? "var(--ink)" : "var(--muted)";
+  const done = (n: number) => stage > n || (stage >= STEPS.length && n === STEPS.length);
+  const stepColor = (n: number) => done(n) ? "#1fb58a" : stage === n - 1 ? "var(--accent-primary)" : "var(--line-2)";
+  const stepInk = (n: number) => done(n) ? "#1fb58a" : stage === n - 1 ? "var(--ink)" : "var(--muted)";
 
   return (
     <div className="panel block svc-flavor">
@@ -828,8 +829,8 @@ export function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", width: "100%" }}>
                 {i > 0 && <div style={{ flex: 1, height: 2, background: stepColor(step.n), transition: "background .4s" }} />}
-                <div style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${stepColor(step.n)}`, background: stage > step.n ? stepColor(step.n) : "var(--bg-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .4s", zIndex: 1 }}>
-                  {stage > step.n
+                <div style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${stepColor(step.n)}`, background: done(step.n) ? stepColor(step.n) : "var(--bg-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .4s", zIndex: 1 }}>
+                  {done(step.n)
                     ? <Check width={14} height={14} style={{ color: "#fff" }} />
                     : stage === step.n - 1 && busy
                     ? <Loader2 size={14} className="wallet-spin" style={{ color: "var(--accent-primary)" }} />
