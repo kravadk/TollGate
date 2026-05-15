@@ -1,13 +1,9 @@
 {
   "network": "ogTestnet",
+  "address": "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f",
+  "txHash": "0x2d63761eb994b0721509737b4e60f0a6019859a1a1e18ed1f2234af59cb6ab9d",
   "chainId": 16602,
-  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
-  "explorer": "https://chainscan-galileo.0g.ai",
-  "deployedAt": "2026-05-14T15:11:39.577Z",
-  "contracts": {
-    "AgentIdentityRegistry": "0xBA4721Df33C3f32d8d35dEE21745cDC2B5b2Db81",
-    "ServiceRegistry":       "0x42a14858Da4B2f75DB5C581bA5579786A12d97b4",
-    "ReceiptRegistry":       "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142"
-  },
-  "txHash": "0xcaad7d44d19d6ffc4239713a7bf941e3814fc0dfc127ce5a69a063ff0617ca48"
+  "deployer": "0x82736f84Ad234566180F902237e2Fb4c35177bDB",
+  "explorer": "https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f",
+  "deployedAt": "2026-05-15T10:31:53.394Z"
 }

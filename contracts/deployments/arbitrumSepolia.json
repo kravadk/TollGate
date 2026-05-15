@@ -1,10 +1,10 @@
 {
   "network": "arbitrumSepolia",
   "contract": "AgentEscrow",
-  "address": "0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7",
-  "txHash": "0x85549afe5523f25b39bdbf014d30b93a43a21fcce4be7be6e447e34965ee1ebc",
+  "address": "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f",
+  "txHash": "0x204faa917906a66cb02b88c1d482fa4d0fe41f7ff2b4ce78ad57f12882ba91a9",
   "chainId": 421614,
-  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "deployer": "0x82736f84Ad234566180F902237e2Fb4c35177bDB",
   "explorer": "https://sepolia.arbiscan.io",
-  "deployedAt": "2026-05-12T14:19:53.402Z"
+  "deployedAt": "2026-05-15T10:31:22.792Z"
 }

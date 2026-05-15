@@ -1,18 +1,16 @@
 {
   "network": "mantleSepolia",
-  "identityRegistry": "0xAe3D4eEc2a49dcBeA1c39CB6987507fA2BF97142",
-  "agentVault": "0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
-  "budgetController": "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8",
-  "serviceRegistry": "0x42a14858Da4B2f75DB5C581bA5579786A12d97b4",
-  "receiptNft": null,
-  "creditRegistry": "0xA8302734081F26b8a3E42f90DCf07b3E063441de",
+  "identityRegistry": "0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446",
+  "agentVault": "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f",
+  "budgetController": "0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8",
+  "serviceRegistry": null,
+  "receiptNft": "0x5F4999829D57f714497343f5677e66e6A56238E3",
+  "creditRegistry": "0x305eF265BD964fBe34913E70Ef6AA8951e6b662e",
   "yieldToken": "0x0000000000000000000000000000000000000000",
-  "identityTxHash": "0xb9f4a49bcc4ef712d3d8492dd3742102a0c0d42df5a95f0ce4d51d7a5088922f",
-  "vaultTxHash": "0x5511d0bd9424ac7553c316fd4e4cd86177013a43445ff0d184b8d7d196c08f71",
+  "identityTxHash": "0xb6b1f0801f12c2d39e112dc5d45f1b7c4ee15a27e00dda249f4fa98ecd3838d7",
+  "vaultTxHash": "0xcacf6ff3c3819802b414a49bcf28077064b420a3ff6cce62edfb91dfcdedee0d",
   "chainId": 5003,
-  "deployer": "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  "deployer": "0x82736f84Ad234566180F902237e2Fb4c35177bDB",
   "explorer": "https://explorer.mantle.xyz",
-  "deployedAt": "2026-05-14T15:12:25.931Z",
-  "serviceRegistryTxHash": "0xcad38a91e3410c95e2a51ad41a3827008b2f710ed39db91a0453c519fb9dfa16",
-  "updatedAt": "2026-05-14T21:10:45.876Z"
+  "deployedAt": "2026-05-15T10:32:15.397Z"
 }
