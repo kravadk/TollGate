@@ -85,11 +85,12 @@ const ALL_SEED_ROWS: SeedRow[] = [
 ];
 
 function seedReceipts(): Receipt[] {
-  return ALL_SEED_ROWS.map((p, i) => {
-    const svc = serviceById(p.svc)!;
-    const ag = agents.find((a) => a.id === p.agent)!;
+  return ALL_SEED_ROWS.flatMap((p, i) => {
+    const svc = serviceById(p.svc);
+    const ag = agents.find((a) => a.id === p.agent);
+    if (!svc || !ag) return [];
     const settled = p.status === "verified" || p.status === "paid";
-    return {
+    return [{
       id: `rcpt_seed${i.toString().padStart(2, "0")}`,
       workspaceId: p.ws,
       serviceId: svc.id,
@@ -106,7 +107,7 @@ function seedReceipts(): Receipt[] {
       errorCode: p.err,
       kind: p.kind,
       payload: p.payload,
-    };
+    }];
   });
 }
 
