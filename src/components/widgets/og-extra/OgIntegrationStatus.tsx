@@ -1,8 +1,35 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { CheckCircle, ExternalLink, Loader2, XCircle, AlertTriangle } from "lucide-react";
-import { getOgConfig, runOgInference } from "../../../lib/og";
+import { getOgConfig } from "../../../lib/og";
 import { API_BASE, API_ENABLED } from "../../../lib/api";
 import { useNetworkMode } from "../../../hooks/useNetworkMode";
+
+// Lightweight compute ping with a short timeout — only for status checking.
+async function pingCompute() {
+  try {
+    const res = await fetch(`${API_BASE}/api/og/compute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "respond with only the word PONG" }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (res.status === 503) return { ok: false as const, reason: "compute_not_configured" as const };
+    const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.ok && j["ok"] === true && typeof j["content"] === "string") {
+      return {
+        ok: true as const,
+        model: typeof j["model"] === "string" ? j["model"] : "",
+        provider: typeof j["provider"] === "string" ? j["provider"] : "",
+        chatID: typeof j["chatID"] === "string" ? j["chatID"] : "",
+        verified: Boolean(j["verified"]),
+      };
+    }
+    return { ok: false as const, reason: "error" as const, message: typeof j["message"] === "string" ? j["message"] : "server error" };
+  } catch (e) {
+    const msg = (e as Error).message ?? "timeout";
+    return { ok: false as const, reason: "error" as const, message: msg.includes("abort") || msg.includes("timed") ? "timed out" : msg };
+  }
+}
 
 type Status = "checking" | "live" | "configured" | "offline";
 
@@ -115,7 +142,7 @@ export function OgIntegrationStatus() {
       update(2, { status: "offline", detail: "Set VITE_API_BASE · server must have OG_COMPUTE_PRIVATE_KEY" });
       update(3, { status: "offline", detail: "TEE attestation requires the compute server · set VITE_API_BASE + OG_COMPUTE_PRIVATE_KEY" });
     } else {
-      runOgInference("respond with only the word PONG").then((res) => {
+      pingCompute().then((res) => {
         if (res.ok) {
           const prov = res.provider ? res.provider.slice(0, 12) + "…" : "unknown";
           update(2, {
@@ -143,6 +170,9 @@ export function OgIntegrationStatus() {
         } else if (res.reason === "compute_not_configured") {
           update(2, { status: "configured", detail: "Server reached · set OG_COMPUTE_PRIVATE_KEY on Render/server", badge: "no key" });
           update(3, { status: "configured", detail: "Set OG_COMPUTE_PRIVATE_KEY · TEE check runs automatically once compute is active", badge: "no key" });
+        } else if (res.message?.includes("timed out") || res.message?.includes("timeout")) {
+          update(2, { status: "configured", detail: "Server reached · compute inference timed out · broker may need funding (≥3 OG + ≥1 OG locked)", link: "https://faucet.0g.ai", badge: "timeout" });
+          update(3, { status: "configured", detail: "TEE attestation pending · compute endpoint reached but broker timed out", link: "https://compute-marketplace.0g.ai", badge: "timeout" });
         } else {
           update(2, { status: "offline", detail: res.message ?? "Compute unavailable · check OG_COMPUTE_PRIVATE_KEY" });
           update(3, { status: "offline", detail: "Compute unreachable · TEE attestation unavailable" });
