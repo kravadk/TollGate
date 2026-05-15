@@ -1,5 +1,5 @@
 export const CHAIN_LOGOS: Record<string, string> = {
-  "0g":       "https://coin-images.coingecko.com/coins/images/69096/large/0G_1024x1024_Circular_Outlined.png?1758637574",
+  "0g":       "/logo0g.png",
   "arbitrum": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png",
   "sui":      "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/sui/info/logo.png",
   "polygon":  "https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png",
