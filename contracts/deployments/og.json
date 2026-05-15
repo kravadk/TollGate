@@ -3,13 +3,12 @@
   "chainId": 16661,
   "deployer": "0x82736f84Ad234566180F902237e2Fb4c35177bDB",
   "explorer": "https://chainscan.0g.ai",
-  "deployedAt": "2026-05-15T10:31:15.268Z",
+  "deployedAt": "2026-05-15T10:56:35.426Z",
   "contracts": {
-    "AgentIdentityRegistry": "0xF4BFd93061B160Fa376c7F66De207a00225B4e70",
-    "ServiceRegistry":       "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8",
-    "AgentBudgetController": "0xA8302734081F26b8a3E42f90DCf07b3E063441de",
-    "DeliveryVerifier":      "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6",
-    "AgentReceiptRegistry":  "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f"
-  },
-  "txHash": "0xd0529b8bafecdcdb39599619b21c88975eba293d024a8ccc613006bd5645add0"
+    "AgentReceiptRegistry": "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f",
+    "AgentIdentityRegistry": "0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446",
+    "ServiceRegistry": "0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8",
+    "AgentBudgetController": "0x305eF265BD964fBe34913E70Ef6AA8951e6b662e",
+    "DeliveryVerifier": "0x5F4999829D57f714497343f5677e66e6A56238E3"
+  }
 }

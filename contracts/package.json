@@ -8,6 +8,8 @@
     "test": "hardhat test",
     "deploy:0g": "hardhat run scripts/deploy.cjs --network og",
     "deploy:0g-testnet": "hardhat run scripts/deploy.cjs --network ogTestnet",
+    "deploy:0g-all": "hardhat run scripts/deploy-og-all.cjs --network og",
+    "deploy:0g-testnet-all": "hardhat run scripts/deploy-og-all.cjs --network ogTestnet",
     "deploy:mantle": "hardhat run scripts/deploy-mantle.cjs --network mantle",
     "deploy:mantle-sepolia": "hardhat run scripts/deploy-mantle.cjs --network mantleSepolia",
     "deploy:arb": "hardhat run scripts/deploy-arbitrum.cjs --network arbitrumSepolia",
