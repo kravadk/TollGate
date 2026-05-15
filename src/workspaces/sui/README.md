@@ -1,23 +1,24 @@
-# TollGate × Sui — SuiAgent OS
+# SuiAgent OS — Agent Economy
 
-**Hackathon:** Sui Overflow 2026
 **App route:** `/app/sui`
-**Deadline:** 23 May 2026
 
 ## What it does
 
 The first Agent Economy OS on Sui: agents hire agents via x402, escrow funds earn DeepBook yield while tasks run, receipts live permanently on Walrus, and agent reputation is a living NFT that updates with every transaction. Any website can accept AI payments by dropping in a single `<sui-pay>` script tag.
 
-## Tracks entered
+## Features
 
-| Track | Prize | What we built |
-|---|---|---|
-| Agentic Web (AI) | main track | x402 agent-to-agent hiring, Intent Engine NL→PTB, Agent Wallet with zkLogin |
-| Walrus | $70K | Walrus Storage Pin API, Agent Memory Write with Seal encryption, receipt storage |
-| DeepBook | $70K | Yield Escrow: locks payment in DeepBook LP while task runs, earns yield on delivery |
-| EVE Frontier | $50K | Agent Arena: battle agents judged by Nautilus TEE, winners earn Legendary AgentNFT |
-| ONE Championship | $70K | Agent Arena challenge entry with verifiable on-chain outcome |
-| DeFi & Payments | general | DeepBook bid/ask panel, PTB builder, zkLogin proof API |
+| Feature | Description |
+|---|---|
+| DeepBook yield escrow | Payment locked into a DeepBook SUI/USDC LP while the task runs; agent receives principal + yield on delivery |
+| Walrus receipts | Every receipt blob pinned to Walrus decentralised storage; blob ID returned with receipt |
+| Seal encrypted memory | Agent memories are AES-GCM encrypted by Seal; only the receipt holder can decrypt |
+| Intent Engine | Natural-language → Move PTB compiler; deploys multi-agent on-chain jobs from a plain description |
+| Sui Pay Widget | `<sui-pay>` drop-in script tag: handles zkLogin, gas sponsorship, and x402 in one interaction |
+| Agent reputation NFT | `agent_reputation.move`: living NFT updated on every on-chain transaction |
+| zkLogin proof API | Generates zkLogin proof bundle from Google/Apple OAuth; no seed phrase needed |
+| Agent Arena | Battle agents judged by Nautilus TEE; winners earn Legendary AgentNFT |
+| PTB builder | Drag-and-drop programmable transaction block composer with dry-run |
 
 ## Paid APIs (x402 services)
 
@@ -46,25 +47,15 @@ The first Agent Economy OS on Sui: agents hire agents via x402, escrow funds ear
 8. **Pay Widget** — `<sui-pay>` embed demo, snippet generator, one-click copy
 9. **Memory Network** — Seal AES-GCM encrypted memory write to Walrus + policy viewer
 10. **Intent Engine** — NL→PTB parser: type an intent, get a multi-step PTB
-11. **Receipts** — full receipt ledger with Walrus blob links and SUI explorer txDigests
+11. **Receipts** — receipt ledger with Walrus blob links and SUI explorer txDigests
 
-## Architecture
+## Payment flow with yield
 
 ```
-User / Agent → x402 challenge → pay SUI/USDC on-chain
-             ↓
-        receipt appended to SQLite + anchored to Walrus
-             ↓
-        NFT minted on Mantle (Receipt NFT cross-chain)
-             ↓
-        SSE nft_update event → frontend "NFT #N" chip
+Agent pays $0.025 for svc_sui_yield_escrow
+  → payment locked in DeepBook SUI/USDC LP
+  → task runs (data fetched, model called, etc.)
+  → delivery proof posted on-chain
+  → principal $0.025 + earned LP yield released to service provider
+  → receipt with blob ID + LP position logged to Walrus
 ```
-
-For DeepBook Yield Escrow: payment is locked into a SUI/USDC LP pool while the task runs, and the agent receives `principal + accrued yield` when the delivery proof is posted.
-
-## Key differentiators
-
-- **Yield-earning escrow**: no other Sui Overflow project earns LP yield on locked payment capital
-- **Seal encrypted memory**: agent memories are AES-GCM encrypted and only the receipt holder can decrypt
-- **One-tag Pay Widget**: `<sui-pay amount="0.01" asset="USDC">` — zero friction for web integration
-- **Intent Engine**: converts plain English into deployable on-chain multi-agent PTBs

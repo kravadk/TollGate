@@ -1,30 +1,30 @@
-# TollGate × 0G — Agentic Economy
+# 0G Agent Payment Router
 
-**Hackathon:** 0G APAC Hackathon 2026 ($150K prize pool)
 **App route:** `/app/0g`
 
 ## What it does
 
 Agents pay-per-call for AI inference and decentralised storage on the 0G network. Every payment flows through the x402 protocol: the server issues a single-use challenge, the agent pays USDC on-chain, and the response is unlocked only after the payment is verified. Each settled call produces a cryptographic receipt anchored to 0G Storage and a Receipt NFT minted on Mantle.
 
-## Tracks entered
+## Features
 
-| Track | What we built for it |
+| Feature | Description |
 |---|---|
-| Agentic Economy | x402 payment gateway: 5 paid APIs, single-use challenges, replay-safe, USDC settlement |
-| Agentic Infra | `AgentReceiptRegistry.sol` on 0G mainnet — immutable on-chain audit trail per payment |
-| Agentic Trading Arena | AlphaTrade widget: agent buys Mantle alpha data → 0G Compute risk score → Mantle decision log |
-| Privacy & TEE | TEE badge, private agent context API (Seal-encrypted), sealed receipt display |
-| Web 4.0 | MCP server (9 tools) — Claude Desktop agents call TollGate APIs natively via tool-use |
+| x402 payment gateway | 5 paid APIs, single-use challenges, replay-safe, USDC settlement |
+| `AgentReceiptRegistry.sol` | Immutable on-chain audit trail per payment on 0G mainnet |
+| A2A trading loop | Strategist agent hires Executor → 0G Compute risk score → Mantle decision log |
+| TEE & Privacy | TEE attestation badge, private sealed context API (Seal-encrypted) |
+| MCP server | 9 tools — Claude Desktop agents call TollGate APIs natively via tool-use |
+| Economy Dashboard | Live SSE payment feed, receipt NFT chips, total volume |
 
 ## Contracts deployed
 
 | Contract | Network | Address |
 |---|---|---|
 | `AgentReceiptRegistry` | 0G Mainnet | `0xF4BFd93061B160Fa376c7F66De207a00225B4e70` |
-| `ServiceRegistry` | 0G Mainnet | deployed via `deploy-0g.cjs` |
-| `AgentBudgetController` | 0G Mainnet | deployed via `deploy-0g.cjs` |
-| `DeliveryVerifier` | 0G Mainnet | deployed via `deploy-0g.cjs` |
+| `ServiceRegistry` | 0G Mainnet | via `deploy-0g.cjs` |
+| `AgentBudgetController` | 0G Mainnet | via `deploy-0g.cjs` |
+| `DeliveryVerifier` | 0G Mainnet | via `deploy-0g.cjs` |
 
 ## Paid APIs (x402 services)
 
@@ -46,26 +46,21 @@ Agents pay-per-call for AI inference and decentralised storage on the 0G network
 6. **TEE & Privacy** — TEE attestation badge, private sealed context viewer
 7. **Receipts** — full receipt ledger (SQLite-persisted), NFT chip, 0G Storage explorer links
 
-## Key differentiators vs other 0G APAC projects
+## Architecture
 
-- **Multi-chain**: 0G + Mantle + Arbitrum + Base as one unified payment rail — only project with this breadth
-- **MCP server**: 9 tools — TollGate is the only project making x402 a first-class Claude tool-call
-- **A2A auto-cycle**: "Start Economy" one-click autonomous loop, agents trade every 5 seconds
-- **On-chain budget enforcement**: `AgentBudgetController` with smart-contract daily caps
-- **Receipt NFTs**: ERC-721 minted per payment, shown live in Economy Dashboard via SSE
+```
+Agent → GET /api/gateway/svc_0g_inference
+      ← 402 { challengeId, payTo, amount: "0.03", asset: "USDC", network: "0g-testnet" }
+      → pay USDC on-chain → retry with X-PAYMENT header
+      ← { data, receiptId, receipt }
+      → receipt anchored to 0G Storage + NFT minted on Mantle
+```
 
-## Environment variables required
+## Environment variables
 
 ```
 OG_STORAGE_INDEXER=https://...        # 0G Storage indexer RPC
 OG_COMPUTE_PRIVATE_KEY=0x...          # server-side wallet for compute billing
 RECEIPT_NFT_ADDRESS=0x...             # ReceiptNFT contract on Mantle
 MINTER_PRIVATE_KEY=0x...              # server-side wallet for NFT minting
-```
-
-## Local development
-
-```bash
-cd server && npm install && npm run dev   # API server on :3001
-npm run dev                              # Vite frontend on :5173
 ```

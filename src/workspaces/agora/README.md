@@ -1,28 +1,28 @@
-# TollGate × Agora — ArcMind Trading Intelligence
+# ArcMind — Autonomous Trading Intelligence
 
-**Hackathon:** Arc Agora Hackathon
 **App route:** `/app/agora`
 
 ## What it does
 
-ArcMind is the first autonomous trading agent that shows judges its reasoning step by step, lets anyone copy-trade with $1, and hard-kills itself when drawdown exceeds the threshold — all settled in USDC on Arc L1 via CCTP cross-chain transfers. Data feeds (Hyperliquid OI, Polymarket sentiment, news sentiment, whale flows) are sold as sub-cent x402 Nanopayments.
+ArcMind is an autonomous trading agent that publishes its reasoning step by step, lets anyone copy-trade with $1 minimum, and hard-kills all positions when drawdown exceeds the threshold — all settled in USDC on Arc L1 via CCTP cross-chain transfers. Market data feeds (Hyperliquid OI, Polymarket sentiment, news sentiment, whale flows) are sold as sub-cent x402 Nanopayments.
 
-## Tracks entered
+## Features
 
-| Track | What we built |
+| Feature | Description |
 |---|---|
-| Cross-Platform Arbitrage Agent | `svc_arc_arb`: CCTP cross-chain USDC arbitrage Arc → Base → Arbitrum, profit tracking |
-| Adaptive Portfolio Manager | `svc_arc_portfolio`: multi-asset rebalance via Circle Paymaster; gas-free |
-| Copy Trading | `CopyTradeEscrow.sol`: ERC-8183 copy-trade with 5% performance fee + auto-kill threshold |
-| Reasoning Traces x402 | `svc_arc_reasoning`: buy ArcMind decision logs as Nanopayments; each trace = Kelly sizing + outcome |
-| Kill Switch Risk Manager | Kill switch widget: auto-closes all positions when max drawdown is hit |
+| CCTP cross-chain arb | Detects USDC price gaps across Arc, Base, Arbitrum; executes via Circle CCTP |
+| Copy-trading escrow | `CopyTradeEscrow.sol`: stake USDC, agent allocates + settles PnL automatically |
+| Reasoning trace marketplace | Buy step-by-step ArcMind decision logs via x402; each trace includes Kelly sizing and outcome |
+| Kill switch | When drawdown exceeds threshold: stops entries, liquidates escrows, posts on-chain kill event |
+| Nanopayment data feeds | $0.001–$0.005/call for Hyperliquid OI, Polymarket, news sentiment, whale tracker |
+| Circle Paymaster | Gas-free USDC portfolio rebalancing via Circle Paymaster |
 
 ## Contracts deployed
 
 | Contract | Network | Address |
 |---|---|---|
 | `ArcMindRegistry` | Arc Testnet | `0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8` |
-| `CopyTradeEscrow` | Arc Testnet | deployed via `deploy-arc.cjs` |
+| `CopyTradeEscrow` | Arc Testnet | via `deploy-arc.cjs` |
 
 ## Paid APIs (x402 services)
 
@@ -49,16 +49,14 @@ ArcMind is the first autonomous trading agent that shows judges its reasoning st
 7. **Circle Tools** — CCTP cross-chain USDC transfer builder + status tracker
 8. **Receipts** — full payment history with Arc explorer links
 
-## ArcMind kill switch
+## Kill switch mechanism
 
-When cumulative drawdown exceeds the configured threshold (default 15%), the kill switch:
-1. Stops all new position entries
-2. Posts a `killSwitch` event to `ArcMindRegistry` on-chain
-3. Triggers liquidation of all copy-trade escrows at current mark price
-4. Emits a receipt for the forced exit
+When cumulative drawdown exceeds the configured threshold (default 15%):
+1. All new position entries are stopped
+2. A `killSwitch` event is posted to `ArcMindRegistry` on-chain
+3. All copy-trade escrows are liquidated at current mark price
+4. A receipt is emitted for the forced exit — auditable by anyone via the registry
 
-This is auditable by any judge via the on-chain registry.
+## Nanopayment economics
 
-## Architecture: Nanopayment data feeds
-
-Each signal call is priced at $0.001–$0.005 — genuinely sub-cent per call. This is only viable because x402 challenges are issued and verified server-side with no per-call gas cost; the on-chain cost is amortised across many calls.
+Signal calls are priced at $0.001–$0.005 per call. This works because x402 challenges are issued and verified server-side with no per-call gas cost; on-chain settlement is batched and amortised across many calls.

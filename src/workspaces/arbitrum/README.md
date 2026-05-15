@@ -1,28 +1,29 @@
-# TollGate × Arbitrum — Agent Services
+# Arbitrum Agent Services
 
-**Hackathon:** Arbitrum Open House / Buildathon
 **App route:** `/app/arbitrum`
 
 ## What it does
 
-Agents pay USDC for API services on Arbitrum with on-chain spend limits, per-call receipts, and optional escrowed delivery. The escrow contract holds payment until a delivery proof is posted, then releases or refunds automatically — eliminating trust between agent and service provider. Stylus (Rust) contract tab shows how services can be deployed as WASM programs on Arbitrum.
+Agents pay USDC for API services on Arbitrum with on-chain spend limits, per-call receipts, and optional escrowed delivery. The escrow contract holds payment until a delivery proof is posted, then releases or refunds automatically — eliminating trust between agent and service provider.
 
-## Tracks entered
+## Features
 
-| Track | What we built for it |
+| Feature | Description |
 |---|---|
-| Best Agentic Project | Full x402 payment stack on Arbitrum: challenges, USDC settlement, replay protection |
-| DeFi / Payments | USDC invoice creation + settlement; per-call stablecoin micro-payments |
-| Stylus / Rust | Stylus contract panel showing WASM deployment flow on Arbitrum Nova |
-| Overall Prize | Multi-chain reach: Arbitrum + Mantle + Base + 0G from one unified gateway |
+| x402 USDC payments | Single-use challenge, replay-safe, stablecoin settlement on Arbitrum |
+| `AgentEscrow.sol` | Holds payment until delivery proof; auto-release or refund |
+| Orbit chain monitor | Sequencer health, batch lag, bridge net flow per Orbit chain |
+| USDC invoice API | Issue + track stablecoin invoices; provider receives directly |
+| Stylus (Rust) panel | WASM contract deploy flow for Arbitrum Nova |
+| Budget controller | `AgentBudgetController`: daily cap + per-request limit enforced on-chain |
 
 ## Contracts deployed
 
 | Contract | Network | Address |
 |---|---|---|
 | `AgentEscrow` | Arbitrum Sepolia | `0x990Fe8e3f7d59148593D9B174a70F2Cd79C7bBc7` |
-| `AgentBudgetController` | Arbitrum Sepolia | deployed via `deploy-arbitrum.cjs` |
-| `AgentIntentSettler` | Arbitrum Sepolia | deployed via `deploy-arbitrum.cjs` |
+| `AgentBudgetController` | Arbitrum Sepolia | via `deploy-arbitrum.cjs` |
+| `AgentIntentSettler` | Arbitrum Sepolia | via `deploy-arbitrum.cjs` |
 
 ## Paid APIs (x402 services)
 
@@ -36,7 +37,7 @@ Agents pay USDC for API services on Arbitrum with on-chain spend limits, per-cal
 
 ## UI tabs
 
-1. **Overview** — wallet connect, receipt feed, deployed contract links with Arbiscan links
+1. **Overview** — wallet connect, receipt feed, deployed contract links with Arbiscan
 2. **Agent Marketplace** — browse paid services, pay with USDC via x402
 3. **USDC Payments** — direct USDC transfer flow, settlement receipt display
 4. **Stylus Contracts** — Rust/WASM contract explainer and deploy command helper
@@ -49,5 +50,5 @@ Agents pay USDC for API services on Arbitrum with on-chain spend limits, per-cal
 GET /api/gateway/svc_arb_invoice
 → 402 { challengeId, payTo, amount: "0.02", asset: "USDC", network: "arbitrum-sepolia" }
 → agent sends USDC on-chain → retry with X-PAYMENT header
-→ server verifies txHash via Base Sepolia RPC → unlocks response + appends receipt
+→ server verifies txHash → unlocks response + appends receipt
 ```

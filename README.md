@@ -17,7 +17,7 @@ HTTP `402` was reserved in the HTTP spec for exactly this case in 1997. TollGate
 ```
 Agent calls endpoint
   → Gateway returns 402 + payment challenge (amount, network, payTo, requestHash, expiry)
-  → Agent pays (USDC on-chain)
+  → Agent pays USDC on-chain
   → Agent retries with X-PAYMENT proof
   → Gateway verifies (recipient, amount, network, challenge binding, replay-safe)
   → Data unlocks + SQLite receipt written
@@ -30,23 +30,25 @@ Agent calls endpoint
 | Component | Path | Description |
 |---|---|---|
 | **Frontend** | `src/` | React 19 + Vite 7 + Tailwind v4. Workspace selector → per-workspace dashboard with live Economy Dashboard (SSE), paid-API tabs, Agents, and Receipts. |
-| **Server** | `server/` | Express + TypeScript. Real `402` gateway middleware, SQLite receipt ledger, SSE payment feed, and an **MCP server** exposing 9 tools (Claude Desktop agents call TollGate natively). |
+| **Server** | `server/` | Express + TypeScript. Real `402` gateway middleware, SQLite receipt ledger, SSE payment feed, and an **MCP server** exposing 9 tools so Claude Desktop agents can call TollGate natively. |
 | **Contracts** | `contracts/` | 18 Hardhat-deployed Solidity contracts across 0G, Mantle, Arbitrum, QIE, and Arc. |
 | **SDK** | `packages/sdk/` | `@tollgate/sdk` — zero-dependency x402 client: `fetchPaid()` + `createTollGate()`. |
 
-## Hackathon workspaces
+## Workspaces
 
-Each workspace is a standalone submission for a different hackathon, with its own contracts, paid API services, and UI tabs.
+Each workspace is a self-contained project with its own contracts, paid API services, UI tabs, and network configuration.
 
-| Workspace | Route | Hackathon | Networks | README |
-|---|---|---|---|---|
-| **0G** | `/app/0g` | 0G APAC Hackathon 2026 | 0G Mainnet, Base Sepolia | [src/workspaces/0g/README.md](src/workspaces/0g/README.md) |
-| **Mantle** | `/app/mantle` | Mantle Turing Test: AI Awakening | Mantle Mainnet | [src/workspaces/mantle/README.md](src/workspaces/mantle/README.md) |
-| **Arbitrum** | `/app/arbitrum` | Arbitrum Open House / Buildathon | Arbitrum Sepolia | [src/workspaces/arbitrum/README.md](src/workspaces/arbitrum/README.md) |
-| **QIE** | `/app/qie` | QIE Hackathon | QIE Testnet (chainId 1983) | [src/workspaces/qie/README.md](src/workspaces/qie/README.md) |
-| **Sui** | `/app/sui` | Sui Overflow 2026 | Sui Mainnet + Testnet | [src/workspaces/sui/README.md](src/workspaces/sui/README.md) |
-| **Agora** | `/app/agora` | Arc Agora Hackathon | Arc Mainnet, Arbitrum, Base | [src/workspaces/agora/README.md](src/workspaces/agora/README.md) |
-| **Polygon** | `/app/polygon` | Polygon zkEVM / UAE Commerce | Polygon zkEVM, Polygon PoS | [src/workspaces/polygon/README.md](src/workspaces/polygon/README.md) |
+| Workspace | Route | Networks | What it is |
+|---|---|---|---|
+| **0G** | `/app/0g` | 0G Mainnet, Base Sepolia | AI inference + decentralised storage economy; A2A loop; MCP server |
+| **Mantle** | `/app/mantle` | Mantle Mainnet | Agent wallets with on-chain spend policies; mETH/USDY yield signals; agent credit scoring |
+| **Arbitrum** | `/app/arbitrum` | Arbitrum Sepolia | USDC per-call services with escrowed delivery; Orbit chain monitoring |
+| **QIE** | `/app/qie` | QIE Testnet | Merchant checkout rail; QIE Pass NFT gating; on-chain oracle feed |
+| **Sui** | `/app/sui` | Sui Mainnet + Testnet | Agent Economy OS: DeepBook yield escrow, Walrus receipts, Seal encryption, Intent Engine |
+| **Agora** | `/app/agora` | Arc Mainnet, Arbitrum, Base | ArcMind autonomous trading: copy-trading, reasoning traces, kill switch |
+| **Polygon** | `/app/polygon` | Polygon zkEVM, PoS | UAE commerce: AED trade invoice tokenisation, cross-border stablecoin remittance |
+
+Full details: [src/workspaces/0g/README.md](src/workspaces/0g/README.md) · [mantle](src/workspaces/mantle/README.md) · [arbitrum](src/workspaces/arbitrum/README.md) · [qie](src/workspaces/qie/README.md) · [sui](src/workspaces/sui/README.md) · [agora](src/workspaces/agora/README.md) · [polygon](src/workspaces/polygon/README.md)
 
 ## Deployed contracts
 
@@ -69,14 +71,14 @@ Each workspace is a standalone submission for a different hackathon, with its ow
 | `ArcMindRegistry` | Arc Testnet | `0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8` |
 | `CopyTradeEscrow` | Arc Testnet | via `deploy-arc.cjs` |
 
-## Key differentiators
+## What makes TollGate different
 
-- **MCP server (9 tools)** — the only hackathon project making x402 a first-class tool-call for Claude Desktop agents
-- **A2A auto-cycle** — "Start Economy" one-click autonomous loop; agents trade every 5 seconds
-- **On-chain budget enforcement** — `AgentBudgetController` with smart-contract daily caps + per-request limits
-- **FICO score for AI agents** — `AgentCreditRegistry.sol` is the first credit scoring system for agents on any chain
+- **MCP server (9 tools)** — x402 is a first-class tool-call for Claude Desktop agents
+- **A2A auto-cycle** — "Start Economy" button: agents trade autonomously every 5 seconds
+- **On-chain budget enforcement** — `AgentBudgetController` with smart-contract daily caps and per-request limits
+- **FICO score for AI agents** — `AgentCreditRegistry.sol`: agent credit history built from on-chain receipt data
 - **Receipt NFTs** — ERC-721 minted server-side per payment, shown live in Economy Dashboard via SSE
-- **SQLite receipt ledger** — receipts survive server restarts; full history queryable via `GET /api/receipts`
+- **SQLite receipt ledger** — receipts survive server restarts; full history at `GET /api/receipts`
 - **Multi-chain** — 0G + Mantle + Arbitrum + Base + QIE + Sui + Polygon from one unified gateway
 
 ## Quick start
