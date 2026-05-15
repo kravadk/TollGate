@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "tollgate": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["tsx", "src/mcp-stdio.ts"],
+      "cwd": "c:\\Users\\Leonid\\Documents\\Codex\\2026-05-08\\https-dorahacks-io-hackathon-the-bags\\server"
+    }
+  }
+}

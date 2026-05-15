@@ -60,7 +60,7 @@ function computeAgentScore(agentId: string, receipts: Receipt[]) {
 
 const WORKSPACE_IDS: WorkspaceId[] = ["0g", "qie", "arbitrum", "mantle", "sui", "agora", "polygon"];
 
-const TOOLS = [
+export const TOOLS = [
   {
     name: "list_services",
     description: "List paid x402 services on TollGate. Optional workspace filter (0g, qie, arbitrum, mantle, sui, agora, polygon).",
@@ -147,6 +147,34 @@ const TOOLS = [
       required: ["receiptId"],
     },
   },
+  {
+    name: "get_onchain_balance",
+    description: "Fetch the native token balance (OG) of any EVM address on 0G mainnet or testnet. Useful to check if an agent wallet has funds before paying.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string", description: "0x-prefixed EVM address" },
+        chain: { type: "string", description: "0g-mainnet (default) or 0g-testnet" },
+      },
+      required: ["address"],
+    },
+  },
+  {
+    name: "get_da_commitments",
+    description: "Fetch recent Data Availability submissions from the 0G FixedPriceFlow contract on mainnet. Returns latest DA commitments with block height, data root, and finality status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Number of recent commitments to return (default 20, max 50)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_server_status",
+    description: "Get TollGate server health: total services, agents, receipts, paid volume, and supported workspaces.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
 ];
 
 function publicService(s: Service) {
@@ -164,7 +192,7 @@ function asWorkspace(v: unknown): WorkspaceId | undefined {
 
 type ProofInput = { payTo?: string; amount?: string; asset?: string; network?: string; txHash?: string; payer?: string };
 
-async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+export async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
   switch (name) {
     case "list_services": {
       const ws = asWorkspace(args["workspace"]);
@@ -389,6 +417,82 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         payerWallet: r.payerWallet,
         providerWallet: r.providerWallet,
         valid: r.status === "paid" || r.status === "verified",
+      };
+    }
+
+    case "get_onchain_balance": {
+      const address = String(args["address"] ?? "").trim();
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return { error: "invalid_address" };
+      const chain = String(args["chain"] ?? "0g-mainnet");
+      const rpc = chain === "0g-testnet" ? "https://evmrpc-testnet.0g.ai" : "https://evmrpc.0g.ai";
+      try {
+        const r = await fetch(rpc, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
+          signal: AbortSignal.timeout(8000),
+        });
+        const j = await r.json() as { result?: string };
+        if (!j.result) return { error: "rpc_error", chain };
+        const eth = Number(BigInt(j.result)) / 1e18;
+        return { address, chain, balanceWei: j.result, balance: eth.toFixed(6), symbol: "OG" };
+      } catch {
+        return { error: "rpc_timeout", chain };
+      }
+    }
+
+    case "get_da_commitments": {
+      const limit = Math.min(Number(args["limit"] ?? 20), 50);
+      const rpc = "https://evmrpc.0g.ai";
+      const FIXED_PRICE_FLOW = "0x62d4144db0f0a6fbbaeb6296c785c71b3d57c526";
+      const SUBMIT_TOPIC = "0xb0f1b13cf8b3793de7b30921124a19c749ee07ab07baf9d3bef1bec0f1c0cde2";
+      try {
+        const bnRes = await fetch(rpc, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
+          signal: AbortSignal.timeout(8000),
+        });
+        const bnJ = await bnRes.json() as { result?: string };
+        if (!bnJ.result) return { error: "rpc_error" };
+        const latest = parseInt(bnJ.result, 16);
+        const fromBlock = "0x" + Math.max(0, latest - 500).toString(16);
+        const logsRes = await fetch(rpc, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_getLogs", params: [{ address: FIXED_PRICE_FLOW, topics: [SUBMIT_TOPIC], fromBlock, toBlock: "latest" }] }),
+          signal: AbortSignal.timeout(10000),
+        });
+        const logsJ = await logsRes.json() as { result?: unknown[] };
+        if (!Array.isArray(logsJ.result)) return { error: "rpc_error", detail: "no logs array" };
+        const logs = (logsJ.result as Array<{ blockNumber: string; topics: string[]; transactionHash: string }>)
+          .slice(-limit).reverse();
+        return {
+          latestBlock: latest,
+          scannedBlocks: 500,
+          count: logs.length,
+          commitments: logs.map((log) => ({
+            txHash: log.transactionHash,
+            blockHeight: parseInt(log.blockNumber, 16),
+            dataRoot: log.topics[1] ?? "0x",
+            status: parseInt(log.blockNumber, 16) < latest - 50 ? "finalized" : "pending",
+          })),
+        };
+      } catch {
+        return { error: "rpc_timeout" };
+      }
+    }
+
+    case "get_server_status": {
+      const receipts = listReceipts({});
+      const paid = receipts.filter((r) => r.status === "paid" || r.status === "verified");
+      const volume = paid.reduce((s, r) => s + r.amount, 0);
+      return {
+        ok: true,
+        serviceCount: services.length,
+        agentCount: agents.length,
+        receiptCount: receipts.length,
+        paidCount: paid.length,
+        totalVolumeUsd: Math.round(volume * 100) / 100,
+        workspaces: WORKSPACE_IDS,
       };
     }
 
