@@ -1,8 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 
-const RAINBOW = "conic-gradient(from 205deg, #ff7a18, #ff3d8b, #9b4dff, #2f6bff, #06c2da, #11b886, #ffb01f, #ff7a18)";
-const STAR_CLIP = "polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%)";
 const TEXT = "TollGate";
 
 export function Preloader() {
@@ -39,10 +37,10 @@ export function Preloader() {
             <motion.div
               animate={phase === "sweep" ? { scale: [1, 1.1, 1], rotate: [0, 5, 0] } : {}}
               transition={{ duration: 0.4 }}
-              className="grid place-items-center w-20 h-20 md:w-24 md:h-24 rounded-2xl"
-              style={{ background: RAINBOW, boxShadow: "0 12px 40px -8px rgba(155,77,255,.6), inset 0 1px 0 rgba(255,255,255,.4)" }}
+              className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden"
+              style={{ boxShadow: "0 12px 40px -8px rgba(255,100,0,.5)" }}
             >
-              <span style={{ width: "44%", height: "44%", background: "rgba(255,255,255,.95)", clipPath: STAR_CLIP }} />
+              <img src="/logo.png" alt="TollGate" className="w-full h-full object-cover" />
             </motion.div>
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
