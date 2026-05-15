@@ -110,7 +110,7 @@ function seedReceipts(): Receipt[] {
   });
 }
 
-export const initialReceipts: Receipt[] = seedReceipts();
+export const initialReceipts: Receipt[] = [];
 
 // ── Metrics ──────────────────────────────────────────────────────────────────
 

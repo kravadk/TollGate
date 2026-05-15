@@ -526,17 +526,24 @@ export function OgComputeCostChart({ workspace }: { workspace: Workspace }) {
   const days7 = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i));
     const label = d.toLocaleDateString(undefined, { weekday: "short" });
-    const cost = deterministicScore(`cost_${workspace.id}_day${i}`, 0.5, 4.5) + jobs.filter((r) => new Date(r.createdAt).getDate() === d.getDate()).reduce((s, r) => s + r.amount, 0);
+    const cost = jobs.filter((r) => {
+      const rd = new Date(r.createdAt);
+      return rd.getFullYear() === d.getFullYear() && rd.getMonth() === d.getMonth() && rd.getDate() === d.getDate();
+    }).reduce((s, r) => s + r.amount, 0);
     return { label, cost };
   });
 
-  const maxCost = Math.max(...days7.map((d) => d.cost), 1);
+  const maxCost = Math.max(...days7.map((d) => d.cost), 0.01);
   const totalWeek = days7.reduce((s, d) => s + d.cost, 0);
   const dailyAvg = totalWeek / 7;
 
-  const modelSpend = MODELS.map((m, i) => ({ model: m, cost: deterministicScore(`model_${workspace.id}_${i}`, 0.3, 3.5), col: MODEL_COLORS[m]! }));
-  const maxModel = Math.max(...modelSpend.map((m) => m.cost), 1);
-  const cheapest = modelSpend.reduce((a, b) => a.cost < b.cost ? a : b);
+  const modelSpend = MODELS.map((m) => ({
+    model: m,
+    cost: jobs.filter((r) => (r.payload?.model as string | undefined)?.toLowerCase().includes(m.toLowerCase()) || (r.payload?.modelName as string | undefined)?.toLowerCase().includes(m.toLowerCase())).reduce((s, r) => s + r.amount, 0),
+    col: MODEL_COLORS[m]!,
+  })).filter((m) => m.cost > 0);
+  const maxModel = Math.max(...modelSpend.map((m) => m.cost), 0.01);
+  const cheapest = modelSpend.length ? modelSpend.reduce((a, b) => a.cost < b.cost ? a : b) : null;
 
   return (
     <div className="panel block svc-flavor">
@@ -548,7 +555,7 @@ export function OgComputeCostChart({ workspace }: { workspace: Workspace }) {
           {[
             { label: "Total this week", val: `$${totalWeek.toFixed(2)}`, col: "#3b82f6" },
             { label: "Daily average", val: `$${dailyAvg.toFixed(2)}`, col: "#10b981" },
-            { label: "Cheapest model", val: cheapest.model, col: cheapest.col },
+            { label: "Cheapest model", val: cheapest?.model ?? "—", col: cheapest?.col ?? "#64748b" },
           ].map((s) => (
             <div key={s.label} style={{ padding: "10px 12px", borderRadius: 12, background: s.col + "12", border: `1px solid ${s.col}28`, textAlign: "center" }}>
               <div style={{ fontSize: ".58rem", textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700 }}>{s.label}</div>
@@ -1184,9 +1191,9 @@ export function OgTradingArenaWidget({ workspace }: { workspace: Workspace }) {
       const conf = parseInt(lines[1] ?? "", 10);
       if (!isNaN(conf) && conf >= 50 && conf <= 99) confidence = conf;
     } else {
-      const d = deterministicScore("0g_" + pair + strategy, 0, 100);
-      signal = d > 55 ? "BUY" : d > 30 ? "HOLD" : "SELL";
-      confidence = 65 + (d % 30);
+      const r = Math.random();
+      signal = r > 0.55 ? "BUY" : r > 0.30 ? "HOLD" : "SELL";
+      confidence = 65 + Math.floor(Math.random() * 30);
     }
     const attestationId = og.ok && og.chatID ? og.chatID : "local_" + hashId("0g", pair + strategy + Date.now(), 16);
     const sealed = og.ok && og.verified ? true : sealedMode && og.ok;
@@ -1364,22 +1371,12 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
   const agentInitials = (n: string) => n.split(" ").map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase();
   const agentColor = (id: string) => { const colors = ["#3b82f6","#8b5cf6","#f59e0b","#10b981","#ef4444","#ec4899","#14b8a6"]; return colors[id.charCodeAt(id.length - 1) % colors.length]!; };
 
-  // Memoize per-agent spend + spark data — deterministicScore is pure, so
-  // we only recompute when the list changes, not on every render.
-  const agentStats = useMemo(() => {
-    return list.map((a) => ({
-      agentId: a.agentId,
-      spentToday: deterministicScore(a.agentId + "|spent", 0, a.dailyCapUsd * 0.85),
-      sparkPts: Array.from({ length: 7 }, (_, i) => deterministicScore(a.agentId + i, 4, 28))
-        .map((h, i) => `${i * 10},${32 - h}`).join(" "),
-    }));
-  }, [list]);
-
-  const sparkPath = (seed: string) => {
-    const bars = Array.from({ length: 7 }, (_, i) => deterministicScore(seed + i, 4, 28));
-    const pts = bars.map((h, i) => `${i * 10},${32 - h}`).join(" ");
-    return pts;
-  };
+  const FLAT_SPARK = Array.from({ length: 7 }, (_, i) => `${i * 10},28`).join(" ");
+  const agentStats = useMemo(() => list.map((a) => ({
+    agentId: a.agentId,
+    spentToday: 0,
+    sparkPts: FLAT_SPARK,
+  })), [list, FLAT_SPARK]);
 
   return (
     <div className="panel block svc-flavor">
@@ -1412,7 +1409,7 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
           {list.map((a) => {
             const col = agentColor(a.agentId);
             const stats = agentStats.find((s) => s.agentId === a.agentId);
-            const pts = stats?.sparkPts ?? sparkPath(a.agentId);
+            const pts = stats?.sparkPts ?? FLAT_SPARK;
             return (
               <div key={a.agentId} style={{ borderRadius: 14, border: `1px solid ${a.status === "revoked" ? "var(--line-2)" : col + "44"}`, background: "var(--bg-2)", padding: "14px 14px 10px", display: "flex", flexDirection: "column", gap: 8, opacity: a.status === "revoked" ? 0.5 : 1, position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: col, borderRadius: "14px 14px 0 0" }} />
@@ -1440,7 +1437,7 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
                   </svg>
                 </div>
                 {(() => {
-                  const spentToday = agentStats.find((s) => s.agentId === a.agentId)?.spentToday ?? deterministicScore(a.agentId + "|spent", 0, a.dailyCapUsd * 0.85);
+                  const spentToday = agentStats.find((s) => s.agentId === a.agentId)?.spentToday ?? 0;
                   const pct = Math.min(1, spentToday / a.dailyCapUsd);
                   const r = 18; const circ = 2 * Math.PI * r;
                   const dash = circ * pct;
@@ -1638,20 +1635,7 @@ function makeDaCommitments(seed: number): DaCommitment[] {
 }
 
 export function OgSlashingAlert() {
-  const [seed] = useState(() => Math.floor(Math.random() * 9999));
-  const rows = useMemo(() => makeDaCommitments(seed), [seed]);
-  const challenged = rows.filter((r) => r.status === "challenged");
-  if (challenged.length === 0) return null;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10, background: "#ef444414", border: "1px solid #ef444440" }}>
-      <span style={{ fontSize: ".9rem" }}>⚠️</span>
-      <div style={{ flex: 1 }}>
-        <span style={{ fontWeight: 800, fontSize: ".72rem", color: "#ef4444" }}>DA Slashing Alert — </span>
-        <span style={{ fontSize: ".72rem", color: "var(--ink)" }}>{challenged.length} commitment{challenged.length > 1 ? "s" : ""} currently challenged on 0G DA</span>
-      </div>
-      <span style={{ fontSize: ".62rem", color: "#ef4444", fontWeight: 700, background: "#ef444420", padding: "2px 8px", borderRadius: 20 }}>View in DA Monitor ↓</span>
-    </div>
-  );
+  return null;
 }
 
 export function OgDaMonitor() {
@@ -1727,11 +1711,12 @@ export function OgDaMonitor() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
+            <tr><td colSpan={6} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>No DA data — connect <code>VITE_0G_DA_URL</code> to stream live commitments from the 0G DA layer.</td></tr>
+            {false && filtered.map((r) => (
               <tr key={r.id} style={{ borderTop: "1px solid var(--line-2)" }}>
                 <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "var(--ink)" }}>#{r.blockHeight.toLocaleString()}</td>
                 <td style={{ padding: "7px 14px", color: "var(--muted)" }}>{r.batchSize} txs</td>
-                <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", color: "var(--muted)" }}>{r.dataRoot.slice(0, 14)}…</td>
+                <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", color: "var(--muted)" }}>{r.dataRoot.slice(0, 14)}...</td>
                 <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "var(--ink)" }}>{r.throughputKBs} KB/s</td>
                 <td style={{ padding: "7px 14px" }}>
                   <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: ".63rem", fontWeight: 700, background: statusColor[r.status] + "18", color: statusColor[r.status] }}>
@@ -1997,29 +1982,24 @@ const MEDAL = ["🥇", "🥈", "🥉", "4.", "5."];
 type ProviderStats = { provider: string; jobs: number; totalUsd: number; avgMs: number; uptime: number };
 
 function buildLeaderboard(receipts: Receipt[]): ProviderStats[] {
-  const map = new Map<string, { jobs: number; totalUsd: number; msSum: number }>();
+  const map = new Map<string, { jobs: number; totalUsd: number; latencySum: number }>();
   for (const r of receipts) {
     if (r.kind !== "0g.inference") continue;
-    const p = (r.payload as { provider?: string } | undefined)?.provider;
-    const key = p ? `${p.slice(0, 8)}…${p.slice(-4)}` : "demo-node";
-    const cur = map.get(key) ?? { jobs: 0, totalUsd: 0, msSum: 0 };
+    const p = (r.payload as { provider?: string } | undefined)?.provider ?? r.providerWallet;
+    const key = p ? `${p.slice(0, 8)}...${p.slice(-4)}` : "unknown";
+    const cur = map.get(key) ?? { jobs: 0, totalUsd: 0, latencySum: 0 };
     cur.jobs++;
     cur.totalUsd += r.amount;
-    cur.msSum += deterministicScore(key + r.id, 210, 890);
+    cur.latencySum += (r.payload as { latencyMs?: number } | undefined)?.latencyMs ?? 400;
     map.set(key, cur);
   }
-  // Supplement with deterministic demo nodes so the board is never empty
-  const DEMO_NODES = ["0x8fAe…c3d1", "0x3b7C…a9f0", "0xDe2A…7b12", "0xF14c…55e8", "0xA09d…cc41"];
-  DEMO_NODES.forEach((n, i) => {
-    if (!map.has(n)) map.set(n, { jobs: 14 - i * 2, totalUsd: (14 - i * 2) * 0.018, msSum: (14 - i * 2) * 430 });
-  });
   return [...map.entries()]
     .map(([provider, s]) => ({
       provider,
       jobs: s.jobs,
       totalUsd: s.totalUsd,
-      avgMs: Math.round(s.msSum / s.jobs),
-      uptime: Math.min(99.9, 94 + deterministicScore(provider, 0, 5.9)),
+      avgMs: Math.round(s.latencySum / s.jobs),
+      uptime: 100,
     }))
     .sort((a, b) => b.jobs - a.jobs)
     .slice(0, 5);
@@ -2046,7 +2026,9 @@ export function OgComputeLeaderboard() {
             </tr>
           </thead>
           <tbody>
-            {board.map((p, i) => (
+            {board.length === 0 ? (
+              <tr><td colSpan={6} style={{ padding: "24px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>No inference receipts yet — run a Compute job above to populate the leaderboard.</td></tr>
+            ) : board.map((p, i) => (
               <tr key={p.provider} style={{ borderTop: "1px solid var(--line-2)" }}>
                 <td style={{ padding: "7px 14px", fontWeight: 800, fontSize: ".82rem" }}>{MEDAL[i]}</td>
                 <td style={{ padding: "7px 14px", fontFamily: "monospace", fontSize: ".66rem", fontWeight: 700, color: "var(--ink)" }}>{p.provider}</td>
@@ -2054,7 +2036,7 @@ export function OgComputeLeaderboard() {
                 <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "#10b981", fontWeight: 700 }}>${p.totalUsd.toFixed(3)}</td>
                 <td style={{ padding: "7px 14px", fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{p.avgMs} ms</td>
                 <td style={{ padding: "7px 14px" }}>
-                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, color: p.uptime > 99 ? "#10b981" : "#f59e0b" }}>{p.uptime.toFixed(1)}%</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#10b981" }}>—</span>
                 </td>
               </tr>
             ))}
@@ -2277,7 +2259,7 @@ export function OgNetworkTopology() {
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", alignItems: "center", gap: 10 }}>
         <Network width={14} height={14} style={{ color: "#7C5CF8", flexShrink: 0 }} />
         <span style={{ fontWeight: 800, fontSize: ".72rem", color: "var(--ink)", flex: 1 }}>Network Topology</span>
-        <span style={{ fontSize: ".62rem", color: "#10b981", fontWeight: 700 }}>● live · 4 layers active</span>
+        <span style={{ fontSize: ".62rem", color: "var(--muted)", fontWeight: 700 }}>Architecture overview</span>
       </div>
       <div style={{ padding: "16px", display: "flex", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
         <svg width={340} height={220} style={{ flex: "0 0 340px", overflow: "visible" }}>

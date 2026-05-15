@@ -39,7 +39,7 @@ export function WidgetMeta({
         color: "var(--text-secondary, #8a8a8a)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 7, flexWrap: "wrap" }}>
         <span
           style={{
             display: "inline-flex",
@@ -51,6 +51,7 @@ export function WidgetMeta({
             letterSpacing: "0.07em",
             padding: "2.5px 7px",
             borderRadius: 999,
+            flexShrink: 0,
             background: live ? "color-mix(in srgb, #1fb58a 18%, transparent)" : "color-mix(in srgb, #f5a623 20%, transparent)",
             color: live ? "#1fb58a" : "#d98f1c",
           }}
@@ -58,7 +59,7 @@ export function WidgetMeta({
           <span style={{ width: 6, height: 6, borderRadius: 999, background: live ? "#1fb58a" : "#f5a623" }} />
           {live ? "Live" : "Demo"}
         </span>
-        <span>{live ? liveText : demoText}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>{live ? liveText : demoText}</span>
       </div>
       <div>
         <b style={{ color: "var(--text-primary, inherit)" }}>You get:</b> {what}

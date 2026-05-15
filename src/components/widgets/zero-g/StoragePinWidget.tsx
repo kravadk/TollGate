@@ -77,7 +77,7 @@ function genMemory(agentId: string, name: string, strategy: string, generation: 
 
 export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt, receipts } = useAppState();
-  const [blobs, setBlobs] = useLocalStore<PinnedBlob[]>("0g.pins", SEEDED_PINS as unknown as PinnedBlob[]);
+  const [blobs, setBlobs] = useLocalStore<PinnedBlob[]>("0g.pins", []);
   const [mode, setMode] = useState<"pin" | "snapshot">("pin");
   const [agentIdx, setAgentIdx] = useState(0);
   const [content, setContent] = useState("# memory-segment\nagent_yield_researcher.snapshot\nbalance: 1.23 ETH\nstrategy: mETH-USDY pair\nlast_trade: 2026-05-12T11:42:08Z");

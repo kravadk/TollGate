@@ -235,18 +235,31 @@ export function FleetView() {
   const { receipts } = useAppState();
   const [filter, setFilter] = useState<Filter>("all");
 
+  const todayStart = useMemo(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime();
+  }, []);
+
+  const agentsWithRealData = useMemo(() => agents.map((a) => {
+    const agentReceipts = receipts.filter(
+      (r) => r.workspaceId === a.workspaceId && new Date(r.createdAt).getTime() >= todayStart,
+    );
+    const spentTodayUsd = agentReceipts.reduce((s, r) => s + r.amount, 0);
+    const hasActivity = receipts.some((r) => r.workspaceId === a.workspaceId);
+    return { ...a, spentTodayUsd, status: hasActivity ? "Ready" : a.status } as typeof a;
+  }), [receipts, todayStart]);
+
   const filtered = useMemo(
     () =>
       filter === "all"
-        ? agents
-        : agents.filter((a) =>
+        ? agentsWithRealData
+        : agentsWithRealData.filter((a) =>
             filter === "ready" ? a.status === "Ready" : a.status === "Paused",
           ),
-    [filter],
+    [filter, agentsWithRealData],
   );
 
-  const totalSpent = agents.reduce((s, a) => s + a.spentTodayUsd, 0);
-  const readyCount = agents.filter((a) => a.status === "Ready").length;
+  const totalSpent = agentsWithRealData.reduce((s, a) => s + a.spentTodayUsd, 0);
+  const readyCount = agentsWithRealData.filter((a) => a.status === "Ready").length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-base)", color: "var(--ink)", paddingBottom: 60 }}>
@@ -348,15 +361,22 @@ export function FleetView() {
             <span />
           </div>
 
-          {filtered.length > 0 ? (
+          {receipts.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 24px" }}>
+              <Bot size={32} style={{ color: "var(--muted)", marginBottom: 12, opacity: 0.4 }} />
+              <p style={{ fontSize: ".84rem", color: "var(--muted)", marginBottom: 6 }}>
+                No activity yet
+              </p>
+              <p style={{ fontSize: ".72rem", color: "var(--muted)", opacity: 0.7 }}>
+                Use any workspace to fire a payment — receipts will appear here in real time.
+              </p>
+            </div>
+          ) : filtered.length > 0 ? (
             filtered.map((a, i) => (
               <AgentRow key={a.id} agent={a} receipts={receipts} isLast={i === filtered.length - 1} />
             ))
           ) : (
-            <p style={{
-              fontSize: ".84rem", color: "var(--muted)",
-              textAlign: "center", padding: "40px 0",
-            }}>
+            <p style={{ fontSize: ".84rem", color: "var(--muted)", textAlign: "center", padding: "40px 0" }}>
               No agents match this filter.
             </p>
           )}
