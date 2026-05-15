@@ -110,44 +110,45 @@ export function OgIntegrationStatus() {
       });
     }
 
-    // ── 0G Compute ────────────────────────────────────────────────────────────
+    // ── 0G Compute + TEE (single ping, results shared) ───────────────────────
     if (!API_ENABLED) {
-      update(2, {
-        status: "offline",
-        detail: "Set VITE_API_BASE · server must have OG_COMPUTE_PRIVATE_KEY",
-      });
+      update(2, { status: "offline", detail: "Set VITE_API_BASE · server must have OG_COMPUTE_PRIVATE_KEY" });
+      update(3, { status: "offline", detail: "TEE attestation requires the compute server · set VITE_API_BASE + OG_COMPUTE_PRIVATE_KEY" });
     } else {
       runOgInference("respond with only the word PONG").then((res) => {
         if (res.ok) {
-          const provider = res.provider ? res.provider.slice(0, 12) + "…" : "unknown";
+          const prov = res.provider ? res.provider.slice(0, 12) + "…" : "unknown";
           update(2, {
             status: "live",
-            detail: `Model: ${res.model || "llama"} · Provider: ${provider}${res.verified ? " · ✓ verified" : ""}`,
+            detail: `Model: ${res.model || "llama"} · Provider: ${prov}${res.verified ? " · ✓ TEE-verified" : ""}`,
             link: "https://0g.ai/compute",
             badge: res.verified ? "verified" : "online",
           });
+          // TEE status is driven by the real `verified` flag from processResponse()
+          if (res.verified) {
+            update(3, {
+              status: "live",
+              detail: `Intel TDX attestation verified · Provider: ${prov} · chatID: ${res.chatID ? res.chatID.slice(0, 12) + "…" : "n/a"}`,
+              link: "https://0g.ai/compute",
+              badge: "TEE verified",
+            });
+          } else {
+            update(3, {
+              status: "configured",
+              detail: "Compute live · provider did not return a TEE attestation · select a TDX-enabled node at compute-marketplace.0g.ai",
+              link: "https://compute-marketplace.0g.ai",
+              badge: "attestation pending",
+            });
+          }
         } else if (res.reason === "compute_not_configured") {
-          update(2, {
-            status: "configured",
-            detail: "Server reached · set OG_COMPUTE_PRIVATE_KEY on Render/server",
-            badge: "no key",
-          });
+          update(2, { status: "configured", detail: "Server reached · set OG_COMPUTE_PRIVATE_KEY on Render/server", badge: "no key" });
+          update(3, { status: "configured", detail: "Set OG_COMPUTE_PRIVATE_KEY · TEE check runs automatically once compute is active", badge: "no key" });
         } else {
-          update(2, {
-            status: "offline",
-            detail: res.message ?? "Compute unavailable · check OG_COMPUTE_PRIVATE_KEY",
-          });
+          update(2, { status: "offline", detail: res.message ?? "Compute unavailable · check OG_COMPUTE_PRIVATE_KEY" });
+          update(3, { status: "offline", detail: "Compute unreachable · TEE attestation unavailable" });
         }
       });
     }
-
-    // ── 0G TEE ────────────────────────────────────────────────────────────────
-    update(3, {
-      status: "configured",
-      detail: "Code-ready · Intel TDX nodes active on 0G mainnet compute network · enable with sealed=true",
-      link: "https://0g.ai/compute",
-      badge: "code-ready",
-    });
 
     setLastChecked(new Date().toLocaleTimeString());
   }, []);
