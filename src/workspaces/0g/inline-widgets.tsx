@@ -1354,10 +1354,11 @@ function envAddr(key: string): string | null {
 const EXPLORER = "https://chainscan.0g.ai";
 
 const OG_CONTRACTS = [
-  { label: "AgentReceiptRegistry", envKey: "VITE_0G_REGISTRY_ADDRESS", fallback: "0xF4BFd93061B160Fa376c7F66De207a00225B4e70", badge: "live" },
-  { label: "ServiceRegistry",      envKey: "VITE_0G_SERVICE_REGISTRY_MAINNET_ADDRESS", fallback: "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8", badge: "live" },
-  { label: "AgentBudget",          envKey: "VITE_0G_AGENT_BUDGET_MAINNET_ADDRESS",     fallback: "0xA8302734081F26b8a3E42f90DCf07b3E063441de", badge: "live" },
-  { label: "DeliveryVerifier",     envKey: "VITE_0G_DELIVERY_VERIFIER_MAINNET_ADDRESS", fallback: "0x8722BeBc218F89455E4E21D75C09B0D5bf1313C6", badge: "live" },
+  { label: "AgentReceiptRegistry",  envKey: "VITE_0G_REGISTRY_ADDRESS",                  fallback: "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f", badge: "live" },
+  { label: "AgentIdentityRegistry", envKey: "VITE_0G_IDENTITY_REGISTRY_ADDRESS",          fallback: "0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446", badge: "live" },
+  { label: "ServiceRegistry",       envKey: "VITE_0G_SERVICE_REGISTRY_MAINNET_ADDRESS",   fallback: "0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8", badge: "live" },
+  { label: "AgentBudgetController", envKey: "VITE_0G_AGENT_BUDGET_MAINNET_ADDRESS",       fallback: "0x305eF265BD964fBe34913E70Ef6AA8951e6b662e", badge: "live" },
+  { label: "DeliveryVerifier",      envKey: "VITE_0G_DELIVERY_VERIFIER_MAINNET_ADDRESS",  fallback: "0x5F4999829D57f714497343f5677e66e6A56238E3", badge: "live" },
 ] as const;
 
 export function OgLiveContractsPanel() {
