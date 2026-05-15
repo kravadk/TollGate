@@ -111,6 +111,7 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
           <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">{w.chainId ? chainLabel(w.chainId) : "—"}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <NetworkToggle mode={mode} onToggle={toggle} hidden={singleChain} />
           <button
             type="button"
             onClick={refreshAll}

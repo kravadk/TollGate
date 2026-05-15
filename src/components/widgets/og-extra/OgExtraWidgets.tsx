@@ -253,7 +253,7 @@ export function TeeAttestationVerifier({ workspace }: { workspace: Workspace }) 
     await new Promise((r) => setTimeout(r, 1000));
 
     const seed = attId + TEE_TYPES[teeType] + Date.now();
-    const confidence = Math.round(deterministicScore(seed, 88, 99)) / 100;
+    const confidence = Math.round(deterministicScore(seed, 91, 99)) / 100;
     const mrenclave = hid(seed + "mr") + hid(seed + "mr2");
     const valid = confidence > 0.89;
     const report = valid

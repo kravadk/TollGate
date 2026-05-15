@@ -89,7 +89,7 @@ const MantleA2ALoopWidget   = lazy(() => _mew().then((m) => ({ default: m.Mantle
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "./widgets/arbitrum-extra/ArbitrumExtraWidgets";
 import { AgentIntentWidget } from "./widgets/arbitrum-extra/AgentIntentWidget";
 import { ArbAddressBook, ArbRecurringPayments, ArbAllowanceManager, ArbContractPaymentSim, ArbPaymentFlowDiagram, UsdcTransferWidget, AgentServiceRegistry, SpendRulesEditor, ArbitrumStylusDeployPanel, ArbBudgetPanel, ArbOnChainRegistry, ArbDisputePanel, ArbAgentReputation } from "../workspaces/arbitrum/inline-widgets";
-import { EconomyDashboard, OgDemoFlow, OgStorageEstimator, OgComputeCostChart, OgSocialFeedWidget, OgComputeKanban, OgPrivacyStepper, OgAgentToAgentLoop, OgTradingArenaWidget, AgentIdRegistry, RevenueSplitConsole } from "../workspaces/0g/inline-widgets";
+import { EconomyDashboard, OgDemoFlow, OgStorageEstimator, OgComputeCostChart, OgSocialFeedWidget, OgComputeKanban, OgPrivacyStepper, OgAgentToAgentLoop, OgTradingArenaWidget, AgentIdRegistry, RevenueSplitConsole, OgAllowlistManager, OgMultiSigApprove, OgBudgetControllerWidget } from "../workspaces/0g/inline-widgets";
 import { MantleEarnCalc, MantleAgentEconomyDashboard, MantlePortfolioRebalancer, MantleGasOptimizer, AlphaDesk, RwaRegistry, MantleEconomyLoop, YieldBoard, MantleDevToolsPanel } from "../workspaces/mantle/inline-widgets";
 import { QieBillSplitter, QieRequestPay, QieWalletDashboard, QieCreatorSubscriptions, QieSalesAnalytics, QiePassIssuer, QieCreatorTipsWidget, AgentWalletConsole, QieCreditWidget, QieOracleFeedWidget } from "../workspaces/qie/widgets";
 import { QiePosWidget, GameItemShop, MerchantPayoutsPanel } from "./widgets/qie-extra/QieExtraWidgets";
@@ -1951,6 +1951,9 @@ export function ServiceTabPage({
       {workspace.id === "0g" && (t.includes("privacy") || t.includes("sovereign") || (variant === "verify" && !t.includes("pass") && !t.includes("rule") && !t.includes("risk"))) && (
         <SealedPayloadVault workspace={workspace} />
       )}
+      {workspace.id === "0g" && (t.includes("privacy") || t.includes("tee") || t.includes("sovereign")) && (
+        <ProofVerifier workspace={workspace} />
+      )}
 
       {(t.includes("pass") || (variant === "verify" && !t.includes("rule") && !t.includes("risk") && !t.includes("privacy") && !t.includes("sovereign"))) && (
         <>
@@ -1983,6 +1986,7 @@ export function ServiceTabPage({
 
       {t.includes("storage") && <StoragePinWidget workspace={workspace} />}
       {workspace.id === "0g" && t.includes("storage") && <DePinBulkPin workspace={workspace} />}
+      {workspace.id === "0g" && t.includes("storage") && <OgAllowlistManager />}
 
       {t.includes("checkout") && <><CheckoutLinkBuilder workspace={workspace} /><SettlementSplitConfig workspace={workspace} /></>}
       {workspace.id === "qie" && t.includes("checkout") && <QiePosWidget workspace={workspace} />}
@@ -2348,6 +2352,7 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
         <SpendWeekCard agent={agent} workspace={workspace} />
         <NewAgentCard workspace={workspace} />
       </div>
+      {workspace.id === "0g" && <OgBudgetControllerWidget workspace={workspace} />}
       {workspace.id === "0g" && <AgentIdRegistry workspace={workspace} />}
       {workspace.id === "0g" && <RevenueSplitConsole workspace={workspace} />}
 
@@ -2514,6 +2519,7 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
           )}
         </div>
       </div>
+      {workspace.id === "0g" && <OgMultiSigApprove workspace={workspace} />}
     </>
   );
 }
