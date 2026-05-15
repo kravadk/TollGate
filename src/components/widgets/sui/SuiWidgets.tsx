@@ -62,7 +62,8 @@ export function WalrusStorageWidget({ workspace }: { workspace: Workspace }) {
     let real = false;
     try {
       setLog("Uploading to Walrus testnet storage nodes…");
-      const res = await fetch(`https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=${epochs}`, {
+      const safeEpochs = Math.min(52, Math.max(1, Math.round(Number(epochs)) || 3));
+      const res = await fetch(`https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=${safeEpochs}`, {
         method: "PUT",
         headers: { "Content-Type": "application/octet-stream" },
         body: bytes,

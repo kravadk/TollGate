@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Wallet, Link as LinkIco, RefreshCw, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { getQieConfig, qieExplorerAddrUrl, QIE_DEFAULT_CHAIN_HEX } from "../../../lib/qie";
+import { useNetworkMode } from "../../../hooks/useNetworkMode";
 
 type ConnState = "disconnected" | "connecting" | "connected" | "wrong_chain";
 
@@ -42,7 +43,8 @@ export function QieWalletConnectPanel() {
   const [address, setAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState<string>("—");
   const [err, setErr] = useState<string | null>(null);
-  const cfg = getQieConfig();
+  const { mode } = useNetworkMode("qie");
+  const cfg = getQieConfig(mode);
 
   const refreshBalance = useCallback(async (addr: string) => {
     const eth = getEth();

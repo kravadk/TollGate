@@ -42,7 +42,8 @@ export function BatchPayoutConsole({ workspace }: { workspace: Workspace }) {
   const [busy, setBusy] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
 
-  const validRows = rows.filter((r) => r.address.startsWith("0x") && r.address.length === 42 && parseFloat(r.amount) > 0);
+  const isEthAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
+  const validRows = rows.filter((r) => isEthAddress(r.address) && parseFloat(r.amount) > 0);
   const total = rows.reduce((acc, r) => acc + (parseFloat(r.amount) || 0), 0);
 
   function addRow() { setRows((prev) => [...prev, { address: "", amount: "" }]); }

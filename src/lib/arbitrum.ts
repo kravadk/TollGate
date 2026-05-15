@@ -66,11 +66,11 @@ export function getArbitrumConfig(mode?: NetworkMode): ArbitrumConfig {
   };
 }
 
-export function isArbitrumEscrowConfigured(): boolean { return getArbitrumConfig().escrowAddress !== null; }
-export function isArbitrumBudgetConfigured(): boolean { return getArbitrumConfig().budgetAddress !== null; }
-export function isArbitrumRegistryConfigured(): boolean { return getArbitrumConfig().serviceRegistryAddress !== null; }
-export function arbitrumExplorerTxUrl(txHash: string): string { return `${getArbitrumConfig().explorerBase}/tx/${txHash}`; }
-export function arbitrumExplorerAddrUrl(addr: string): string { return `${getArbitrumConfig().explorerBase}/address/${addr}`; }
+export function isArbitrumEscrowConfigured(mode?: NetworkMode): boolean { return getArbitrumConfig(mode).escrowAddress !== null; }
+export function isArbitrumBudgetConfigured(mode?: NetworkMode): boolean { return getArbitrumConfig(mode).budgetAddress !== null; }
+export function isArbitrumRegistryConfigured(mode?: NetworkMode): boolean { return getArbitrumConfig(mode).serviceRegistryAddress !== null; }
+export function arbitrumExplorerTxUrl(txHash: string, mode?: NetworkMode): string { return `${getArbitrumConfig(mode).explorerBase}/tx/${txHash}`; }
+export function arbitrumExplorerAddrUrl(addr: string, mode?: NetworkMode): string { return `${getArbitrumConfig(mode).explorerBase}/address/${addr}`; }
 
 export function formatDeadlineRelative(deadlineSec: number): { label: string; expired: boolean } {
   const diffMs = deadlineSec * 1000 - Date.now();
@@ -116,8 +116,8 @@ function getEth(): Eip1193 {
   return eth;
 }
 
-async function getArbitrumSigner() {
-  const cfg = getArbitrumConfig();
+async function getArbitrumSigner(mode?: NetworkMode) {
+  const cfg = getArbitrumConfig(mode);
   const eth = getEth();
   const current = (await eth.request({ method: "eth_chainId" })) as string;
   if (current.toLowerCase() !== cfg.chainHex) {
@@ -138,8 +138,8 @@ async function getArbitrumSigner() {
   return provider.getSigner();
 }
 
-function escrowContract(signerOrProvider: unknown) {
-  const cfg = getArbitrumConfig();
+function escrowContract(signerOrProvider: unknown, mode?: NetworkMode) {
+  const cfg = getArbitrumConfig(mode);
   if (!cfg.escrowAddress) throw new Error("Arbitrum escrow not configured (set VITE_ARBITRUM_ESCROW_ADDRESS).");
   return new Contract(cfg.escrowAddress, ESCROW_ABI, signerOrProvider as never);
 }
@@ -147,13 +147,13 @@ function escrowContract(signerOrProvider: unknown) {
 export type OpenEscrowResult = { txHash: string; explorerUrl: string; id: number | null; chainHex: string; contract: string };
 
 /** Open a native-ETH escrow to `payee` for `amountEthStr` ETH, releasable until `deadlineSec` Unix seconds. Real tx. */
-export async function openEscrow(params: { payee: string; amountEthStr: string; deadlineSec: number; refHex?: string }): Promise<OpenEscrowResult> {
-  const cfg = getArbitrumConfig();
+export async function openEscrow(params: { payee: string; amountEthStr: string; deadlineSec: number; refHex?: string }, mode?: NetworkMode): Promise<OpenEscrowResult> {
+  const cfg = getArbitrumConfig(mode);
   if (!cfg.escrowAddress) throw new Error("Arbitrum escrow not configured (set VITE_ARBITRUM_ESCROW_ADDRESS).");
   if (!/^0x[0-9a-fA-F]{40}$/.test(params.payee)) throw new Error("Enter a valid provider address.");
   const amount = parseEther(params.amountEthStr);
-  const signer = await getArbitrumSigner();
-  const c = escrowContract(signer);
+  const signer = await getArbitrumSigner(mode);
+  const c = escrowContract(signer, mode);
   const tx = await c.open(params.payee, ZERO_ADDR, amount, BigInt(Math.floor(params.deadlineSec)), to0xBytes32(params.refHex), { value: amount });
   const receipt = await tx.wait();
   let id: number | null = null;
@@ -163,28 +163,28 @@ export async function openEscrow(params: { payee: string; amountEthStr: string; 
       if (parsed?.name === "EscrowOpened") { id = Number(parsed.args.id); break; }
     }
   } catch { /* id stays null */ }
-  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string), id, chainHex: cfg.chainHex, contract: cfg.escrowAddress };
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string, mode), id, chainHex: cfg.chainHex, contract: cfg.escrowAddress };
 }
 
 export type EscrowActionResult = { txHash: string; explorerUrl: string };
 
-export async function releaseEscrow(id: number): Promise<EscrowActionResult> {
-  const signer = await getArbitrumSigner();
-  const tx = await escrowContract(signer).release(BigInt(id));
+export async function releaseEscrow(id: number, mode?: NetworkMode): Promise<EscrowActionResult> {
+  const signer = await getArbitrumSigner(mode);
+  const tx = await escrowContract(signer, mode).release(BigInt(id));
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string, mode) };
 }
-export async function refundEscrow(id: number): Promise<EscrowActionResult> {
-  const signer = await getArbitrumSigner();
-  const tx = await escrowContract(signer).refund(BigInt(id));
+export async function refundEscrow(id: number, mode?: NetworkMode): Promise<EscrowActionResult> {
+  const signer = await getArbitrumSigner(mode);
+  const tx = await escrowContract(signer, mode).refund(BigInt(id));
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string, mode) };
 }
-export async function cancelEscrow(id: number): Promise<EscrowActionResult> {
-  const signer = await getArbitrumSigner();
-  const tx = await escrowContract(signer).cancel(BigInt(id));
+export async function cancelEscrow(id: number, mode?: NetworkMode): Promise<EscrowActionResult> {
+  const signer = await getArbitrumSigner(mode);
+  const tx = await escrowContract(signer, mode).cancel(BigInt(id));
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string, mode) };
 }
 
 export type EscrowView = {
@@ -195,13 +195,13 @@ export type EscrowView = {
 const STATE_NAMES = ["None", "Open", "Released", "Refunded"] as const;
 
 /** Read one escrow by id via the wallet provider. Returns null on failure / nonexistent. */
-export async function getEscrowView(id: number): Promise<EscrowView | null> {
-  const cfg = getArbitrumConfig();
+export async function getEscrowView(id: number, mode?: NetworkMode): Promise<EscrowView | null> {
+  const cfg = getArbitrumConfig(mode);
   if (!cfg.escrowAddress) return null;
   try {
     const eth = getEth();
     const provider = new BrowserProvider(eth as never);
-    const e = await escrowContract(provider).getEscrow(BigInt(id));
+    const e = await escrowContract(provider, mode).getEscrow(BigInt(id));
     return {
       payer: e.payer, payee: e.payee, token: e.token,
       amountEth: formatEther(e.amount),
@@ -249,11 +249,11 @@ export async function getAgentBudget(agentAddr: string): Promise<AgentBudget | n
   } catch { return null; }
 }
 
-export async function setAgentBudget(agentAddr: string, dailyLimitCents: number, perRequestMaxCents: number, autoPay: boolean): Promise<{ txHash: string; explorerUrl: string }> {
-  const signer = await getArbitrumSigner();
-  const tx = await budgetContract(signer).setBudget(agentAddr, BigInt(dailyLimitCents), BigInt(perRequestMaxCents), autoPay);
+export async function setAgentBudget(agentAddr: string, dailyLimitCents: number, perRequestMaxCents: number, autoPay: boolean, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string }> {
+  const signer = await getArbitrumSigner(mode);
+  const tx = await budgetContract(signer, mode).setBudget(agentAddr, BigInt(dailyLimitCents), BigInt(perRequestMaxCents), autoPay);
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string, mode) };
 }
 
 // ─── ServiceRegistry ─────────────────────────────────────────────────────────
@@ -277,15 +277,15 @@ function registryContract(signerOrProvider: unknown, mode?: NetworkMode) {
   return new Contract(addr, REGISTRY_ABI, signerOrProvider as never);
 }
 
-export async function registerService(params: { serviceId: string; name: string; endpointUrl: string; priceUsdc: number; provider: string; agentCardUri?: string }): Promise<{ txHash: string; explorerUrl: string }> {
-  const signer = await getArbitrumSigner();
+export async function registerService(params: { serviceId: string; name: string; endpointUrl: string; priceUsdc: number; provider: string; agentCardUri?: string }, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string }> {
+  const signer = await getArbitrumSigner(mode);
   const listingFee = parseEther("0.0001");
-  const tx = await registryContract(signer).register(
+  const tx = await registryContract(signer, mode).register(
     params.serviceId, params.name, params.endpointUrl,
     BigInt(Math.round(params.priceUsdc * 100)), params.provider,
     params.agentCardUri ?? "",
     { value: listingFee }
   );
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: arbitrumExplorerTxUrl(tx.hash as string, mode) };
 }

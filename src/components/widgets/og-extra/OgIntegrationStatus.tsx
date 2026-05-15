@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { CheckCircle, ExternalLink, Loader2, XCircle, AlertTriangle } from "lucide-react";
 import { getOgConfig, runOgInference } from "../../../lib/og";
 import { API_BASE, API_ENABLED } from "../../../lib/api";
+import { useNetworkMode } from "../../../hooks/useNetworkMode";
 
 type Status = "checking" | "live" | "configured" | "offline";
 
@@ -44,6 +45,7 @@ export function OgIntegrationStatus() {
   const [comps, setComps] = useState<OgComponent[]>(INITIAL);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const ran = useRef(false);
+  const { mode } = useNetworkMode("0g");
 
   function update(i: number, patch: Partial<OgComponent>) {
     setComps((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -53,7 +55,7 @@ export function OgIntegrationStatus() {
     if (ran.current) return;
     ran.current = true;
 
-    const cfg = getOgConfig();
+    const cfg = getOgConfig(mode);
 
     // ── 0G Chain ──────────────────────────────────────────────────────────────
     const chainContracts = [

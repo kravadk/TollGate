@@ -12,7 +12,7 @@ export const workspace: Workspace = {
   route: "/arbitrum",
   pitch: "Agents pay USDC for API/services on Arbitrum with spend limits, receipts and optional escrowed delivery.",
   tags: ["USDC Payments", "Escrow", "Orbit Monitor", "Stylus Contracts", "Budget Control"],
-  networks: ["arbitrum-sepolia"],
+  networks: ["arbitrum-one", "arbitrum-sepolia"],
   tabs: ["Overview", "Agent Marketplace", "USDC Payments", "Stylus Contracts", "Escrow", "Wallet Protection"],
   accent: "#1B4ADD",
   darkAccent: "#5C7CFF",

@@ -4,6 +4,8 @@ export { MantleEarnCalc, MantleAgentEconomyDashboard, MantlePortfolioRebalancer,
 
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
@@ -99,9 +101,26 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
+function MantleEcosystemLinks() {
+  const { mode } = useNetworkMode("mantle");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "Mantle Sepolia Explorer", url: "https://sepolia.mantlescan.xyz" }] },
+    { title: "Faucet", items: [{ label: "Mantle Sepolia Faucet", url: "https://faucet.testnet.mantle.xyz" }] },
+    { title: "Bridge", items: [{ label: "Mantle Testnet Bridge", url: "https://bridge.testnet.mantle.xyz" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "Mantlescan", url: "https://mantlescan.xyz" }] },
+    { title: "Bridge", items: [{ label: "Mantle Bridge", url: "https://bridge.mantle.xyz" }] },
+    { title: "Swap", items: [{ label: "Agni Finance", url: "https://agni.finance" }, { label: "Merchant Moe", url: "https://merchantmoe.com" }] },
+    { title: "Yield", items: [{ label: "Mantle Earn (mETH)", url: "https://meth.mantle.xyz" }, { label: "Ondo USDY", url: "https://ondo.finance" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Mantle Sepolia Testnet" : "Mantle Mainnet · chainId 5000"} accent="#1A9AFF" />;
+}
+
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
   return (
-    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+    <>
+      <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
         <span style={{ fontSize: ".63rem", color: "#1A9AFF", fontWeight: 700, background: "#1A9AFF18", padding: "2px 7px", borderRadius: 5 }}>Mantle Mainnet + Sepolia</span>
@@ -125,5 +144,7 @@ export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string)
         );
       })}
     </div>
+      <MantleEcosystemLinks />
+    </>
   );
 }

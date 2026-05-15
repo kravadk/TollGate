@@ -416,7 +416,7 @@ export function OverviewPage({
       { light: true, ico: Bolt, title: "Run an inference job", sub: "pay per token · Risk Scorer · Llama 3 · Anomaly", onClick: () => def && onOpenPayment(def) },
       { ico: FileText, title: "Pin a memory blob to 0G Storage", sub: "SHA-256 hash · verifiable reference", onClick: () => onGoTab("storage") },
       { ico: Shield, title: "Verify a receipt proof", sub: "single-use · replay-safe · sealed", onClick: () => onGoTab("privacy") },
-      { ico: Robot, title: "Manage agent budgets & allowlist", sub: "0G Job Worker · daily cap $8.00", onClick: () => onGoTab("agent") },
+      { ico: Robot, title: "Manage agent budgets & allowlist", sub: "0G Compute Agent · daily cap $8.00", onClick: () => onGoTab("agent") },
       { ico: Code, title: "0G x402 SDK & gateway docs", sub: "cURL · TypeScript · Python adapters", onClick: () => onGoTab("gateway") || onGoTab("privacy") },
       { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} paid jobs on record`, onClick: () => onGoReceipts() },
     ],
@@ -2365,7 +2365,7 @@ export function AgentsPage({ agent, workspace, tabLabel, onTogglePause }: { agen
       {workspace.id === "mantle" && <MantleEconomyLoop workspace={workspace} />}
       {workspace.id === "mantle" && <ErrorBoundary label="AgentCreditLine"><Suspense fallback={null}><AgentCreditLine workspace={workspace} /></Suspense></ErrorBoundary>}
       {workspace.id === "mantle" && <AgentScoreCard agentId="agent_mantle_strategist" />}
-      <div className="panel block">
+      <div className="panel block" style={{ marginTop: 16 }}>
         <div className="block-head"><div className="ttl"><span className="sq soft"><Shield width={15} height={15} /></span><div><h3>Enforced on every paid request</h3><div className="sub">server-side — frontend is never the source of truth</div></div></div></div>
         <ul style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 10 }}>
           {ENFORCED.map((r) => (

@@ -8,6 +8,8 @@
  */
 
 import { useState, useMemo, type ReactNode } from "react";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import {
   Bot,
   Check,
@@ -133,7 +135,7 @@ export function QieBillSplitter({ workspace }: { workspace: Workspace }) {
     const results = people.map((p, i) => {
       const share = mode === "equal" ? equalShare : (parseFloat(p.custom) || 0);
       const id = hashId("split", p.name + i + Date.now(), 6);
-      const link = `https://pay.qie.digital/bill/${id}?amount=${share.toFixed(2)}&currency=${currency}&to=${p.name.replace(/\s/g, "+")}`;
+      const link = `https://pay.qie.digital/bill/${id}?amount=${share.toFixed(2)}&currency=${encodeURIComponent(currency)}&to=${encodeURIComponent(p.name)}`;
       emitReceipt({ workspaceId: workspace.id, serviceName: "QIE Bill Split", amount: share, currency: "USDC", network: workspace.networks[0] ?? "qie-testnet", kind: "qie.bill.split", payload: { person: p.name, share, link, batchTotal: t } });
       return { name: p.name, share, link };
     });
@@ -911,8 +913,24 @@ const QIE_CONTRACTS = [
   { label: "QieOracleFeed (Mainnet v3)",  addr: (import.meta.env as Record<string,string|undefined>)["VITE_QIE_ORACLE_FEED_ADDRESS"]   ?? "0x0551b255Cb74F004e872034a5a906ffaA7DD58Eb" },
 ] as const;
 
+function QieEcosystemLinks() {
+  const { mode } = useNetworkMode("qie");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "QIE Testnet Explorer", url: "https://testnet.qie.digital/explorer" }] },
+    { title: "Faucet", items: [{ label: "QIE Testnet Faucet", url: "https://faucet.testnet.qie.digital" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "QIE Explorer", url: "https://mainnet.qie.digital/explorer" }] },
+    { title: "Swap", items: [{ label: "QIE Swap", url: "https://swap.qie.digital" }] },
+    { title: "Checkout", items: [{ label: "QIE Pay", url: "https://pay.qie.digital" }, { label: "QIE Pass Portal", url: "https://pass.qie.digital" }] },
+    { title: "Dev", items: [{ label: "QIE Docs", url: "https://docs.qie.digital" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "QIE Testnet · chainId 1983" : "QIE Mainnet · chainId 1990"} accent="#7c3aed" />;
+}
+
 export function renderOverviewExtra(_ws: Workspace): ReactNode {
   return (
+    <>
     <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
@@ -933,6 +951,8 @@ export function renderOverviewExtra(_ws: Workspace): ReactNode {
         );
       })}
     </div>
+    <QieEcosystemLinks />
+    </>
   );
 }
 

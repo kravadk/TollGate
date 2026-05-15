@@ -12,7 +12,7 @@ export const workspace: Workspace = {
   route: "/0g",
   pitch: "Agents pay per inference job and per storage write; receipts link to verifiable job metadata in 0G Storage.",
   tags: ["x402 Gateway", "0G Compute", "0G Storage", "TEE & Privacy", "MCP Server"],
-  networks: ["0g-testnet", "base-sepolia"],
+  networks: ["0g-mainnet", "0g-testnet"],
   tabs: ["Overview", "Agent Identity", "Compute", "Trading Arena", "Storage & Memory", "TEE & Privacy", "Receipts"],
   accent: "#7C5CF8",
   darkAccent: "#9D85FF",
@@ -43,7 +43,7 @@ export const rawServices: SRaw[] = [
 ];
 
 export const agentRaw: AgentRaw = {
-  id: "agent_0g_worker", workspaceId: "0g", name: "0G Job Worker", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
+  id: "agent_0g_worker", workspaceId: "0g", name: "0G Compute Agent", wallet: "0x0E437c109A4C1e15172c4dA557E77724D7243F71",
   autoPay: true, dailyLimitUsd: 8, maxPerRequestUsd: 0.10, spentTodayUsd: 0.62,
   allowlist: ["svc_0g_inference", "svc_0g_storage", "svc_0g_context", "svc_0g_dav", "svc_0g_batch"],
 };
@@ -70,7 +70,7 @@ const _iso = (mins: number) => new Date(_now - mins * 60000).toISOString();
 export const SEEDED_PINS: SeededPin[] = [
   { id: "pin_9f2c1a7be4", name: "agent-snapshot.md", size: 184,
     hash: "9f2c1a7be4d03f5a8c1b6e2d9047a3f1c8b5e0d2a6f7b1c4e9d3a0f8b2c6e1d4",
-    content: "# memory-segment\nagent_yield_researcher.snapshot\nbalance: 1.23 ETH\nstrategy: mETH-USDY pair\nlast_trade: 2026-05-12T11:42:08Z",
+    content: "# memory-segment\nagent_yield_researcher.snapshot\nbalance: 1.23 ETH\nstrategy: ETH-USDC pair\nlast_trade: 2026-05-12T11:42:08Z",
     receiptId: "rcpt_seed11", createdAt: _iso(110) },
   { id: "pin_2b07d4e1a9", name: "trade-log-2026-05.json", size: 4096,
     hash: "2b07d4e1a9c63f08b15e7c2d4a6093f8c1b5e0d2a6f7b1c4e9d3a0f8b2c6e1a3",

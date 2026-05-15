@@ -53,7 +53,7 @@ async function verifyOnChainUsdcPayment(opts: {
     }
     return { verified: false, reason: "no_matching_transfer_log" };
   } catch (e) {
-    return { verified: false, reason: `rpc_error: ${(e as Error).message?.slice(0, 80)}` };
+    return { verified: false, reason: "rpc_error" };
   }
 }
 
@@ -67,7 +67,7 @@ export function requestHashFor(req: Request, serviceId: string): string {
     method: req.method,
     path: req.path,
     query: req.query ?? {},
-    agent: req.header("X-Agent-Id") ?? "anonymous",
+    agent: ((req.header("X-Agent-Id") ?? "anonymous").slice(0, 128).replace(/[^\x20-\x7E]/g, "") || "anonymous"),
   });
   return "0x" + createHash("sha256").update(basis).digest("hex");
 }
@@ -139,7 +139,7 @@ export function withX402() {
     // No payment → 402 with a fresh challenge.
     if (!header) {
       const ch = issueChallenge({ serviceId: service.id, amount, currency, network, payTo, requestHash: reqHash });
-      logX402Call({ timestamp: Date.now(), endpoint, serviceId: service.id, caller: req.header("X-Agent-Id") ?? "anonymous", amount: service.priceUsd, asset: currency, status: "rejected", reason: "no_payment" });
+      logX402Call({ timestamp: Date.now(), endpoint, serviceId: service.id, caller: ((req.header("X-Agent-Id") ?? "anonymous").slice(0, 128).replace(/[^\x20-\x7E]/g, "") || "anonymous"), amount: service.priceUsd, asset: currency, status: "rejected", reason: "no_payment" });
       recordActivity("gateway.402", service.id);
       res.status(402).json(challengeBody(service, { challengeId: ch.challengeId, amount, payTo, network, currency, requestHash: reqHash, expiresAt: ch.expiresAt }));
       return;
@@ -183,7 +183,12 @@ export function withX402() {
 
     const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(proof.payTo);
     const matchesPayTo = isValidAddress && proof.payTo.toLowerCase() === payTo.toLowerCase();
-    const matchesAmount = Number(proof.amount) >= service.priceUsd;
+    const paidAmt = Number(proof.amount);
+    if (!Number.isFinite(paidAmt) || paidAmt < 0) {
+      res.status(402).json({ error: "payment_verification_failed", details: { matchesPayTo: false, matchesAmount: false, matchesNetwork: false, matchesAsset: false } });
+      return;
+    }
+    const matchesAmount = paidAmt >= service.priceUsd;
     const matchesNetwork = proof.network === network;
     const matchesAsset = proof.asset === currency;
     const valid = matchesPayTo && matchesAmount && matchesNetwork && matchesAsset;

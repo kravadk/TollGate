@@ -5,6 +5,7 @@ import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { hashId } from "../../../lib/util-hash";
 import { getQieConfig } from "../../../lib/qie";
+import { useNetworkMode, type NetworkMode } from "../../../hooks/useNetworkMode";
 
 // AgentScore → QIElend credit line widget.
 // Beats NeuroCred (2025 QIE winner): real x402 receipts as score basis, no off-chain ML.
@@ -13,8 +14,8 @@ import { getQieConfig } from "../../../lib/qie";
 const GET_LINE_SEL = "0x60116863";
 const DEMO_AGENT = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
 
-async function fetchOnChainCreditLine(): Promise<number> {
-  const cfg = getQieConfig("mainnet");
+async function fetchOnChainCreditLine(mode: NetworkMode = "testnet"): Promise<number> {
+  const cfg = getQieConfig(mode);
   const addr = cfg.agentCreditAddress;
   if (!addr) return 0;
   try {
@@ -54,6 +55,7 @@ type BorrowRecord = { id: string; amount: number; service: string; ts: string; r
 
 export function QieCreditWidget({ workspace }: { workspace: Workspace }) {
   const { receipts, emitReceipt } = useAppState();
+  const { mode } = useNetworkMode("qie");
   const [borrowed, setBorrowed] = useLocalStore<number>("qie.credit.borrowed", 0);
   const [borrows, setBorrows] = useLocalStore<BorrowRecord[]>("qie.credit.borrows", []);
   const [running, setRunning] = useState(false);
@@ -62,7 +64,7 @@ export function QieCreditWidget({ workspace }: { workspace: Workspace }) {
   const [repaying, setRepaying] = useState(false);
   const [onChainLine, setOnChainLine] = useState<number | null>(null);
 
-  useEffect(() => { fetchOnChainCreditLine().then(setOnChainLine); }, []);
+  useEffect(() => { fetchOnChainCreditLine(mode).then(setOnChainLine); }, [mode]);
 
   const wsReceipts = receipts.filter((r) => r.workspaceId === workspace.id);
   const count = wsReceipts.length;

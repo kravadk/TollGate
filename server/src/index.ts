@@ -20,9 +20,19 @@ const allowedOrigins = env.corsOrigin === "*"
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: "1mb" }));
 
-// Request-id middleware — trace every request through the stack.
+// Security headers — basic protections for all responses.
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  next();
+});
+
+// Request-id middleware — validate client-supplied ID to prevent log injection.
 app.use((req: Request, res: Response, next: NextFunction) => {
-  const rid = (req.headers["x-request-id"] as string | undefined) ?? newRequestId();
+  const clientRid = req.headers["x-request-id"] as string | undefined;
+  const rid = (clientRid && /^[a-zA-Z0-9_-]{1,64}$/.test(clientRid)) ? clientRid : newRequestId();
   (req as Request & { rid: string }).rid = rid;
   res.setHeader("X-Request-Id", rid);
   next();

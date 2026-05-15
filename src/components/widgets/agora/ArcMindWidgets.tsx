@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { safeAmt } from "../../../lib/validate";
 import {
   Copy, Eye, Lock, Play, Pause, Shield, Zap, Brain,
   ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCheck,
@@ -55,7 +56,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
   }, [positions]);
 
   function startCopying() {
-    const amt = parseFloat(stake) || 10;
+    const amt = safeAmt(stake, 10_000) ?? 10;
     const now = Date.now();
     const pos: CopyPosition[] = ARCMIND_POSITIONS.map((p, i) => ({
       ...p,
@@ -551,7 +552,7 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
         <input
           type="range" min="5" max="30" step="1"
           value={maxDrawdown}
-          onChange={e => setMaxDrawdown(Number(e.target.value))}
+          onChange={e => setMaxDrawdown(Math.min(30, Math.max(5, Number(e.target.value) || 15)))}
           className="w-full accent-red-500"
         />
         <div className="flex justify-between text-xs text-gray-500">

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeAmt } from "../../../lib/validate";
 import {
   ArrowRight, BadgeCheck, Building2, CheckCircle,
   DollarSign, FileText, Globe, Loader2,
@@ -9,6 +10,7 @@ import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId } from "../../../lib/util-hash";
 import { getPolygonConfig } from "../../../lib/polygon";
+import { useNetworkMode } from "../../../hooks/useNetworkMode";
 
 // ── Trade Finance — SME Invoice Factoring ───────────────────────────────────────
 
@@ -34,10 +36,11 @@ export function PolygonTradeFinanceWidget({ workspace }: { workspace: Workspace 
   const totalFunded = invoices.filter(i => i.status === "funded").reduce((s, i) => s + i.advance, 0);
 
   async function submitInvoice() {
+    const amtNum = safeAmt(amount, 10_000_000);
+    if (!amtNum) { return; }
     setSubmitting(true);
     await new Promise(r => setTimeout(r, 1600));
     const id = hashId("inv", `${Date.now()}`).slice(0, 12);
-    const amtNum = parseFloat(amount);
     const dueDate = new Date(Date.now() + 30 * 24 * 3600_000).toLocaleDateString();
     setInvoices(prev => [{
       id, buyer, amount: amtNum,
@@ -167,6 +170,7 @@ export function PolygonUsdcPaymentsWidget({ workspace }: { workspace: Workspace 
   const saving = bankCost - ourCost;
 
   async function sendPayment() {
+    if (!safeAmt(amount, 100_000_000)) return;
     setSending(true);
     await new Promise(r => setTimeout(r, 2200));
     const hash = hashId("usdc", `${Date.now()}`).slice(0, 18);
@@ -393,7 +397,8 @@ export function PolygonStatsWidget({ workspace: _ }: { workspace: Workspace }) {
 }
 
 function PolygonDeployedContracts() {
-  const cfg = getPolygonConfig("mainnet");
+  const { mode } = useNetworkMode("polygon");
+  const cfg = getPolygonConfig(mode);
   const escrow = cfg.escrowAddress ?? undefined;
   const explorer = cfg.explorerBase;
   return (
@@ -434,11 +439,13 @@ export function PolygonMerchantOnboardingWidget({ workspace }: { workspace: Work
   const [deployed, setDeployed] = useLocalStore<{ name: string; address: string; endpoint: string; ts: string } | null>(
     `polygon-merchant-${workspace.id}`, null
   );
+  const { mode } = useNetworkMode(workspace.id);
 
   async function deploy() {
+    if (!safeAmt(price, 10_000)) return;
     setDeploying(true);
     await new Promise(r => setTimeout(r, 2000));
-    const escrow = getPolygonConfig("mainnet").escrowAddress ?? `0x${hashId("merchant", `${name}`).slice(0, 40)}`;
+    const escrow = getPolygonConfig(mode).escrowAddress ?? `0x${hashId("merchant", `${name}`).slice(0, 40)}`;
     setDeployed({ name, address: escrow, endpoint: `/api/${name.toLowerCase().replace(/\s/g, "-")}`, ts: new Date().toLocaleTimeString() });
     setDeploying(false);
     setStep(3);

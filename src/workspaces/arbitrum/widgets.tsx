@@ -8,6 +8,8 @@ import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Send, Shield, Globe, Robot, Lock, Receipt as RIco } from "../../icons402";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import { ArbitrumEscrowPanel } from "../../components/widgets/arbitrum/ArbitrumEscrowPanel";
 import { BatchPayoutConsole, StylusSnippetViewer, RobinhoodChainPanel } from "../../components/widgets/arbitrum-extra/ArbitrumExtraWidgets";
 import { AgentIntentWidget } from "../../components/widgets/arbitrum-extra/AgentIntentWidget";
@@ -82,28 +84,47 @@ const ARB_CONTRACTS = [
   { label: "AgentIntentSettler (Sep.)",  addr: (import.meta.env as Record<string,string|undefined>)["VITE_ARB_INTENT_SETTLER_ADDRESS"] ?? "0x5E870A75059AfEF6D310bcCD8EdC7BaAa2535620", explorer: "https://sepolia.arbiscan.io" },
 ] as const;
 
+function ArbEcosystemLinks() {
+  const { mode } = useNetworkMode("arbitrum");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "Arbitrum Sepolia Explorer", url: "https://sepolia.arbiscan.io" }] },
+    { title: "Faucet", items: [{ label: "Alchemy Sepolia Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" }, { label: "Chainlink Faucet", url: "https://faucets.chain.link/arbitrum-sepolia" }] },
+    { title: "Bridge", items: [{ label: "Arbitrum Bridge (Testnet)", url: "https://bridge.arbitrum.io/?l2ChainId=421614" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "Arbiscan", url: "https://arbiscan.io" }] },
+    { title: "Bridge", items: [{ label: "Arbitrum Bridge", url: "https://bridge.arbitrum.io" }, { label: "Stargate", url: "https://stargate.finance" }] },
+    { title: "Swap", items: [{ label: "Camelot DEX", url: "https://app.camelot.exchange" }, { label: "Uniswap (Arbitrum)", url: "https://app.uniswap.org/#/swap?chain=arbitrum" }] },
+    { title: "Dev Tools", items: [{ label: "Arbitrum Docs", url: "https://docs.arbitrum.io" }, { label: "Stylus SDK", url: "https://docs.arbitrum.io/stylus/gentle-introduction" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Arbitrum Sepolia · chainId 421614" : "Arbitrum One · chainId 42161"} accent="#5C7CFF" />;
+}
+
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
   return (
-    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
-        <span style={{ fontSize: ".63rem", color: "#1B4ADD", fontWeight: 700, background: "#1B4ADD18", padding: "2px 7px", borderRadius: 5 }}>Arbitrum One + Sepolia</span>
-      </div>
-      {ARB_CONTRACTS.map((c) => {
-        const short = `${c.addr.slice(0, 8)}…${c.addr.slice(-6)}`;
-        return (
-          <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
-            <Shield width={13} height={13} style={{ color: "#5C7CFF", flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
-              <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{c.addr}</div>
+    <>
+      <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
+        <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
+          <span style={{ fontSize: ".63rem", color: "#1B4ADD", fontWeight: 700, background: "#1B4ADD18", padding: "2px 7px", borderRadius: 5 }}>Arbitrum One + Sepolia</span>
+        </div>
+        {ARB_CONTRACTS.map((c) => {
+          const short = `${c.addr.slice(0, 8)}…${c.addr.slice(-6)}`;
+          return (
+            <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
+              <Shield width={13} height={13} style={{ color: "#5C7CFF", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: ".77rem", fontWeight: 700, color: "var(--ink)" }}>{c.label}</div>
+                <div style={{ fontSize: ".62rem", color: "var(--muted)", fontFamily: "monospace" }}>{c.addr}</div>
+              </div>
+              <a href={`${c.explorer}/address/${c.addr}`} target="_blank" rel="noreferrer"
+                style={{ fontSize: ".6rem", color: "#5C7CFF", fontWeight: 700, textDecoration: "none", background: "#5C7CFF14", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap" }}
+              >{short} ↗</a>
             </div>
-            <a href={`${c.explorer}/address/${c.addr}`} target="_blank" rel="noreferrer"
-              style={{ fontSize: ".6rem", color: "#5C7CFF", fontWeight: 700, textDecoration: "none", background: "#5C7CFF14", padding: "3px 7px", borderRadius: 5, whiteSpace: "nowrap" }}
-            >{short} ↗</a>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+      <ArbEcosystemLinks />
+    </>
   );
 }

@@ -15,7 +15,8 @@ export function NetworkToggle({ mode, onToggle, hidden }: Props) {
       type="button"
       onClick={onToggle}
       aria-label={`Switch to ${isMainnet ? "testnet" : "mainnet"}`}
-      className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+      title={isMainnet ? "Mainnet — click for testnet" : "Testnet — click for mainnet"}
+      className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
       style={{
         background: isMainnet
           ? "color-mix(in srgb, var(--accent-primary) 16%, transparent)"
@@ -32,7 +33,7 @@ export function NetworkToggle({ mode, onToggle, hidden }: Props) {
         className="w-1.5 h-1.5 rounded-full shrink-0"
         style={{ background: isMainnet ? "var(--accent-primary)" : "#f59e0b" }}
       />
-      {isMainnet ? "Mainnet" : "Testnet"}
+      {isMainnet ? "M" : "T"}
     </button>
   );
 }

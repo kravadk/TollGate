@@ -5,11 +5,12 @@ import { useAppState } from "../../../app-state";
 import { useLocalStore } from "../../../lib/storage";
 import { hashId } from "../../../lib/util-hash";
 import { getQieConfig } from "../../../lib/qie";
+import { useNetworkMode, type NetworkMode } from "../../../hooks/useNetworkMode";
 
 const SERVICE_COUNT_SELECTOR = "0x06237526"; // keccak256("serviceCount()")[0:4]
 
-async function fetchOnChainFeedCount(): Promise<number> {
-  const cfg = getQieConfig("mainnet");
+async function fetchOnChainFeedCount(mode: NetworkMode = "testnet"): Promise<number> {
+  const cfg = getQieConfig(mode);
   const addr = cfg.oracleFeedAddress;
   if (!addr) return 0;
   try {
@@ -64,6 +65,7 @@ type DemoStep = { id: string; label: string; detail: string; done: boolean };
 
 export function QieOracleFeedWidget({ workspace }: { workspace: Workspace }) {
   const { receipts, emitReceipt } = useAppState();
+  const { mode } = useNetworkMode("qie");
   const [feeds, setFeeds] = useLocalStore<OracleFeed[]>("qie.oracle.feeds", SEED_FEEDS);
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<DemoStep[]>([]);
@@ -72,9 +74,9 @@ export function QieOracleFeedWidget({ workspace }: { workspace: Workspace }) {
   const [ethPrice, setEthPrice] = useState<number>(0);
 
   useEffect(() => {
-    fetchOnChainFeedCount().then(setOnChainCount);
+    fetchOnChainFeedCount(mode).then(setOnChainCount);
     fetchEthPrice().then(setEthPrice);
-  }, []);
+  }, [mode]);
 
   const wsReceipts = receipts.filter((r) => r.workspaceId === workspace.id);
   const liveCheckouts = SEED_FEEDS[0].callCount + wsReceipts.filter((r) => r.serviceId === "svc_qie_checkout").length;

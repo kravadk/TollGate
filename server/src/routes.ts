@@ -15,6 +15,7 @@
 //   GET  /api/status/x402-log
 
 import { Router, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 import { env, isProd } from "./env.js";
 import { uploadToOg } from "./og-upload.js";
 import { runOgInference } from "./og-compute.js";
@@ -69,24 +70,34 @@ export const apiRouter = Router();
 
 // ─── 0G Storage upload (server-side, uses private key) ──────────────────────
 
-apiRouter.post("/og/upload", async (req: Request, res: Response) => {
+const uploadLimiter = rateLimit({
+  windowMs: 60_000, max: 10,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: "rate_limit_exceeded", retryAfterSec: 60, scope: "/api/og/upload" },
+});
+
+apiRouter.post("/og/upload", uploadLimiter, async (req: Request, res: Response) => {
   const content = typeof req.body?.content === "string" ? req.body.content : "";
   if (!content) return res.status(400).json({ error: "content required" });
+  if (content.length > 51200) return res.status(413).json({ error: "content too large (max 50 KB)" });
   try {
     const result = await uploadToOg(content);
     recordActivity("og.upload", "0g");
     res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+  } catch {
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
 // ─── 0G Compute inference (server-side, uses compute private key) ────────────
 
+const ALLOWED_MODELS = ["risk-scorer-v2", "wallet-labeler", "anomaly-detect", "sentiment-v1", "market-signals"];
+
 apiRouter.post("/og/compute", async (req: Request, res: Response) => {
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt : "";
   const model = typeof req.body?.model === "string" ? req.body.model : undefined;
   if (!prompt) return res.status(400).json({ error: "prompt required" });
+  if (model && !ALLOWED_MODELS.includes(model)) return res.status(400).json({ error: "unknown model" });
   const result = await runOgInference(prompt, model);
   if (!result.ok && result.reason === "compute_not_configured") {
     return res.status(503).json({ ok: false, reason: "compute_not_configured" });
@@ -177,7 +188,7 @@ async function unlockedResponse(req: Request, res: Response): Promise<void> {
     return;
   }
   const { service } = x;
-  const agentId = req.header("X-Agent-Id") ?? "anonymous";
+  const agentId = ((req.header("X-Agent-Id") ?? "anonymous").slice(0, 128).replace(/[^\x20-\x7E]/g, "") || "anonymous");
   const ws = service.workspaceIds[0] ?? "unknown";
   const receipt = appendReceipt({
     challengeId: x.challengeId,
@@ -309,7 +320,6 @@ statusRouter.get("/health", (_req: Request, res: Response) => {
     defaultNetwork: env.x402Network,
     defaultAsset: env.x402Asset,
     payoutAddress: env.x402PayoutAddress,
-    devBypassEnabled: !isProd(),
     serviceCount: services.length,
     agentCount: agents.length,
   });

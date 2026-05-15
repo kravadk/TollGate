@@ -5,6 +5,7 @@
  */
 
 import { Fragment, useState, useMemo, useEffect, useCallback } from "react";
+import { safeAmt, safeUrl } from "../../lib/validate";
 import {
   Code2,
   Loader2,
@@ -241,7 +242,9 @@ export function ArbContractPaymentSim({ workspace }: { workspace: Workspace }) {
   const [result, setResult] = useState<{ calldata: string; gas: string; output: string } | null>(null);
 
   const simulate = () => {
-    const hexAmt = parseInt(amount).toString(16).padStart(64, "0");
+    const amtInt = parseInt(amount, 10);
+    if (!Number.isInteger(amtInt) || amtInt <= 0) return;
+    const hexAmt = amtInt.toString(16).padStart(64, "0");
     const calldata = "0x" + hashId("4bytes", fnSig, 4) + "000000000000000000000000000000000000000000000000000000000000002" + hexAmt.slice(-2);
     const gas = (21000 + fnSig.length * 68 + Math.floor(deterministicScore(fnSig, 10000, 60000))).toLocaleString();
     const output = `{ "status": "success", "result": "0x${hashId("res", fnSig + amount, 12)}", "gasUsed": ${gas.replace(/,/g, "")}, "receiptId": "arb_${hashId("rcpt", fnSig + Date.now(), 8)}" }`;
@@ -809,8 +812,11 @@ export function ArbBudgetPanel({ workspace: _workspace }: { workspace: Workspace
     if (!wallet.address) { setErr("Connect wallet first."); return; }
     setBusy(true); setErr(null); setOk(null);
     try {
-      const dailyCents = Math.round(parseFloat(dailyUsd) * 100);
-      const perReqCents = Math.round(parseFloat(perReqUsd) * 100);
+      const daily = safeAmt(dailyUsd, 100_000);
+      const perReq = safeAmt(perReqUsd, daily ?? 100_000);
+      if (!daily || !perReq) { setErr("Enter valid positive USD amounts (per-request ≤ daily limit)."); setBusy(false); return; }
+      const dailyCents = Math.round(daily * 100);
+      const perReqCents = Math.round(perReq * 100);
       const res = await setAgentBudget(wallet.address, dailyCents, perReqCents, autoPay);
       setSaved({ dailyUsd, perReqUsd, autoPay });
       setOk(res.txHash);
@@ -884,11 +890,13 @@ export function ArbOnChainRegistry({ workspace: _workspace }: { workspace: Works
 
   const submit = async () => {
     if (!wallet.address) { setErr("Connect wallet first."); return; }
-    if (!svcId.trim() || !name.trim() || !endpoint.startsWith("http")) { setErr("Fill all required fields."); return; }
+    const price = safeAmt(priceUsdc, 10_000);
+    if (!svcId.trim() || !name.trim() || !safeUrl(endpoint)) { setErr("Fill all fields with a valid https:// endpoint URL."); return; }
+    if (!price) { setErr("Enter a valid positive price in USDC (max 10,000)."); return; }
     setBusy(true); setErr(null); setOk(null);
     try {
-      const res = await registerService({ serviceId: svcId.trim(), name: name.trim(), endpointUrl: endpoint.trim(), priceUsdc: parseFloat(priceUsdc), provider: wallet.address });
-      const entry: RegEntry = { id: svcId.trim(), name: name.trim(), endpoint: endpoint.trim(), priceUsdc: parseFloat(priceUsdc), wallet: wallet.address, txHash: res.txHash, ts: new Date().toLocaleTimeString() };
+      const res = await registerService({ serviceId: svcId.trim(), name: name.trim(), endpointUrl: endpoint.trim(), priceUsdc: price, provider: wallet.address });
+      const entry: RegEntry = { id: svcId.trim(), name: name.trim(), endpoint: endpoint.trim(), priceUsdc: price, wallet: wallet.address, txHash: res.txHash, ts: new Date().toLocaleTimeString() };
       setEntries((e) => [entry, ...e].slice(0, 20));
       setOk(res.txHash);
       setSvcId(""); setName(""); setEndpoint("https://");

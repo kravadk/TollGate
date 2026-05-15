@@ -9,6 +9,7 @@ import { slugifyTab } from "../components/ui/AppSidebar";
 import { DottedGlobe } from "../components/visual/DottedGlobe";
 import { HexGrid } from "../components/visual/HexGrid";
 import { fadeInUp, fadeInUpSmall, fadeInScale, staggerFast } from "../lib/motion";
+import { CHAIN_LOGOS } from "../lib/chain-logos";
 
 type ProjectLauncherProps = {
   theme: Theme;
@@ -17,6 +18,7 @@ type ProjectLauncherProps = {
 
 const RAINBOW = "conic-gradient(from 205deg, #ff7a18, #ff3d8b, #9b4dff, #2f6bff, #06c2da, #11b886, #ffb01f, #ff7a18)";
 const STAR_CLIP = "polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%)";
+
 
 function prettyChain(net: string): string {
   const base = net.replace(/-sepolia$/, "").replace(/-testnet$/, "");
@@ -59,7 +61,7 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
             <Bot className="w-3 h-3" />
             Fleet
           </Link>
-          <ConnectWalletButton compact />
+          <ConnectWalletButton />
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
       </header>
@@ -107,54 +109,65 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
           variants={staggerFast}
           initial="hidden"
           animate="show"
-          className="relative mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4"
+          className="relative mt-12 grid gap-4 sm:grid-cols-2"
         >
           {workspaces.map((ws) => {
             const Icon = ws.Icon;
             const firstTabSlug = slugifyTab(ws.tabs[0] ?? "Overview");
-            const chain = prettyChain(ws.networks[0] ?? "");
             const featured = ws.id === "0g";
             return (
-              <motion.div key={ws.id} variants={fadeInScale} className={featured ? "sm:col-span-2" : undefined}>
+              <motion.div key={ws.id} variants={fadeInScale}>
                 <Link
                   to={`/app/${ws.id}/${firstTabSlug}`}
-                  className={
-                    "launch-card group relative flex flex-col h-full p-5 rounded-2xl border transition-all duration-300 overflow-hidden hover:-translate-y-1 " +
-                    (featured
-                      ? "launch-card--featured bg-surface-1 border-primary/40 shadow-[0_0_40px_-12px_var(--ws-c)]"
-                      : "bg-surface-1 border-border-default")
-                  }
+                  className="group relative flex h-full rounded-2xl border border-border-default bg-surface-1 overflow-hidden transition-all duration-300 hover:border-[var(--ws-c)] hover:shadow-[0_0_28px_-8px_var(--ws-c)]"
                   style={{ ["--ws-c" as string]: ws.accent }}
                 >
-                  {featured && (
-                    <span className="absolute top-4 right-4 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-primary/15 border border-primary/30 text-primary">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      Live on 0G mainnet
-                    </span>
-                  )}
-                  <div className="flex items-start justify-between mb-4">
-                    <span
-                      className="grid place-items-center w-11 h-11 rounded-xl"
-                      style={{ background: `color-mix(in srgb, ${ws.accent} 16%, transparent)`, color: ws.accent }}
-                    >
-                      <Icon size={20} />
-                    </span>
-                    {!featured && <span className="text-[10px] text-text-muted uppercase tracking-[0.2em] font-bold">{chain}</span>}
-                  </div>
-                  <h3 className="text-[15px] font-extrabold leading-snug mb-2 group-hover:text-primary transition-colors" style={{ fontFamily: "var(--font-display)" }}>
-                    {ws.name}
-                  </h3>
-                  <p className="text-[12.5px] text-text-secondary leading-relaxed line-clamp-3 mb-4 flex-1">{ws.pitch}</p>
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                    {ws.tags.slice(0, 2).map((t) => (
-                      <span key={t} className="text-[10px] px-2 py-0.5 rounded-md bg-surface-2 border border-border-default text-text-muted font-medium">{t}</span>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between pt-3 border-t border-border-default">
-                    <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider">{ws.networks.join(" · ")}</span>
-                    <span className="inline-flex items-center gap-1 text-[12px] font-bold" style={{ color: ws.accent }}>
-                      Open <ArrowUpRight size={14} />
-                    </span>
+                  {/* Accent stripe */}
+                  <span
+                    className="w-1.5 shrink-0 rounded-l-2xl transition-all duration-300 group-hover:w-2.5"
+                    style={{ background: ws.accent, boxShadow: `0 0 12px 2px ${ws.accent}99` }}
+                  />
+
+                  <div className="flex flex-col flex-1 px-5 py-4">
+                    {/* Header */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <span
+                        className="grid place-items-center w-14 h-14 rounded-2xl shrink-0 overflow-hidden"
+                        style={{ background: `color-mix(in srgb, ${ws.accent} 15%, transparent)`, color: ws.accent }}
+                      >
+                        {CHAIN_LOGOS[ws.id] ? (
+                          <img src={CHAIN_LOGOS[ws.id]} alt={ws.name} width={40} height={40} className="rounded-lg object-contain"
+                            onError={(e) => { e.currentTarget.style.display = "none"; const fb = e.currentTarget.nextElementSibling as HTMLElement | null; if (fb) fb.style.display = "flex"; }} />
+                        ) : null}
+                        <span style={{ display: CHAIN_LOGOS[ws.id] ? "none" : "flex", alignItems: "center", justifyContent: "center" }}><Icon size={26} /></span>
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-[14px] font-extrabold leading-tight group-hover:text-[var(--ws-c)] transition-colors" style={{ fontFamily: "var(--font-display)" }}>
+                            {ws.name}
+                          </h3>
+                          {featured && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-primary/15 border border-primary/25 text-primary shrink-0">
+                              <span className="w-1 h-1 rounded-full bg-primary animate-pulse" />Live · 0G
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-text-secondary font-mono uppercase tracking-wider">{ws.networks.slice(0, 2).join(" · ")}</span>
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: ws.accent }}>
+                        Open <ArrowUpRight size={13} />
+                      </span>
+                    </div>
+
+                    {/* Pitch */}
+                    <p className="text-[12.5px] text-text-primary leading-relaxed flex-1">{ws.pitch}</p>
+
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border-default">
+                      {ws.tags.slice(0, 4).map((t) => (
+                        <span key={t} className="text-[10px] px-2 py-0.5 rounded-md bg-surface-2 border border-border-default text-text-secondary font-medium">{t}</span>
+                      ))}
+                    </div>
                   </div>
                 </Link>
               </motion.div>

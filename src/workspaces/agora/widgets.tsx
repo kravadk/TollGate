@@ -5,6 +5,8 @@ import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Robot, Code, Receipt as RIco } from "../../icons402";
 import { getAgoraConfig } from "../../lib/agora";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import { AgoraTradingWidget } from "../../components/widgets/agora/AgoraTradingWidget";
 import {
   AgoraPortfolioWidget,
@@ -150,7 +152,8 @@ export function renderAgentExtra(_workspace: Workspace): ReactNode | null {
 
 // ── Arc Deployed Contracts panel ───────────────────────────────────────────────
 function ArcContractsPanel() {
-  const cfg = getAgoraConfig();
+  const { mode } = useNetworkMode("agora");
+  const cfg = getAgoraConfig(mode);
   const CONTRACTS = [
     { name: "ArcMindRegistry.sol", addr: cfg.registryAddress, note: "on-chain agent & service registry" },
     { name: "CopyTradeEscrow.sol", addr: cfg.escrowAddress, note: "ERC-8183 copy-trade escrow" },
@@ -185,11 +188,31 @@ function ArcContractsPanel() {
   );
 }
 
+function AgoraEcosystemLinks() {
+  const { mode } = useNetworkMode("agora");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "Arc Testnet Explorer", url: "https://explorer.testnet.arcchain.io" }] },
+    { title: "Faucet", items: [{ label: "Arc Testnet Faucet", url: "https://faucet.testnet.arcchain.io" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "Arc Explorer", url: "https://explorer.arcchain.io" }] },
+    { title: "Bridge", items: [{ label: "Arc Bridge", url: "https://bridge.arcchain.io" }] },
+    { title: "Swap", items: [{ label: "Arc DEX", url: "https://dex.arcchain.io" }] },
+    { title: "Dev", items: [{ label: "Arc Docs", url: "https://docs.arcchain.io" }, { label: "Circle CCTP", url: "https://developers.circle.com/stablecoins/cctp-getting-started" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Arc Testnet · chainId 5042002" : "Arc Mainnet"} accent="#F59E0B" />;
+}
+
 // ── Overview extra ─────────────────────────────────────────────────────────────
 export function renderOverviewExtra(
   _workspace: Workspace,
   _onGoTab: (t: string) => boolean,
   _onGoReceipts: () => void,
 ): ReactNode | null {
-  return <ArcContractsPanel />;
+  return (
+    <>
+      <ArcContractsPanel />
+      <AgoraEcosystemLinks />
+    </>
+  );
 }

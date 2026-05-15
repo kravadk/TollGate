@@ -3,6 +3,8 @@ import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Bolt, Link as LinkIco, Send, Robot, Shield, Receipt as RIco } from "../../icons402";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import {
   PolygonTradeFinanceWidget,
   PolygonUsdcPaymentsWidget,
@@ -109,10 +111,26 @@ export function renderAgentExtra(_workspace: Workspace): ReactNode | null {
   return null;
 }
 
+function PolygonEcosystemLinks() {
+  const { mode } = useNetworkMode("polygon");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "Cardona Testnet Explorer", url: "https://cardona-zkevm.polygonscan.com" }] },
+    { title: "Faucet", items: [{ label: "Polygon zkEVM Faucet", url: "https://faucet.polygon.technology" }] },
+    { title: "Bridge", items: [{ label: "zkEVM Bridge (Testnet)", url: "https://bridge-ui.zkevm-rpc.com" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "PolygonScan zkEVM", url: "https://zkevm.polygonscan.com" }] },
+    { title: "Bridge", items: [{ label: "Polygon Bridge", url: "https://bridge.polygon.technology" }] },
+    { title: "Swap", items: [{ label: "QuickSwap", url: "https://quickswap.exchange" }, { label: "Uniswap (Polygon)", url: "https://app.uniswap.org/#/swap?chain=polygon_zkevm" }] },
+    { title: "Dev", items: [{ label: "Polygon Docs", url: "https://docs.polygon.technology/zkEVM" }, { label: "AggLayer", url: "https://agglayer.polygon.technology" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Polygon zkEVM Cardona Testnet" : "Polygon zkEVM Mainnet · chainId 1101"} accent="#8247E5" />;
+}
+
 export function renderOverviewExtra(
   _workspace: Workspace,
   _onGoTab: (t: string) => boolean,
   _onGoReceipts: () => void,
 ): ReactNode | null {
-  return null;
+  return <PolygonEcosystemLinks />;
 }

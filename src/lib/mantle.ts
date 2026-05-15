@@ -61,14 +61,14 @@ export function getMantleConfig(mode?: NetworkMode): MantleConfig {
   };
 }
 
-export function isMantleIdentityConfigured(): boolean { return getMantleConfig().identityAddress !== null; }
-export function isMantleVaultConfigured(): boolean { return getMantleConfig().vaultAddress !== null; }
-export function isMantleCreditConfigured(): boolean { return getMantleConfig().creditAddress !== null; }
-export function isMantleConfigured(): boolean { const c = getMantleConfig(); return c.identityAddress !== null || c.vaultAddress !== null; }
+export function isMantleIdentityConfigured(mode?: NetworkMode): boolean { return getMantleConfig(mode).identityAddress !== null; }
+export function isMantleVaultConfigured(mode?: NetworkMode): boolean { return getMantleConfig(mode).vaultAddress !== null; }
+export function isMantleCreditConfigured(mode?: NetworkMode): boolean { return getMantleConfig(mode).creditAddress !== null; }
+export function isMantleConfigured(mode?: NetworkMode): boolean { const c = getMantleConfig(mode); return c.identityAddress !== null || c.vaultAddress !== null; }
 
-export function mantleExplorerTxUrl(txHash: string): string { return `${getMantleConfig().explorerBase}/tx/${txHash}`; }
-export function mantleExplorerAddrUrl(addr: string): string { return `${getMantleConfig().explorerBase}/address/${addr}`; }
-export function mantleExplorerTokenUrl(addr: string, tokenId: number | string): string { return `${getMantleConfig().explorerBase}/token/${addr}/instance/${tokenId}`; }
+export function mantleExplorerTxUrl(txHash: string, mode?: NetworkMode): string { return `${getMantleConfig(mode).explorerBase}/tx/${txHash}`; }
+export function mantleExplorerAddrUrl(addr: string, mode?: NetworkMode): string { return `${getMantleConfig(mode).explorerBase}/address/${addr}`; }
+export function mantleExplorerTokenUrl(addr: string, tokenId: number | string, mode?: NetworkMode): string { return `${getMantleConfig(mode).explorerBase}/token/${addr}/instance/${tokenId}`; }
 
 const IDENTITY_ABI = [
   "function register(string agentDomain, address agentAddress) returns (uint256 agentId)",
@@ -122,8 +122,8 @@ function getEth(): Eip1193 {
 }
 
 /** Get a signer on the configured Mantle chain, switching/adding the network if needed. */
-async function getMantleSigner() {
-  const cfg = getMantleConfig();
+async function getMantleSigner(mode?: NetworkMode) {
+  const cfg = getMantleConfig(mode);
   const eth = getEth();
   const current = (await eth.request({ method: "eth_chainId" })) as string;
   if (current.toLowerCase() !== cfg.chainHex) {
@@ -147,10 +147,10 @@ async function getMantleSigner() {
 export type RegisterIdentityResult = { txHash: string; explorerUrl: string; agentId: number | null; chainHex: string; contract: string };
 
 /** Register an ERC-8004 agent identity → mints the identity NFT. Real tx. */
-export async function registerAgentIdentity(params: { domain: string; agentAddress: string }): Promise<RegisterIdentityResult> {
-  const cfg = getMantleConfig();
+export async function registerAgentIdentity(params: { domain: string; agentAddress: string }, mode?: NetworkMode): Promise<RegisterIdentityResult> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.identityAddress) throw new Error("Mantle identity registry not configured (set VITE_MANTLE_IDENTITY_ADDRESS).");
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.identityAddress, IDENTITY_ABI, signer);
   const tx = await c.register(params.domain, params.agentAddress);
   const receipt = await tx.wait();
@@ -161,19 +161,19 @@ export async function registerAgentIdentity(params: { domain: string; agentAddre
       if (parsed?.name === "AgentRegistered") { agentId = Number(parsed.args.agentId); break; }
     }
   } catch { /* agentId stays null */ }
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string), agentId, chainHex: cfg.chainHex, contract: cfg.identityAddress };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode), agentId, chainHex: cfg.chainHex, contract: cfg.identityAddress };
 }
 
 /** Leave a 1..5 reputation score for an agent. Real tx. */
-export async function recordAgentFeedback(params: { agentId: number; score: number; refHex?: string }): Promise<{ txHash: string; explorerUrl: string }> {
-  const cfg = getMantleConfig();
+export async function recordAgentFeedback(params: { agentId: number; score: number; refHex?: string }, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string }> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.identityAddress) throw new Error("Mantle identity registry not configured.");
   if (params.score < 1 || params.score > 5) throw new Error("Score must be 1..5");
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.identityAddress, IDENTITY_ABI, signer);
   const tx = await c.recordFeedback(params.agentId, params.score, to0xBytes32(params.refHex));
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode) };
 }
 
 /**
@@ -181,21 +181,21 @@ export async function recordAgentFeedback(params: { agentId: number; score: numb
  * Merkle root of the agent's latest brain dump. Makes the NFT "intelligent": its
  * on-chain state points at a blob living on 0G Storage. Caller must own the NFT. Real tx.
  */
-export async function bindAgentMemoryRoot(params: { agentId: number; rootHex: string }): Promise<{ txHash: string; explorerUrl: string; root: string }> {
-  const cfg = getMantleConfig();
+export async function bindAgentMemoryRoot(params: { agentId: number; rootHex: string }, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string; root: string }> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.identityAddress) throw new Error("Mantle identity registry not configured (set VITE_MANTLE_IDENTITY_ADDRESS).");
   if (!Number.isInteger(params.agentId) || params.agentId < 1) throw new Error("Enter a valid agentId (the NFT token id).");
   const root = to0xBytes32(params.rootHex); // pads/validates; full 32-byte 0G root is a no-op
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.identityAddress, IDENTITY_ABI, signer);
   const tx = await c.setMemoryRoot(params.agentId, root);
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string), root };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode), root };
 }
 
 /** Read-only: the currently-bound 0G Storage memory root for an agent (ZERO if none). */
-export async function readAgentMemoryRoot(agentId: number): Promise<string> {
-  const cfg = getMantleConfig();
+export async function readAgentMemoryRoot(agentId: number, mode?: NetworkMode): Promise<string> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.identityAddress) return ZERO_BYTES32;
   try {
     const eth = getEth();
@@ -208,30 +208,30 @@ export async function readAgentMemoryRoot(agentId: number): Promise<string> {
 
 export type VaultTxResult = { txHash: string; explorerUrl: string; seq?: number | null };
 
-export async function vaultDeposit(amountEthStr: string): Promise<VaultTxResult> {
-  const cfg = getMantleConfig();
+export async function vaultDeposit(amountEthStr: string, mode?: NetworkMode): Promise<VaultTxResult> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.vaultAddress) throw new Error("Mantle vault not configured (set VITE_MANTLE_VAULT_ADDRESS).");
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.vaultAddress, VAULT_ABI, signer);
   const tx = await c.deposit({ value: parseEther(amountEthStr) });
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode) };
 }
 
-export async function vaultDeployToYield(params: { amountEthStr: string; strategyRefHex?: string }): Promise<VaultTxResult> {
-  const cfg = getMantleConfig();
+export async function vaultDeployToYield(params: { amountEthStr: string; strategyRefHex?: string }, mode?: NetworkMode): Promise<VaultTxResult> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.vaultAddress) throw new Error("Mantle vault not configured.");
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.vaultAddress, VAULT_ABI, signer);
   const tx = await c.deployToYield(parseEther(params.amountEthStr), to0xBytes32(params.strategyRefHex));
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode) };
 }
 
-export async function vaultRecordDecision(params: { decisionHashHex: string; contextHashHex?: string }): Promise<VaultTxResult> {
-  const cfg = getMantleConfig();
+export async function vaultRecordDecision(params: { decisionHashHex: string; contextHashHex?: string }, mode?: NetworkMode): Promise<VaultTxResult> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.vaultAddress) throw new Error("Mantle vault not configured.");
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.vaultAddress, VAULT_ABI, signer);
   const tx = await c.recordDecision(to0xBytes32(params.decisionHashHex), to0xBytes32(params.contextHashHex));
   const receipt = await tx.wait();
@@ -242,7 +242,7 @@ export async function vaultRecordDecision(params: { decisionHashHex: string; con
       if (parsed?.name === "DecisionRecorded") { seq = Number(parsed.args.seq); break; }
     }
   } catch { /* seq stays null */ }
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string), seq };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode), seq };
 }
 
 const BUDGET_ABI = [
@@ -275,15 +275,15 @@ export async function setBudget(params: {
   dailyLimitUsd: number;
   perRequestMaxUsd: number;
   autoPay: boolean;
-}): Promise<{ txHash: string; explorerUrl: string }> {
+}, mode?: NetworkMode): Promise<{ txHash: string; explorerUrl: string }> {
   const addr = getBudgetControllerAddress();
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(addr, BUDGET_ABI, signer);
   const dailyCents = BigInt(Math.round(params.dailyLimitUsd * 100));
   const perReqCents = BigInt(Math.round(params.perRequestMaxUsd * 100));
   const tx = await c.setBudget(params.agent, dailyCents, perReqCents, params.autoPay, "0x" + "0".repeat(64));
   await tx.wait();
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode) };
 }
 
 /** Read-only: fetch current budget state for an agent address. */
@@ -368,16 +368,16 @@ export async function getCreditRecord(agentAddress: string): Promise<CreditRecor
 }
 
 /** Write: record a successful x402 payment for an agent (called by TollGate gateway). Amount in USDC cents (e.g. 10 = $0.10). */
-export async function recordAgentPayment(params: { agentAddress: string; amountCents: number }): Promise<VaultTxResult> {
-  const cfg = getMantleConfig();
+export async function recordAgentPayment(params: { agentAddress: string; amountCents: number }, mode?: NetworkMode): Promise<VaultTxResult> {
+  const cfg = getMantleConfig(mode);
   if (!cfg.creditAddress) throw new Error("AgentCreditRegistry not configured (set VITE_MANTLE_CREDIT_ADDRESS).");
-  const signer = await getMantleSigner();
+  const signer = await getMantleSigner(mode);
   const c = new Contract(cfg.creditAddress, CREDIT_ABI, signer);
   const amountWei = BigInt(Math.round(params.amountCents * 1e16));
   const tx = await c.recordPayment(params.agentAddress, amountWei);
   await tx.wait();
   _creditCache.delete(params.agentAddress.toLowerCase());
-  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string) };
+  return { txHash: tx.hash as string, explorerUrl: mantleExplorerTxUrl(tx.hash as string, mode) };
 }
 
 // ─── Read-only RPC helpers (no wallet required) ───────────────────────────────

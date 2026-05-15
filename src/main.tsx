@@ -17,7 +17,7 @@ import "./styles.css";
 // runtime only when the DSN env var is present, keeping the default bundle clean.
 if (import.meta.env.VITE_SENTRY_DSN) {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  (new Function("m", "return import(m)"))("@sentry/react")
+  ;(new Function("m", "return import(m)"))("@sentry/react")
     .then((sentry: { init: (o: object) => void; browserTracingIntegration: () => unknown }) => {
       sentry.init({
         dsn: import.meta.env.VITE_SENTRY_DSN as string,

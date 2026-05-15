@@ -15,6 +15,7 @@ import {
   type RailItem,
   type RailKind,
 } from "../WorkspaceDashboard";
+import { CHAIN_LOGOS } from "../../lib/chain-logos";
 
 type NavSection = "Dashboard" | "Management" | "Content";
 const SECTIONS: readonly NavSection[] = ["Dashboard", "Management", "Content"];
@@ -110,7 +111,6 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
           <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">{w.chainId ? chainLabel(w.chainId) : "—"}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <NetworkToggle mode={mode} onToggle={toggle} hidden={singleChain} />
           <button
             type="button"
             onClick={refreshAll}
@@ -126,8 +126,7 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
       <div className="space-y-px">
         <BalanceRow symbol={nativeSym} value={w.balanceEth ?? (refreshing ? "…" : "—")} accent />
         <BalanceRow symbol="USDC" value={balOf("USDC")} />
-        <BalanceRow symbol="USDT" value={balOf("USDT")} />
-        {stables.filter((t) => t.symbol !== "USDC" && t.symbol !== "USDT").map((t) => (
+        {stables.filter((t) => t.symbol !== "USDC" && balOf(t.symbol) !== "0").map((t) => (
           <BalanceRow key={t.symbol} symbol={t.symbol} value={balOf(t.symbol)} />
         ))}
       </div>
@@ -206,7 +205,19 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
             />
           </span>
           <div className="flex flex-col min-w-0">
-            <span className="text-[13px] font-extrabold tracking-tight leading-tight truncate">{workspace.shortName}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {CHAIN_LOGOS[workspace.id] && (
+                <img
+                  src={CHAIN_LOGOS[workspace.id]}
+                  alt={workspace.shortName}
+                  width={16}
+                  height={16}
+                  className="rounded-sm object-contain shrink-0"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              )}
+              <span className="text-[13px] font-extrabold tracking-tight leading-tight truncate">{workspace.shortName}</span>
+            </div>
             <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">TollGate · x402</span>
           </div>
         </button>
@@ -285,20 +296,23 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
       <div className="px-3 py-4 border-t border-border-default space-y-2.5">
         <BalanceDisplay workspace={workspace} />
         <div className="flex items-center gap-2 px-1">
-          <div
-            className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-bold shrink-0"
-            style={{
-              background: "color-mix(in srgb, var(--accent-primary) 18%, var(--surface-3))",
-              color: "var(--accent-primary)",
-              boxShadow: "0 0 0 1px color-mix(in srgb, var(--accent-primary) 22%, transparent)",
-            }}
-          >
-            {agent.name.split(" ").map((s) => s[0]).slice(0, 2).join("")}
+          <div className="relative shrink-0">
+            <div
+              className="w-8 h-8 rounded-xl grid place-items-center text-[11px] font-bold"
+              style={{
+                background: "color-mix(in srgb, var(--accent-primary) 16%, var(--surface-2))",
+                color: "var(--accent-primary)",
+                border: "1px solid color-mix(in srgb, var(--accent-primary) 24%, transparent)",
+              }}
+            >
+              {agent.name.split(" ").filter(s => /[a-zA-Z]/.test(s[0])).map((s) => s[0]).slice(0, 2).join("").toUpperCase() || "AG"}
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-surface-1" />
           </div>
           <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-[12px] font-bold truncate">{agent.name}</span>
-            <span className="text-[10px] text-text-muted truncate">
-              {w.address ? shortAddr(w.address) : "Demo agent"}
+            <span className="text-[12px] font-semibold truncate text-text-primary">{agent.name}</span>
+            <span className="text-[10px] text-text-muted truncate font-mono">
+              {w.address ? shortAddr(w.address) : "no wallet"}
             </span>
           </div>
         </div>
@@ -306,9 +320,9 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-colors uppercase tracking-wider"
+            className="flex-1 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-text-secondary hover:text-primary hover:bg-surface-2 transition-colors uppercase tracking-wider"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
             All projects
           </button>
           <button

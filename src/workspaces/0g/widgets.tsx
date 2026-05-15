@@ -14,6 +14,8 @@ import { StoragePinWidget } from "../../components/widgets/zero-g/StoragePinWidg
 import { ProofVerifier } from "../../components/widgets/zero-g/ProofVerifier";
 import { OpenClawSkillConsole, TeeAttestationVerifier, DePinBulkPin } from "../../components/widgets/og-extra/OgExtraWidgets";
 import { OgIntegrationStatus } from "../../components/widgets/og-extra/OgIntegrationStatus";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import {
   OgComputeCostChart,
   OgStorageEstimator,
@@ -36,6 +38,7 @@ import {
   OgBlockExplorerEmbed,
   OgMultiSigApprove,
   OgBudgetControllerWidget,
+  OgStorageHistory,
 } from "./inline-widgets";
 
 export const signature: SigBlock = {
@@ -56,7 +59,7 @@ export function cards({ onGoTab, onOpenPayment, wsReceipts, def, onGoReceipts }:
     { light: true, ico: Bolt, title: "Run an inference job", sub: "pay per token · Risk Scorer · Llama 3 · Anomaly", onClick: () => { if (def) onOpenPayment(def); } },
     { ico: Database, title: "Pin a memory blob to 0G Storage", sub: "SHA-256 hash · verifiable reference", onClick: () => onGoTab("storage") },
     { ico: Shield, title: "Verify a receipt proof", sub: "single-use · replay-safe · sealed", onClick: () => onGoTab("privacy") },
-    { ico: Robot, title: "Manage agent budgets & allowlist", sub: "0G Job Worker · daily cap $8.00", onClick: () => onGoTab("agent") },
+    { ico: Robot, title: "Manage agent budgets & allowlist", sub: "0G Compute Agent · daily cap $8.00", onClick: () => onGoTab("agent") },
     { ico: Code, title: "0G x402 SDK & gateway docs", sub: "cURL · TypeScript · Python adapters", onClick: () => onGoTab("gateway") || onGoTab("privacy") },
     { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} paid jobs on record`, onClick: () => onGoReceipts() },
   ];
@@ -80,6 +83,7 @@ export function renderTab(t: string, workspace: Workspace, _receipts: Receipt[],
     nodes.push(<OgStorageEstimator key="storagecalc" />);
     nodes.push(<StoragePinWidget key="storage" workspace={workspace} />);
     nodes.push(<DePinBulkPin key="depin" workspace={workspace} />);
+    nodes.push(<OgStorageHistory key="history" workspace={workspace} />);
   }
   if (t.includes("privacy") || t.includes("tee") || t.includes("sovereign")) {
     nodes.push(<OgPrivacyStepper key="stepper" workspace={workspace} />);
@@ -117,12 +121,30 @@ export function renderAgentExtra(workspace: Workspace): ReactNode | null {
   );
 }
 
+function OgEcosystemLinks() {
+  const { mode } = useNetworkMode("0g");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "Galileo Testnet Explorer", url: "https://chainscan-galileo.0g.ai" }] },
+    { title: "Faucet", items: [{ label: "0G Testnet Faucet", url: "https://faucet.0g.ai" }] },
+    { title: "Storage", items: [{ label: "Storage Indexer", url: "https://indexer-storage-turbo.0g.ai" }, { label: "StorageScan", url: "https://storagescan-galileo.0g.ai" }] },
+    { title: "Compute", items: [{ label: "0G Compute Portal", url: "https://0g.ai" }, { label: "Docs", url: "https://docs.0g.ai" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "Chainscan Mainnet", url: "https://chainscan.0g.ai" }] },
+    { title: "Storage", items: [{ label: "Storage Indexer", url: "https://indexer-storage-turbo.0g.ai" }, { label: "StorageScan", url: "https://storagescan.0g.ai" }] },
+    { title: "Compute", items: [{ label: "0G Compute Portal", url: "https://0g.ai" }, { label: "Docs", url: "https://docs.0g.ai" }] },
+    { title: "Bridge & Ecosystem", items: [{ label: "0G Bridge", url: "https://bridge.0g.ai" }, { label: "0G DApp Hub", url: "https://hub.0g.ai" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "0G Testnet · Galileo" : "0G Mainnet · chainId 16661"} accent="#3b82f6" />;
+}
+
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {
   return (
     <>
       <OgSlashingAlert />
       <OgBlockExplorerEmbed />
       <OgLiveContractsPanel />
+      <OgEcosystemLinks />
     </>
   );
 }

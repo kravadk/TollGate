@@ -60,7 +60,7 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
     try {
       const refHex = await sha256Hex(`arb|escrow|${refNote}|${Date.now()}`);
       const deadlineSec = Math.floor(Date.now() / 1000) + minsN * 60;
-      const res = await openEscrow({ payee: payee.trim(), amountEthStr: amount, deadlineSec, refHex });
+      const res = await openEscrow({ payee: payee.trim(), amountEthStr: amount, deadlineSec, refHex }, netMode);
       setLast({ id: res.id, txHash: res.txHash });
       push({ id: res.id, txHash: res.txHash, payee: payee.trim(), amountEth: amount, deadline: deadlineSec, at: new Date().toISOString(), state: "Open" });
       emitReceipt({ workspaceId: workspace.id, serviceName: "AgentEscrow · Open (Arbitrum Sepolia)", amount: 0, currency: "ETH", network: workspace.networks[0] ?? "arbitrum-sepolia", kind: "arb.escrow.open", payload: { escrowId: res.id, payee: payee.trim(), amountEth: amount, deadlineSec, ref: refHex, txHash: res.txHash, explorerUrl: res.explorerUrl, contract: res.contract, chainHex: res.chainHex }, status: "verified" });
@@ -72,14 +72,14 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
     setActing(id); setErr(null);
     try {
       const fn = kind === "release" ? releaseEscrow : kind === "refund" ? refundEscrow : cancelEscrow;
-      const res = await fn(id);
+      const res = await fn(id, netMode);
       patch(id, kind === "release" ? "Released" : "Refunded");
       emitReceipt({ workspaceId: workspace.id, serviceName: `AgentEscrow · ${kind[0].toUpperCase()}${kind.slice(1)} #${id}`, amount: 0, currency: "ETH", network: workspace.networks[0] ?? "arbitrum-sepolia", kind: `arb.escrow.${kind}`, payload: { escrowId: id, txHash: res.txHash, explorerUrl: res.explorerUrl }, status: "verified" });
     } catch (e) { setErr((e as { message?: string }).message ?? `${kind} failed`); } finally { setActing(null); }
   };
 
   const refreshState = async (id: number) => {
-    const v = await getEscrowView(id);
+    const v = await getEscrowView(id, netMode);
     if (v) patch(id, v.state);
   };
 
@@ -94,7 +94,7 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
         <span className="row sm" style={{ gap: 6 }}>
           <button className={"pill click" + (netMode === "testnet" ? " on" : "")} type="button" onClick={() => setNetMode("testnet")} style={{ fontSize: ".65rem" }}>Sepolia</button>
           <button className={"pill click" + (netMode === "mainnet" ? " on" : "")} type="button" onClick={() => setNetMode("mainnet")} style={{ fontSize: ".65rem" }}>Mainnet</button>
-          <a className="btn btn-ghost btn-sm" href={arbitrumExplorerAddrUrl(cfg.escrowAddress!)} target="_blank" rel="noreferrer">Contract <ExternalLink width={11} height={11} /></a>
+          <a className="btn btn-ghost btn-sm" href={arbitrumExplorerAddrUrl(cfg.escrowAddress!, netMode)} target="_blank" rel="noreferrer">Contract <ExternalLink width={11} height={11} /></a>
           <button className="btn btn-acc btn-sm" type="button" onClick={open} disabled={busy}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Opening…</> : <><HandCoins width={13} height={13} /> Open escrow</>}</button>
         </span>
       }
@@ -122,7 +122,7 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
       {last && (
         <div style={{ ...okStrip, marginBottom: 12 }}>
           <ShieldCheck width={13} height={13} /> Escrow opened{last.id != null ? <> · id <code style={codeStyle}>#{last.id}</code></> : null} ·{" "}
-          <a href={arbitrumExplorerTxUrl(last.txHash)} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>tx {SHORT(last.txHash)} <ExternalLink width={11} height={11} /></a>
+          <a href={arbitrumExplorerTxUrl(last.txHash, netMode)} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>tx {SHORT(last.txHash)} <ExternalLink width={11} height={11} /></a>
         </div>
       )}
       {err && <div style={{ marginBottom: 12, color: "var(--red)", fontSize: ".76rem", fontWeight: 600 }}>{err}</div>}
@@ -141,7 +141,7 @@ export function ArbitrumEscrowPanel({ workspace }: { workspace: Workspace }) {
                   <td className="svc-table__num">{e.amountEth} ETH</td>
                   <td className="muted svc-table__num" title={new Date(e.deadline * 1000).toLocaleString()}>{(() => { const d = formatDeadlineRelative(e.deadline); return <span style={d.expired ? { color: "var(--red)" } : {}}>{d.label}</span>; })()}</td>
                   <td>{e.state === "Open" ? <span className="pill">open</span> : e.state === "Released" ? <span className="pill ok">released</span> : e.state === "Refunded" ? <span className="pill">refunded</span> : "—"}</td>
-                  <td><a href={arbitrumExplorerTxUrl(e.txHash)} target="_blank" rel="noreferrer"><code>{e.txHash.slice(0, 10)}…</code></a></td>
+                  <td><a href={arbitrumExplorerTxUrl(e.txHash, netMode)} target="_blank" rel="noreferrer"><code>{e.txHash.slice(0, 10)}…</code></a></td>
                   <td>
                     <span className="row sm" style={{ gap: 6 }}>
                       {e.id != null && e.state === "Open" && <>

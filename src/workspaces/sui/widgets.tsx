@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import { SuiDemoFlow, SuiLiveContractsPanel } from "./inline-widgets";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Bolt, Code, Star, Robot, Shield, Receipt as RIco } from "../../icons402";
 import {
@@ -77,11 +79,28 @@ export function renderAgentExtra(_workspace: Workspace): ReactNode | null {
   return null;
 }
 
+function SuiEcosystemLinks() {
+  const { mode } = useNetworkMode("sui");
+  const isTestnet = mode === "testnet";
+  const groups = isTestnet ? [
+    { title: "Explorer", items: [{ label: "Sui Testnet Explorer", url: "https://suiscan.xyz/testnet" }, { label: "SuiVision Testnet", url: "https://testnet.suivision.xyz" }] },
+    { title: "Faucet", items: [{ label: "Sui Testnet Faucet", url: "https://faucet.sui.io" }] },
+    { title: "Walrus", items: [{ label: "Walrus Testnet", url: "https://walrus.space" }] },
+  ] : [
+    { title: "Explorer", items: [{ label: "Suiscan", url: "https://suiscan.xyz" }, { label: "SuiVision", url: "https://suivision.xyz" }] },
+    { title: "Swap", items: [{ label: "Cetus DEX", url: "https://app.cetus.zone" }, { label: "Aftermath Finance", url: "https://aftermath.finance" }] },
+    { title: "DeepBook", items: [{ label: "DeepBook v3 Docs", url: "https://docs.deepbook.tech" }] },
+    { title: "Walrus & Seal", items: [{ label: "Walrus", url: "https://walrus.space" }, { label: "Sui Seal", url: "https://docs.sui.io/concepts/cryptography/seal" }] },
+  ];
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Sui Testnet" : "Sui Mainnet"} accent="#6FBCF0" />;
+}
+
 export function renderOverviewExtra(workspace: Workspace, onGoTab: (t: string) => boolean, onGoReceipts: () => void): ReactNode | null {
   return (
     <>
       <SuiDemoFlow workspace={workspace} onGoTab={onGoTab} onGoReceipts={onGoReceipts} />
       <SuiLiveContractsPanel />
+      <SuiEcosystemLinks />
     </>
   );
 }

@@ -25,7 +25,7 @@ function feedHandler(req: Request, res: Response): void {
   if (!x || !x.service) { res.status(500).json({ error: "x402 context missing" }); return; }
 
   const { service } = x;
-  const agentId = req.header("X-Agent-Id") ?? "anonymous";
+  const agentId = ((req.header("X-Agent-Id") ?? "anonymous").slice(0, 128).replace(/[^\x20-\x7E]/g, "") || "anonymous");
   const ws = service.workspaceIds[0] ?? "mantle";
 
   const receipt = appendReceipt({
@@ -57,7 +57,7 @@ async function agniLiquidityHandler(req: Request, res: Response): Promise<void> 
   if (!x || !x.service) { res.status(500).json({ error: "x402 context missing" }); return; }
 
   const { service } = x;
-  const agentId = req.header("X-Agent-Id") ?? "anonymous";
+  const agentId = ((req.header("X-Agent-Id") ?? "anonymous").slice(0, 128).replace(/[^\x20-\x7E]/g, "") || "anonymous");
   const ws = service.workspaceIds[0] ?? "mantle";
 
   appendReceipt({

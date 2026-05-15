@@ -3,6 +3,7 @@
  * Imported by WorkspaceDashboard.tsx and workspaces/0g/widgets.tsx.
  */
 import { useState, useEffect, useMemo, useRef } from "react";
+import { isTxHash } from "../../lib/validate";
 import {
   CircleDollarSign,
   Database,
@@ -23,6 +24,7 @@ import { deterministicScore, hashId, sha256Hex, fnv1aHex } from "../../lib/util-
 import { badgeFor } from "../../lib/ws-helpers";
 import type { Receipt, Workspace } from "../../types";
 import { services as allCatalogServices, makeTxHash } from "../../data";
+import { SEEDED_PINS } from "./index";
 import {
   ArrowUpRight,
   Bolt,
@@ -36,6 +38,7 @@ import { AgentScoreComparison } from "../../components/widgets/AgentScoreBadge";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage, registerAgentIdentity, anchorDeliveryOnChain } from "../../lib/og";
 import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../../lib/mantle";
 import { useWallet } from "../../wallet";
+import { useNetworkMode } from "../../hooks/useNetworkMode";
 import * as api from "../../lib/api";
 
 // ── Economy Dashboard ──────────────────────────────────────────────────────
@@ -114,7 +117,7 @@ export function EconomyDashboard() {
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", borderBottom: i < Math.min(feed.length - 1, 5) ? "1px solid var(--line-2)" : undefined, fontSize: ".74rem" }}>
               <span style={{ color: "#22c55e", fontWeight: 700, minWidth: 52 }}>${r.amount.toFixed(3)}</span>
               <span style={{ color: "var(--muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.serviceName}</span>
-              {r.nftTokenId != null && r.nftTxHash ? (
+              {r.nftTokenId != null && r.nftTxHash && isTxHash(r.nftTxHash) ? (
                 <a href={`https://explorer.mantle.xyz/tx/${r.nftTxHash}`} target="_blank" rel="noreferrer"
                   style={{ fontSize: ".6rem", fontWeight: 700, color: "#7C5CF8", background: "rgba(124,92,248,.12)", borderRadius: 4, padding: "1px 6px", textDecoration: "none", flexShrink: 0 }}>
                   NFT #{r.nftTokenId}
@@ -162,7 +165,8 @@ export function OgDemoFlow({
   onGoReceipts: () => void;
 }) {
   const { emitReceipt } = useAppState();
-  const ogCfg = getOgConfig();
+  const { mode } = useNetworkMode(workspace.id);
+  const ogCfg = getOgConfig(mode);
   const registryReady = isOgRegistryConfigured();
   const liveRegistryAddr = ogCfg.registryAddress ?? "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
   const [cursor, setCursor] = useState<number>(-1);
@@ -368,6 +372,145 @@ export function OgStorageEstimator() {
           Prices are estimates · 0G stores data with Merkle proofs · content survives as long as nodes are incentivized
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── OG Storage History ────────────────────────────────────────────────────
+export function OgStorageHistory({ workspace }: { workspace: Workspace }) {
+  const { receipts } = useAppState();
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const storageReceipts = useMemo(
+    () => receipts.filter((r) => r.workspaceId === workspace.id && (r.kind?.includes("pin") || r.kind?.includes("storage"))),
+    [receipts, workspace.id],
+  );
+
+  const seededIds = useMemo(() => new Set(SEEDED_PINS.map((p) => p.receiptId).filter(Boolean)), []);
+
+  const livePins = useMemo(() =>
+    storageReceipts
+      .filter((r) => !seededIds.has(r.id))
+      .map((r) => ({
+        id: r.id,
+        name: (r.payload as Record<string, unknown>)?.name as string ?? "blob",
+        hash: (r.payload as Record<string, unknown>)?.hash as string ?? hashId("h", r.id, 64),
+        size: (r.payload as Record<string, unknown>)?.size as number ?? 0,
+        receiptId: r.id,
+        createdAt: r.createdAt,
+      })),
+    [storageReceipts, seededIds],
+  );
+
+  const allPins = useMemo(
+    () => [...SEEDED_PINS, ...livePins].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [livePins],
+  );
+
+  function timeAgo(iso: string) {
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  function fmtSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function copyHash(hash: string) {
+    navigator.clipboard.writeText(hash).catch(() => {});
+    setCopied(hash);
+    setTimeout(() => setCopied(null), 1500);
+  }
+
+  return (
+    <div className="panel block">
+      <div className="block-head">
+        <div className="ttl">
+          <span className="sq soft">📁</span>
+          <div>
+            <h3>Storage pin history</h3>
+            <div className="sub">{allPins.length} blob{allPins.length !== 1 ? "s" : ""} pinned to 0G Storage · SHA-256 hash · click hash to copy</div>
+          </div>
+        </div>
+      </div>
+      {allPins.length === 0 ? (
+        <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>
+          No pins yet — use "Pin a memory blob" above to get started.
+        </div>
+      ) : (
+        <div style={{ padding: "0 0 4px" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0,1.8fr) minmax(0,2.6fr) 56px 68px 18px",
+            gap: 10, padding: "6px 16px",
+            fontSize: ".58rem", fontWeight: 800, textTransform: "uppercase",
+            letterSpacing: ".09em", color: "var(--muted)",
+            borderBottom: "1px solid var(--line-2)",
+          }}>
+            <span>Name</span><span>SHA-256</span>
+            <span style={{ textAlign: "right" }}>Size</span>
+            <span style={{ textAlign: "right" }}>When</span>
+            <span />
+          </div>
+          {allPins.map((pin, i) => (
+            <div key={pin.id} style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0,1.8fr) minmax(0,2.6fr) 56px 68px 18px",
+              gap: 10, padding: "10px 16px", alignItems: "center",
+              borderBottom: i < allPins.length - 1 ? "1px solid var(--line-2)" : "none",
+              fontSize: ".76rem",
+            }}>
+              <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {pin.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => copyHash(pin.hash)}
+                title="Copy full SHA-256"
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  background: "none", border: "none", padding: 0,
+                  cursor: "pointer", color: "var(--muted)",
+                  fontFamily: "var(--mono)", fontSize: ".64rem", textAlign: "left",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {pin.hash.slice(0, 10)}…{pin.hash.slice(-8)}
+                </span>
+                {copied === pin.hash
+                  ? <Check style={{ width: 11, height: 11, color: "#17b26a", flexShrink: 0 }} />
+                  : <Copy style={{ width: 11, height: 11, flexShrink: 0 }} />}
+              </button>
+              <span style={{ textAlign: "right", color: "var(--muted)", fontSize: ".68rem" }}>
+                {fmtSize(pin.size)}
+              </span>
+              <span style={{ textAlign: "right", color: "var(--muted)", fontSize: ".68rem" }}>
+                {timeAgo(pin.createdAt)}
+              </span>
+              <span style={{ display: "flex", justifyContent: "flex-end" }}>
+                {pin.receiptId && (
+                  <a
+                    href={ogExplorerTxUrl(pin.receiptId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View on 0G Explorer"
+                    style={{ color: "var(--muted)", display: "flex" }}
+                  >
+                    <ArrowUpRight style={{ width: 13, height: 13 }} />
+                  </a>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -618,7 +761,7 @@ type StepperStage = 0 | 1 | 2 | 3;
 export function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [stage, setStage] = useState<StepperStage>(0);
-  const [inputText, setInputText] = useState('{ "strategy": "rotate 40% mETH→USDY when spread<0.04%", "agentId": "agid_0g_77bd" }');
+  const [inputText, setInputText] = useState('{ "strategy": "rotate 40% ETH→USDC when spread<0.04%", "agentId": "agid_0g_77bd" }');
   const [encryptedHex, setEncryptedHex] = useState<string | null>(null);
   const [attestId, setAttestId] = useState<string | null>(null);
   const [teeQuote, setTeeQuote] = useState<string | null>(null);
@@ -723,7 +866,7 @@ export function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
 type A2AReceiptRow = { id: string; label: string; amount: number; currency: string };
 const A2A_STEPS: { title: string; body: React.ReactNode }[] = [
   { title: "Strategist agent hires the Executor", body: <>The Strategist needs a trade made but can&apos;t run a model itself. It pays the Executor <b>$0.02 USDC</b> over HTTP&nbsp;402 — agent paying agent, no account, no key.</> },
-  { title: "Executor pulls a signal from 0G Compute", body: <>The hired Executor calls <b>0G Compute</b> for a BUY / SELL / HOLD verdict on mETH&nbsp;/&nbsp;USDY, paying <b>$0.03 USDC</b> per call out of its earned balance — <b>self-funding</b>.</> },
+  { title: "Executor pulls a signal from 0G Compute", body: <>The hired Executor calls <b>0G Compute</b> for a BUY / SELL / HOLD verdict on ETH&nbsp;/&nbsp;USDC, paying <b>$0.03 USDC</b> per call out of its earned balance — <b>self-funding</b>.</> },
   { title: "Executor anchors its decision on-chain", body: <>The Executor writes <code>recordDecision(hash(verdict), hash(context))</code> to <code>AgentVault</code> — a permanent benchmarking trail of what it decided and why.</> },
   { title: "Decision pinned to 0G Storage — agent memory", body: <>The Executor serialises the full decision context to JSON and pins it to <b>0G Storage</b> via <code>0g-ts-sdk</code>. The Merkle root is written to <code>AgentIdentityRegistry.setMemoryRoot</code> — agent memory lives forever on 0G.</> },
 ];
@@ -775,7 +918,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     setRows((p) => [...p, { id: r1.id, label: "Strategist → Executor · hire", amount: 0.02, currency: "USDC" }]);
 
     setCursor(1);
-    const prompt = "Given the current mETH/USDY APY spread and 7-day momentum, answer with BUY, SELL or HOLD and a confidence 0-100. Return compact JSON {verdict, confidence}.";
+    const prompt = "Given the current ETH/USDC price spread and 7-day momentum on 0G, answer with BUY, SELL or HOLD and a confidence 0-100. Return compact JSON {verdict, confidence}.";
     const og = await runOgInference(prompt);
     let verdict: "BUY" | "SELL" | "HOLD"; let confidence: number; let live = false; let provider: string | undefined;
     if (og.ok) {
@@ -811,11 +954,11 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     setDecision({ txHash, onChain });
     const r3 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Executor records decision",
-      amount: 0, currency: onChain ? "MNT" : "USDC", network: onChain ? "mantle" : (workspace.networks[0] ?? "0g-testnet"), kind: "0g.a2a.execute",
+      amount: 0, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.a2a.execute",
       agentName: "Executor agent", status: onChain ? "verified" : undefined,
       payload: { from: EXECUTOR, verdict, confidence, decisionHash: decisionHashHex, contextHash: contextHashHex, txHash, onChain },
     });
-    setRows((p) => [...p, { id: r3.id, label: onChain ? "Executor · recordDecision on Mantle" : "Executor · decision recorded", amount: 0, currency: onChain ? "MNT" : "USDC" }]);
+    setRows((p) => [...p, { id: r3.id, label: onChain ? "Executor · recordDecision anchored on-chain" : "Executor · decision recorded", amount: 0, currency: "USDC" }]);
 
     setCursor(3);
     const memoryPayload = JSON.stringify({
@@ -855,7 +998,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     <div className="panel block ogdf mb">
       <div className="block-head">
         <div className="ttl">
-          <span className="sq soft"><Robot width={15} height={15} /></span>
+          <span className="sq soft" style={{ color: "var(--accent-primary)" }}><Robot width={18} height={18} /></span>
           <div>
             <h3>Agents pay agents · Strategist hires Executor</h3>
             <div className="sub">x402 micropayment → 0G Compute signal → AgentVault on-chain → 0G Storage memory. Self-funding: Executor earns, pays own compute.</div>
@@ -887,7 +1030,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
             { id: "strategist", label: "Strategist", sub: "hires & pays", x: 60,  y: 60, col: "#7C5CF8" },
             { id: "executor",   label: "Executor",   sub: "runs & earns", x: 220, y: 60, col: "#10b981" },
             { id: "compute",    label: "0G Compute", sub: "$0.03 · LLM",  x: 370, y: 20, col: "#3b82f6" },
-            { id: "vault",      label: "Mantle Vault",sub: "on-chain",     x: 370, y: 100, col: "#f59e0b" },
+            { id: "vault",      label: "Audit Trail", sub: "on-chain",     x: 370, y: 100, col: "#f59e0b" },
             { id: "storage",    label: "0G Storage", sub: "memory pin",   x: 370, y: 60, col: "#8b5cf6" },
           ];
           const edges = [
@@ -951,8 +1094,8 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
                 {i === 2 && decision && (
                   <div className="ogdf-out">
                     {decision.onChain
-                      ? <a href={mantleExplorerTxUrl(decision.txHash)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#1fb58a", fontWeight: 700, fontSize: ".78rem" }}><LinkIco width={12} height={12} /> recordDecision on Mantle <ArrowUpRight width={12} height={12} /></a>
-                      : <span className="muted" style={{ fontSize: ".74rem" }}>Decision recorded (hash <code style={{ background: "rgba(0,0,0,.12)", padding: "1px 5px", borderRadius: 5 }}>{decision.txHash.slice(0, 12)}…</code>). Set <code>VITE_MANTLE_VAULT_ADDRESS</code> to anchor it via <code>AgentVault.recordDecision</code> on Mantle.</span>}
+                      ? <a href={mantleExplorerTxUrl(decision.txHash)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#1fb58a", fontWeight: 700, fontSize: ".78rem" }}><LinkIco width={12} height={12} /> recordDecision anchored on-chain <ArrowUpRight width={12} height={12} /></a>
+                      : <span className="muted" style={{ fontSize: ".74rem" }}>Decision recorded (hash <code style={{ background: "rgba(0,0,0,.12)", padding: "1px 5px", borderRadius: 5 }}>{decision.txHash.slice(0, 12)}…</code>). Configure <code>VITE_MANTLE_VAULT_ADDRESS</code> to anchor it on-chain via <code>AgentVault.recordDecision</code>.</span>}
                     {err && <em style={{ color: "var(--red)", fontStyle: "normal", fontWeight: 600, marginLeft: 8, fontSize: ".74rem" }}>{err}</em>}
                   </div>
                 )}
@@ -1015,7 +1158,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
 }
 
 // ── OG Trading Arena ──────────────────────────────────────────────────────
-const OG_TRADE_PAIRS = ["mETH / USDY", "0G / ETH", "ETH / USDC", "BTC / ETH", "ARB / USDC"] as const;
+const OG_TRADE_PAIRS = ["ZG / USDC", "0G / ETH", "ETH / USDC", "BTC / ETH", "WBTC / USDC"] as const;
 const OG_STRATEGIES = ["RSI Momentum", "MACD Cross", "Mean Reversion", "Breakout", "Trend Follow"] as const;
 type TradingSignal = { id: string; pair: string; strategy: string; signal: "BUY" | "SELL" | "HOLD"; confidence: number; attestationId: string; sealed: boolean; ts: string };
 
@@ -2457,11 +2600,12 @@ export function OgBudgetControllerWidget({ workspace }: { workspace: Workspace }
   const [err, setErr] = useState<string | null>(null);
   const [setTx, setSetTx] = useState<string | null>(null);
   const [budget, setBudget] = useState<{ daily: string; perReq: string; spentToday: string; remaining: string; autoPay: boolean } | null>(null);
+  const { mode } = useNetworkMode(workspace.id);
 
   const switchToOg = async () => {
     const eth = (typeof window !== "undefined" ? (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum : undefined);
     if (!eth) return;
-    const cfg = getOgConfig();
+    const cfg = getOgConfig(mode);
     const cur = await eth.request({ method: "eth_chainId" }) as string;
     if (cur.toLowerCase() !== cfg.chainHex) {
       await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: cfg.chainHex }] });
