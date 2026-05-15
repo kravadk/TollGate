@@ -48,7 +48,16 @@ export const agentRaw: AgentRaw = {
   allowlist: ["svc_0g_inference", "svc_0g_storage", "svc_0g_context", "svc_0g_dav", "svc_0g_batch"],
 };
 
-export const seedRows: SeedRow[] = [];
+export const seedRows: SeedRow[] = [
+  { ws: "0g", svc: "svc_0g_inference", agent: "agent_0g_worker", mins: 3,   status: "verified", kind: "0g.inference",    payload: { model: "risk-scorer-v2", prompt: "wallet risk: 0xaA3f…", attestationId: "att_0g_3f9c2a", ogCompute: true, response: '{"riskScore":41,"label":"low","flags":[]}' } },
+  { ws: "0g", svc: "svc_0g_storage",   agent: "agent_0g_worker", mins: 11,  status: "verified", kind: "0g.storage.pin",  payload: { root: "0x9f2c8b4e1d3a7f60aa91bc54de2081cf44e3d0b", size: 3072, merkleComputed: true, onChain: true } },
+  { ws: "0g", svc: "svc_0g_inference", agent: "agent_0g_worker", mins: 24,  status: "verified", kind: "0g.trading.signal", payload: { pair: "ETH/USDC", strategy: "momentum-v2", signal: "BUY", confidence: 87, attestationId: "att_0g_c71a8b", sealed: true } },
+  { ws: "0g", svc: "svc_0g_dav",       agent: "agent_0g_worker", mins: 38,  status: "verified", kind: "0g.da.verify",    payload: { commitment: "0xb14fc9e2a7d301…", segment: 7, ok: true, root: "0x77da11…" } },
+  { ws: "0g", svc: "svc_0g_context",   agent: "agent_0g_worker", mins: 55,  status: "verified", kind: "0g.privacy.tee",  payload: { attestationId: "att_0g_e20f91", teeQuote: "SGX_QUOTE:v3·E20F91·verified", encryptedInput: "0x4aef…[AES-GCM-256]" } },
+  { ws: "0g", svc: "svc_0g_batch",     agent: "agent_0g_worker", mins: 72,  status: "paid",     kind: "0g.inference",   payload: { model: "risk-scorer-v2", prompts: 24, batchId: "batch_0g_31a", avgMs: 608 } },
+  { ws: "0g", svc: "svc_0g_storage",   agent: "agent_0g_worker", mins: 94,  status: "verified", kind: "0g.storage.pin", payload: { root: "0x2d9e4c1b8a7f3e06c55d1b09ea4720fc1a2b3c4d", size: 8192, merkleComputed: true, onChain: false } },
+  { ws: "0g", svc: "svc_0g_inference", agent: "agent_0g_worker", mins: 130, status: "verified", kind: "0g.inference",   payload: { model: "wallet-labeler", prompt: "label 0x9E31…", attestationId: "att_0g_7d4c01", ogCompute: true, response: '{"label":"defi-power-user","score":91}' } },
+];
 
 export type SeededPin = { id: string; name: string; hash: string; size: number; content: string; receiptId?: string; createdAt: string };
 
