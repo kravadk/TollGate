@@ -2409,10 +2409,29 @@ function ReceiptRow({ r, onClick, active }: { r: Receipt; onClick?: () => void; 
 
 const RECEIPT_FILTERS: (ReceiptStatus | "all")[] = ["all", "verified", "paid", "failed", "replayed", "expired"];
 
+const W1 = "0x0E437c109A4C1e15172c4dA557E77724D7243F71";
+const W2 = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
+const t = (m: number) => new Date(Date.now() - m * 60000).toISOString();
+const h = () => "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+const OG_DEMO_RECEIPTS: Receipt[] = [
+  { id: "rcpt_0g_d01", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "0G Inference Risk Report",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(3),   kind: "0g.inference",    payload: { model: "risk-scorer-v2", attestationId: "att_0g_3f9c2a", response: '{"riskScore":41,"label":"low"}' } },
+  { id: "rcpt_0g_d02", workspaceId: "0g", serviceId: "svc_0g_storage",   serviceName: "0G Storage Memory Write",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.020, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(11),  kind: "0g.storage.pin",  payload: { root: "0x9f2c8b4e1d3a7f60aa91bc54de2081cf44e3d0b", size: 3072, merkleComputed: true, onChain: true } },
+  { id: "rcpt_0g_d03", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "Trading Arena · ETH/USDC",   agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(24),  kind: "0g.trading.signal", payload: { pair: "ETH/USDC", signal: "BUY", confidence: 87, sealed: true } },
+  { id: "rcpt_0g_d04", workspaceId: "0g", serviceId: "svc_0g_dav",       serviceName: "0G DA Verify",               agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.015, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(38),  kind: "0g.da.verify",    payload: { segment: 7, ok: true, root: "0x77da11c2e4a3f90b" } },
+  { id: "rcpt_0g_d05", workspaceId: "0g", serviceId: "svc_0g_context",   serviceName: "0G Privacy · TEE Execution", agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.018, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(55),  kind: "0g.privacy.tee",  payload: { attestationId: "att_0g_e20f91", teeQuote: "SGX_QUOTE:v3·E20F91·verified" } },
+  { id: "rcpt_0g_d06", workspaceId: "0g", serviceId: "svc_0g_batch",     serviceName: "0G Compute Batch Job",       agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.090, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "paid",     createdAt: t(72),  kind: "0g.inference",    payload: { model: "risk-scorer-v2", prompts: 24, batchId: "batch_0g_31a", avgMs: 608 } },
+  { id: "rcpt_0g_d07", workspaceId: "0g", serviceId: "svc_0g_storage",   serviceName: "0G Storage Memory Write",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.020, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(94),  kind: "0g.storage.pin",  payload: { root: "0x2d9e4c1b8a7f3e06c55d1b09ea4720fc1a2b3c4d", size: 8192 } },
+  { id: "rcpt_0g_d08", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "0G Inference Risk Report",   agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(130), kind: "0g.inference",    payload: { model: "wallet-labeler", attestationId: "att_0g_7d4c01", response: '{"label":"defi-power-user","score":91}' } },
+];
+
 export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Receipt[]; workspace: Workspace; tabLabel: string }) {
   const [filter, setFilter] = useState<ReceiptStatus | "all">("all");
   const [sel, setSel] = useState<Receipt | null>(null);
-  const all = useMemo(() => receipts.filter((r) => r.workspaceId === workspace.id), [receipts, workspace.id]);
+  const all = useMemo(() => {
+    const ws = receipts.filter((r) => r.workspaceId === workspace.id);
+    if (ws.length === 0 && workspace.id === "0g") return OG_DEMO_RECEIPTS;
+    return ws;
+  }, [receipts, workspace.id]);
   const rows = useMemo(() => all.filter((r) => filter === "all" || r.status === filter), [all, filter]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
