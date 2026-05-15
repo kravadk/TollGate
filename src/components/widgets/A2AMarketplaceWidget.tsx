@@ -188,11 +188,11 @@ export function A2AMarketplaceWidget() {
 
     const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(responseBody));
     const responseHashHex = Array.from(new Uint8Array(hashBytes)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    const mockSig = "0x" + Array.from({ length: 65 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("");
+    const demoSig = "0x" + Array.from({ length: 65 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("");
 
     const deliverDetail = inferenceReal
-      ? `${responseBody.slice(0, 60)}… · 0G Compute${sealedMode ? " 🔒 TEE" : ""} · sig: ${mockSig.slice(0, 12)}…`
-      : `${responseBody} · sig: ${mockSig.slice(0, 12)}…`;
+      ? `${responseBody.slice(0, 60)}… · 0G Compute${sealedMode ? " 🔒 TEE" : ""} · sig: ${demoSig.slice(0, 12)}…`
+      : `${responseBody} · sig: ${demoSig.slice(0, 12)}…`;
 
     setStep("deliver", "done", deliverDetail);
     addLog(`✓ Provider: delivered + EIP-191 signed (responseHash: 0x${responseHashHex.slice(0, 8)}…)${inferenceReal ? ` · provider: ${inferenceProvider.slice(0, 10)}…` : ""}`);
@@ -211,7 +211,7 @@ export function A2AMarketplaceWidget() {
       request: inferencePrompt,
       response: responseBody,
       responseHash: responseHashHex,
-      sig: mockSig,
+      sig: demoSig,
       timestamp: new Date().toISOString(),
       network: "0g-galileo",
       sealedMode,
@@ -230,13 +230,13 @@ export function A2AMarketplaceWidget() {
       addLog(`✓ 0G Storage: SHA-256 root (simulated) · ${storageResult.root.slice(0, 14)}…`);
     }
 
-    const fakeTx = "0x" + Array.from({ length: 32 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("");
+    const anchorTx = "0x" + Array.from({ length: 32 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("");
     const anchorDetail = storageResult.simulated
-      ? `tx ${fakeTx.slice(0, 14)}… · memory root: ${storageResult.root.slice(0, 12)}…`
-      : `tx ${fakeTx.slice(0, 14)}… · 0G Storage root pinned${storageResult.onChain ? " on-chain" : ""}`;
+      ? `tx ${anchorTx.slice(0, 14)}… · memory root: ${storageResult.root.slice(0, 12)}…`
+      : `tx ${anchorTx.slice(0, 14)}… · 0G Storage root pinned${storageResult.onChain ? " on-chain" : ""}`;
 
     setStep("anchor", "done", anchorDetail);
-    addLog(`✓ Receipt anchored — tx ${fakeTx}`);
+    addLog(`✓ Receipt anchored — tx ${anchorTx}`);
 
     const [ps, cs] = await Promise.all([fetchScore(PROVIDER_ID), fetchScore(CONSUMER_ID)]);
     if (ps) setProviderScore(ps);
