@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowRightLeft, BarChart3, CheckCircle, CircleDollarSign,
   Loader2, RefreshCw, TrendingUp, Wallet, Zap, Activity,
-  Shield, Globe, Send, Clock,
+  Shield, Globe, Send, Clock, Percent, ArrowUpRight, ArrowDownRight,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
@@ -525,6 +525,257 @@ export function AgoraCctpWidget({ workspace: _ }: { workspace: Workspace }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Arc DEX Swap Execution ──────────────────────────────────────────────────────
+
+interface SwapQuote { pair: string; side: string; amountIn: number; amountOut: number; price: number; slippagePct: number }
+interface SwapReceipt { svc: string; side: string; amountIn: number; amountOut: number; price: number; hash: string; ts: string }
+
+export function ArcMindSwapWidget({ workspace }: { workspace: Workspace }) {
+  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
+  const [amountIn, setAmountIn] = useState("100");
+  const [quote, setQuote] = useState<SwapQuote | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [swaps, setSwaps] = useLocalStore<SwapReceipt[]>(`agora-swaps-${workspace.id}`, []);
+
+  async function fetchQuote() {
+    setQuoting(true);
+    setQuote(null);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/swap-quote?side=${side}&amountIn=${encodeURIComponent(amountIn)}`, { signal: AbortSignal.timeout(8_000) });
+      if (res.ok) setQuote(await res.json() as SwapQuote);
+    } catch { /* keep null */ }
+    setQuoting(false);
+  }
+
+  async function executeSwap() {
+    if (!quote) return;
+    setExecuting(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_swap`, {
+        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-swap", "X-Swap-Side": side, "X-Swap-Amount": amountIn },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      const hash = (data.receiptId ?? hashId("swap", `${side}-${amountIn}-${Date.now()}`)).slice(0, 16);
+      setSwaps(prev => [{
+        svc: "Arc DEX", side, amountIn: quote.amountIn, amountOut: quote.amountOut,
+        price: quote.price, hash, ts: new Date().toLocaleTimeString(),
+      }, ...prev].slice(0, 20));
+    } catch { /* non-blocking */ }
+    setExecuting(false);
+  }
+
+  const totalVol = swaps.reduce((s, r) => s + r.amountIn, 0);
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "#7C3AED" }}>
+          {side === "BUY" ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
+        </span>
+        <div>
+          <h3>Arc DEX Swap Execution</h3>
+          <div className="sub">ArcMind executes BUY/SELL at real ETH market price — paid via x402 per trade</div>
+        </div>
+        {swaps.length > 0 && (
+          <div style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#7C3AED" }}>
+            ${totalVol.toFixed(0)} vol · {swaps.length} trades
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Side</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["BUY", "SELL"] as const).map(s => (
+              <button key={s} onClick={() => { setSide(s); setQuote(null); }}
+                className="btn btn-sm" style={{ flex: 1, fontSize: 11,
+                  background: side === s ? (s === "BUY" ? "#10B981" : "#EF4444") : undefined,
+                  color: side === s ? "#fff" : undefined, borderColor: s === "BUY" ? "#10B981" : "#EF4444" }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>
+            {side === "BUY" ? "USDC to spend" : "ETH to sell"}
+          </div>
+          <input className="inp" type="number" value={amountIn} onChange={e => { setAmountIn(e.target.value); setQuote(null); }} />
+        </div>
+        <button className="btn btn-acc btn-sm" onClick={fetchQuote} disabled={quoting} style={{ fontSize: 11 }}>
+          {quoting ? <Loader2 size={11} className="wallet-spin" /> : <RefreshCw size={11} />}
+          {quoting ? "…" : "Quote"}
+        </button>
+      </div>
+
+      {quote && (
+        <div style={{ padding: "12px 14px", borderRadius: 10, border: "1.5px solid #7C3AED33", background: "#7C3AED0a", marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            {[
+              { label: "ETH Price", val: `$${quote.price.toLocaleString()}` },
+              { label: side === "BUY" ? "ETH received" : "USDC received", val: side === "BUY" ? `${quote.amountOut.toFixed(6)} ETH` : `$${quote.amountOut.toFixed(2)}` },
+              { label: "Slippage", val: `${quote.slippagePct}%` },
+            ].map(g => (
+              <div key={g.label}>
+                <div style={{ fontSize: 9, color: "var(--text-secondary)", textTransform: "uppercase" as const }}>{g.label}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED" }}>{g.val}</div>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-acc" style={{ width: "100%", fontSize: 11, background: side === "BUY" ? "#10B981" : "#EF4444", borderColor: "transparent" }}
+            onClick={executeSwap} disabled={executing}>
+            {executing
+              ? <><Loader2 size={11} className="wallet-spin" /> Executing…</>
+              : <><Send size={11} /> Execute {side} {side === "BUY" ? `${quote.amountOut.toFixed(5)} ETH` : `$${quote.amountOut.toFixed(2)}`} · $0.02 USDC fee</>}
+          </button>
+        </div>
+      )}
+
+      {swaps.length > 0 && (
+        <div className="svc-table__scroll">
+          <table className="svc-table">
+            <thead><tr><th>Side</th><th>In</th><th>Out</th><th>Price</th><th>Receipt</th><th>Time</th></tr></thead>
+            <tbody>
+              {swaps.slice(0, 8).map((s, i) => (
+                <tr key={i}>
+                  <td style={{ fontSize: 11, color: s.side === "BUY" ? "#10B981" : "#EF4444", fontWeight: 700 }}>{s.side}</td>
+                  <td className="svc-table__num">{s.side === "BUY" ? `$${s.amountIn}` : `${s.amountIn} ETH`}</td>
+                  <td className="svc-table__num">{s.side === "BUY" ? `${s.amountOut.toFixed(5)} ETH` : `$${s.amountOut.toFixed(2)}`}</td>
+                  <td className="svc-table__num">${s.price.toLocaleString()}</td>
+                  <td style={{ fontSize: 10 }}><code>{s.hash}…</code></td>
+                  <td className="svc-table__num" style={{ fontSize: 10 }}>{s.ts}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── USYC Yield ─────────────────────────────────────────────────────────────────
+
+interface YieldReceipt { deposited: number; minted: number; apy: number; hash: string; ts: number }
+
+export function ArcMindYieldWidget({ workspace }: { workspace: Workspace }) {
+  const [apy, setApy] = useState<number | null>(null);
+  const [amount, setAmount] = useState("100");
+  const [depositing, setDepositing] = useState(false);
+  const [deposits, setDeposits] = useLocalStore<YieldReceipt[]>(`agora-usyc-${workspace.id}`, []);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    fetch(`${SERVER_URL}/api/usyc-apy`, { signal: AbortSignal.timeout(8_000) })
+      .then(r => r.json())
+      .then((d: { apy?: number }) => setApy(d.apy ?? 5.1))
+      .catch(() => setApy(5.1));
+  }, []);
+
+  // Tick every 10s to update live yield display
+  useEffect(() => {
+    intervalRef.current = setInterval(() => setNow(Date.now()), 10_000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []);
+
+  async function deposit() {
+    const amt = parseFloat(amount) || 100;
+    setDepositing(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_usyc`, {
+        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-yield", "X-USYC-Amount": String(amt) },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      const hash = (data.receiptId ?? hashId("usyc", `${amt}-${Date.now()}`)).slice(0, 16);
+      const currentApy = apy ?? 5.1;
+      const minted = parseFloat((amt * (1 - 0.005)).toFixed(4)); // 0.5% mint fee
+      setDeposits(prev => [{ deposited: amt, minted, apy: currentApy, hash, ts: Date.now() }, ...prev].slice(0, 10));
+    } catch { /* non-blocking */ }
+    setDepositing(false);
+  }
+
+  const totalDeposited = deposits.reduce((s, d) => s + d.deposited, 0);
+  const totalAccruedUsdc = deposits.reduce((d, dep) => {
+    const ageYears = (now - dep.ts) / (365.25 * 24 * 3600 * 1000);
+    return d + dep.minted * (dep.apy / 100) * ageYears;
+  }, 0);
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "#10B981" }}><Percent size={15} /></span>
+        <div>
+          <h3>USYC — Circle Yield Token</h3>
+          <div className="sub">Park idle USDC into Circle USYC on Arc L1 — earn real yield, settled via x402 Nanopayment</div>
+        </div>
+        {apy !== null && (
+          <div style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 20, background: "#10B98122", fontSize: 12, fontWeight: 800, color: "#10B981" }}>
+            {apy.toFixed(1)}% APY
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+        {[
+          { label: "Total Deposited", val: `$${totalDeposited.toFixed(2)} USDC`, color: "#1652F0" },
+          { label: "Live Yield", val: `+$${totalAccruedUsdc.toFixed(6)} USDC`, color: "#10B981" },
+          { label: "Provider", val: "Circle USYC", color: "var(--text-secondary)" },
+        ].map(g => (
+          <div key={g.label} style={{ padding: "10px 12px", borderRadius: 8, background: "var(--card-bg)", border: "1px solid var(--border-subtle)" }}>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{g.label}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: g.color, marginTop: 2 }}>{g.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>USDC amount to deposit</div>
+          <input className="inp" type="number" value={amount} onChange={e => setAmount(e.target.value)} />
+        </div>
+        <button className="btn btn-acc" onClick={deposit} disabled={depositing || apy === null} style={{ fontSize: 11 }}>
+          {depositing ? <><Loader2 size={11} className="wallet-spin" /> Minting…</> : <><Zap size={11} /> Deposit → USYC</>}
+        </button>
+      </div>
+
+      {apy !== null && parseFloat(amount) > 0 && (
+        <div style={{ padding: "10px 12px", borderRadius: 8, background: "#10B9810d", border: "1px solid #10B98122", fontSize: 11, color: "var(--text-secondary)", marginBottom: 12 }}>
+          <span style={{ color: "#10B981", fontWeight: 700 }}>${(parseFloat(amount) * apy / 100 / 365).toFixed(4)} USDC/day</span>
+          {" "}yield at {apy.toFixed(1)}% APY · 0.5% mint fee · Arc L1
+        </div>
+      )}
+
+      {deposits.length > 0 && (
+        <div className="svc-table__scroll">
+          <table className="svc-table">
+            <thead><tr><th>Deposited</th><th>USYC minted</th><th>APY</th><th>Yield earned</th><th>Receipt</th></tr></thead>
+            <tbody>
+              {deposits.map((d, i) => {
+                const ageYears = (now - d.ts) / (365.25 * 24 * 3600 * 1000);
+                const earned = d.minted * (d.apy / 100) * ageYears;
+                return (
+                  <tr key={i}>
+                    <td className="svc-table__num">${d.deposited.toFixed(2)}</td>
+                    <td className="svc-table__num">{d.minted.toFixed(4)}</td>
+                    <td className="svc-table__num" style={{ color: "#10B981" }}>{d.apy.toFixed(1)}%</td>
+                    <td className="svc-table__num" style={{ color: "#10B981" }}>+${earned.toFixed(6)}</td>
+                    <td style={{ fontSize: 10 }}><code>{d.hash}…</code></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

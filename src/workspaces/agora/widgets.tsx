@@ -15,6 +15,8 @@ import {
   AgoraX402Widget,
   AgoraLeaderboardWidget,
   AgoraCctpWidget,
+  ArcMindSwapWidget,
+  ArcMindYieldWidget,
 } from "../../components/widgets/agora/AgoraExtraWidgets";
 import {
   ArcMindCopyTradingWidget,
@@ -32,6 +34,8 @@ export {
   AgoraX402Widget,
   AgoraLeaderboardWidget,
   AgoraCctpWidget,
+  ArcMindSwapWidget,
+  ArcMindYieldWidget,
 } from "../../components/widgets/agora/AgoraExtraWidgets";
 export {
   ArcMindCopyTradingWidget,
@@ -144,6 +148,15 @@ export function renderTab(
   }
   if (tab.includes("kill") || tab.includes("risk")) {
     nodes.push(<ArcMindKillSwitchWidget key="kill" workspace={workspace} />);
+  }
+  if (tab.includes("swap") || tab.includes("dex")) {
+    nodes.push(<ArcMindSwapWidget key="swap" workspace={workspace} />);
+  }
+  if (tab.includes("usyc") || tab.includes("yield")) {
+    nodes.push(
+      <ArcMindYieldWidget key="yield" workspace={workspace} />,
+      <ArcMindSwapWidget key="swap-yield" workspace={workspace} />,
+    );
   }
 
   return nodes.length > 0 ? <>{nodes}</> : null;

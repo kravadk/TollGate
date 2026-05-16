@@ -328,6 +328,130 @@ apiRouter.get("/arc-decisions", (_req: Request, res: Response) => {
   }
 });
 
+// ─── Signals aggregator (ArcMind Signal Hub) ─────────────────────────────────
+
+interface HlCtx { openInterest: string; funding: string }
+interface PmMarket { question: string; outcomePrices?: string[]; volume24hr?: number }
+
+apiRouter.get("/signals", async (_req: Request, res: Response) => {
+  let whale: { netFlow: number; direction: "bullish" | "bearish" | "neutral" } = { netFlow: 0, direction: "neutral" };
+  try {
+    const hlRes = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "metaAndAssetCtxs" }),
+      signal: AbortSignal.timeout(7_000),
+    });
+    if (hlRes.ok) {
+      const hlData = await hlRes.json() as [{ universe: { name: string }[] }, HlCtx[]];
+      const ethIdx = hlData[0].universe.findIndex((u) => u.name === "ETH");
+      if (ethIdx >= 0 && hlData[1][ethIdx]) {
+        const ctx = hlData[1][ethIdx];
+        const oi  = parseFloat(ctx.openInterest);
+        const fr  = parseFloat(ctx.funding);
+        whale = {
+          netFlow: isNaN(oi) ? 0 : parseFloat((oi / 1e6).toFixed(1)),
+          direction: (!isNaN(fr) && fr > 0.0001) ? "bullish" : (!isNaN(fr) && fr < -0.0001) ? "bearish" : "neutral",
+        };
+      }
+    }
+  } catch { /* fallback */ }
+
+  let polymarket: { question: string; yesPct: number; volume24h: number } =
+    { question: "ETH above $3000 by EOY?", yesPct: 50, volume24h: 0 };
+  try {
+    const pmRes = await fetch(
+      "https://gamma-api.polymarket.com/markets?tag=crypto&limit=5&active=true",
+      { signal: AbortSignal.timeout(6_000) }
+    );
+    if (pmRes.ok) {
+      const pmData = await pmRes.json() as PmMarket[];
+      const mkt = Array.isArray(pmData) ? pmData[0] : null;
+      if (mkt) {
+        const prices = Array.isArray(mkt.outcomePrices) ? mkt.outcomePrices.map(Number) : [0.5];
+        polymarket = {
+          question: mkt.question ?? polymarket.question,
+          yesPct: Math.round((prices[0] ?? 0.5) * 100),
+          volume24h: mkt.volume24hr ?? 0,
+        };
+      }
+    }
+  } catch { /* fallback */ }
+
+  let ethPrice = 0;
+  try {
+    const cgRes = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+      { signal: AbortSignal.timeout(6_000) }
+    );
+    if (cgRes.ok) {
+      const cgData = await cgRes.json() as { ethereum?: { usd?: number } };
+      ethPrice = cgData?.ethereum?.usd ?? 0;
+    }
+  } catch { /* fallback */ }
+
+  res.json({ polymarket, whale, ethPrice, ts: new Date().toISOString() });
+});
+
+// ─── USYC APY (DeFiLlama → Circle USYC pool) ─────────────────────────────────
+
+interface LlamaPool { symbol: string; apy: number; project?: string }
+
+apiRouter.get("/usyc-apy", async (_req: Request, res: Response) => {
+  let apy = 5.1; // Circle USYC typical APY fallback
+  try {
+    const r = await fetch("https://yields.llama.fi/pools", { signal: AbortSignal.timeout(8_000) });
+    if (r.ok) {
+      const data = await r.json() as { data: LlamaPool[] };
+      const pool = data.data?.find(p => p.symbol?.toUpperCase().includes("USYC"));
+      if (pool?.apy) apy = parseFloat(pool.apy.toFixed(2));
+    }
+  } catch { /* fallback */ }
+  res.json({ apy, asset: "USYC", provider: "Circle", network: "arc-testnet", ts: new Date().toISOString() });
+});
+
+// ─── Swap quote (real ETH price via CoinGecko) ────────────────────────────────
+
+apiRouter.get("/swap-quote", async (req: Request, res: Response) => {
+  const side = String(req.query["side"] ?? "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  const amountIn = Math.min(Math.max(parseFloat(String(req.query["amountIn"] ?? "100")) || 100, 0.001), 1_000_000);
+
+  let ethPrice = 3412.5;
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6_000) });
+    if (r.ok) {
+      const d = await r.json() as { ethereum?: { usd?: number } };
+      ethPrice = d?.ethereum?.usd ?? ethPrice;
+    }
+  } catch { /* fallback */ }
+
+  const slippage = 0.001; // 0.1%
+  const amountOut = side === "BUY"
+    ? parseFloat(((amountIn / ethPrice) * (1 - slippage)).toFixed(8))
+    : parseFloat((amountIn * ethPrice * (1 - slippage)).toFixed(4));
+
+  res.json({ pair: "ETH/USDC", side, amountIn, amountOut, price: ethPrice, slippagePct: 0.1, network: "arc-testnet", ts: new Date().toISOString() });
+});
+
+// ─── Agent leaderboard ────────────────────────────────────────────────────────
+
+apiRouter.get("/leaderboard", (_req: Request, res: Response) => {
+  const all = listReceipts();
+  const byAgent = new Map<string, { amount: number }[]>();
+  for (const r of all) {
+    if (!byAgent.has(r.agentId)) byAgent.set(r.agentId, []);
+    byAgent.get(r.agentId)!.push({ amount: r.amount });
+  }
+  const rows = Array.from(byAgent.entries())
+    .map(([agentId, receipts]) => {
+      const s = computeAgentScore(agentId, receipts);
+      return { agentId, score: s.score, tier: s.tier, receipts: receipts.length, volumeUsd: s.volumeUsd };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  res.json({ leaderboard: rows, ts: new Date().toISOString() });
+});
+
 export const statusRouter = Router();
 
 statusRouter.get("/health", (_req: Request, res: Response) => {
