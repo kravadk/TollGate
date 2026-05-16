@@ -11,7 +11,7 @@ import { useAppState } from "../../../app-state";
 import { deterministicScore, hashId } from "../../../lib/util-hash";
 import {
   isAgoraEscrowConfigured, isAgoraRegistryConfigured,
-  stakeToEscrow, registerArcAgent, recordArcDecision,
+  stakeToEscrow, registerArcAgent, recordArcDecision, resolveArcDecision,
   arcExplorerTxUrl,
 } from "../../../lib/agora";
 
@@ -282,6 +282,21 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
   const [decTxHash, setDecTxHash] = useLocalStore<string | null>(`arcmind-dec-tx-${workspace.id}`, null);
   const [onchainErr, setOnchainErr] = useState<string | null>(null);
   const [onchainLoading, setOnchainLoading] = useState<"register" | "record" | null>(null);
+  const [resolveTxHashes, setResolveTxHashes] = useLocalStore<Record<string, string>>(`arcmind-resolve-tx-${workspace.id}`, {});
+  const [resolving, setResolving] = useState<string | null>(null);
+
+  async function resolveTrace(trace: Trace, index: number) {
+    setResolving(trace.id);
+    setOnchainErr(null);
+    try {
+      const { txHash } = await resolveArcDecision(index, trace.outcome);
+      setResolveTxHashes((prev: Record<string, string>) => ({ ...prev, [trace.id]: txHash }));
+    } catch (e: unknown) {
+      setOnchainErr((e as { message?: string }).message ?? "Resolve failed.");
+    } finally {
+      setResolving(null);
+    }
+  }
 
   async function registerAgent() {
     setOnchainErr(null);
@@ -378,13 +393,31 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
                         <div><span className="text-gray-500">Rationale: </span><span className="text-gray-300">{trace.rationale}</span></div>
                         <div><span className="text-gray-500">Outcome: </span><span className="text-green-400">{trace.outcome}</span></div>
                       </div>
-                      <button
-                        onClick={() => copyJson(trace)}
-                        className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
-                      >
-                        {copied === trace.id ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        {copied === trace.id ? "Copied!" : "Copy JSON"}
-                      </button>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => copyJson(trace)}
+                          className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
+                        >
+                          {copied === trace.id ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copied === trace.id ? "Copied!" : "Copy JSON"}
+                        </button>
+                        {isAgoraRegistryConfigured() && agentId && !resolveTxHashes[trace.id] && (
+                          <button
+                            onClick={() => resolveTrace(trace, SAMPLE_TRACES.indexOf(trace))}
+                            disabled={resolving === trace.id}
+                            className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 disabled:opacity-50"
+                          >
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            {resolving === trace.id ? "Resolving…" : "Resolve Outcome (+rep)"}
+                          </button>
+                        )}
+                        {resolveTxHashes[trace.id] && (
+                          <a href={arcExplorerTxUrl(resolveTxHashes[trace.id])} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300">
+                            <ExternalLink className="w-3 h-3" /> Resolved ↗ +rep
+                          </a>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <button
@@ -594,9 +627,23 @@ interface ArcDecision {
 
 const SERVER = import.meta.env.VITE_SERVER_URL ?? "";
 
+function useCountdown(intervalSec: number): string {
+  const [remaining, setRemaining] = useState(0);
+  useEffect(() => {
+    const tick = () => setRemaining(intervalSec - (Math.floor(Date.now() / 1000) % intervalSec));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [intervalSec]);
+  const m = String(Math.floor(remaining / 60)).padStart(2, "0");
+  const s = String(remaining % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 export function ArcDecisionLogWidget() {
   const [decisions, setDecisions] = useState<ArcDecision[]>([]);
   const [loading, setLoading] = useState(true);
+  const countdown = useCountdown(1800);
 
   async function load() {
     try {
@@ -621,7 +668,7 @@ export function ArcDecisionLogWidget() {
       <div className="flex items-center gap-2">
         <Activity className="w-5 h-5 text-violet-400" />
         <h3 className="font-semibold text-white">Autonomous Decision Log</h3>
-        <span className="ml-auto text-xs text-gray-500">live · 30 min ticks</span>
+        <span className="ml-auto text-xs text-gray-500">next in <span className="font-mono text-violet-400">{countdown}</span></span>
       </div>
       <p className="text-xs text-gray-400">
         Real on-chain decisions recorded by ArcMind every 30 min via ArcMindRegistry.recordDecision().
