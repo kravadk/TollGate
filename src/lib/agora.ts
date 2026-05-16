@@ -9,7 +9,7 @@
  *
  * Same graceful-degradation pattern as src/lib/arbitrum.ts and src/lib/mantle.ts.
  */
-import { BrowserProvider, Contract, encodeBytes32String } from "ethers";
+import { BrowserProvider, Contract, encodeBytes32String, Interface, JsonRpcProvider } from "ethers";
 import type { NetworkMode } from "./chains";
 
 function env(key: string): string | undefined {
@@ -69,6 +69,7 @@ function getEth(): Eip1193 {
 const REGISTRY_ABI = [
   "function registerAgent(bytes32 builderId, string calldata metadata) external returns (bytes32 agentId)",
   "function recordDecision(bytes32 agentId, bytes32 decisionHash) external returns (uint256 index)",
+  "function resolveDecision(uint256 index, bytes32 outcomeHash) external",
   "function getReputation(bytes32 agentId) external view returns (uint256)",
 ];
 
@@ -134,6 +135,38 @@ export async function recordArcDecision(agentId: string, decisionJson: string): 
   const tx = await registry.recordDecision(agentId, decisionHash);
   const receipt = await tx.wait() as { hash: string };
   return { txHash: receipt.hash };
+}
+
+export async function resolveArcDecision(index: number, outcome: string): Promise<{ txHash: string }> {
+  const cfg = getAgoraConfig();
+  if (!cfg.registryAddress) throw new Error("ArcMindRegistry not configured.");
+  await switchToArc();
+  const eth = getEth();
+  await eth.request({ method: "eth_requestAccounts" });
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const enc = new TextEncoder();
+  const raw = enc.encode(outcome);
+  const hashBuf = await crypto.subtle.digest("SHA-256", raw);
+  const outcomeHash = "0x" + Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  const registry = new Contract(cfg.registryAddress, REGISTRY_ABI, signer);
+  const tx = await registry.resolveDecision(index, outcomeHash);
+  const receipt = await tx.wait() as { hash: string };
+  return { txHash: receipt.hash };
+}
+
+export async function getArcAgentStats(agentId: string): Promise<{ reputation: number } | null> {
+  const cfg = getAgoraConfig();
+  if (!cfg.registryAddress || !agentId) return null;
+  try {
+    const iface = new Interface(REGISTRY_ABI);
+    const provider = new JsonRpcProvider("https://rpc.testnet.arc-node.thecanteenapp.com/v1/public");
+    const registry = new Contract(cfg.registryAddress, iface, provider);
+    const rep = await registry.getReputation(agentId) as bigint;
+    return { reputation: Number(rep) };
+  } catch {
+    return null;
+  }
 }
 
 export async function switchToArc(): Promise<void> {

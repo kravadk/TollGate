@@ -1,11 +1,12 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState, useEffect } from "react";
 import { TrendingUp, CircleDollarSign, Zap, ShieldCheck } from "lucide-react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
 import { Robot, Code, Receipt as RIco } from "../../icons402";
-import { getAgoraConfig } from "../../lib/agora";
+import { getAgoraConfig, getArcAgentStats } from "../../lib/agora";
 import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { useLocalStore } from "../../lib/storage";
 import { EcosystemLinksPanel } from "../../components/ui/EcosystemLinksPanel";
 import { AgoraTradingWidget } from "../../components/widgets/agora/AgoraTradingWidget";
 import {
@@ -151,9 +152,21 @@ export function renderAgentExtra(_workspace: Workspace): ReactNode | null {
 }
 
 // ── Arc Deployed Contracts panel ───────────────────────────────────────────────
-function ArcContractsPanel() {
+function ArcContractsPanel({ workspace }: { workspace: Workspace }) {
   const { mode } = useNetworkMode("agora");
   const cfg = getAgoraConfig(mode);
+  const [agentId] = useLocalStore<string | null>(`arcmind-agent-id-${workspace.id}`, null);
+  const [reputation, setReputation] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!agentId) return;
+    getArcAgentStats(agentId).then((s) => { if (s) setReputation(s.reputation); });
+    const id = setInterval(() => {
+      getArcAgentStats(agentId).then((s) => { if (s) setReputation(s.reputation); });
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [agentId]);
+
   const CONTRACTS = [
     { name: "ArcMindRegistry.sol", addr: cfg.registryAddress, note: "on-chain agent & service registry" },
     { name: "CopyTradeEscrow.sol", addr: cfg.escrowAddress, note: "ERC-8183 copy-trade escrow" },
@@ -162,7 +175,14 @@ function ArcContractsPanel() {
     <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden", marginTop: 14 }}>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
-        <span style={{ fontSize: ".62rem", color: "#1652F0", fontWeight: 700, background: "#1652F018", padding: "2px 7px", borderRadius: 5 }}>Arc L1 testnet · chainId 5042002</span>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {reputation !== null && (
+            <span style={{ fontSize: ".62rem", color: "#22c55e", fontWeight: 700, background: "#22c55e18", padding: "2px 7px", borderRadius: 5 }}>
+              rep {reputation}
+            </span>
+          )}
+          <span style={{ fontSize: ".62rem", color: "#1652F0", fontWeight: 700, background: "#1652F018", padding: "2px 7px", borderRadius: 5 }}>Arc L1 testnet · chainId 5042002</span>
+        </div>
       </div>
       {CONTRACTS.map((c) => (
         <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "1px solid var(--line-2)" }}>
@@ -205,13 +225,13 @@ function AgoraEcosystemLinks() {
 
 // ── Overview extra ─────────────────────────────────────────────────────────────
 export function renderOverviewExtra(
-  _workspace: Workspace,
+  workspace: Workspace,
   _onGoTab: (t: string) => boolean,
   _onGoReceipts: () => void,
 ): ReactNode | null {
   return (
     <>
-      <ArcContractsPanel />
+      <ArcContractsPanel workspace={workspace} />
       <AgoraEcosystemLinks />
     </>
   );

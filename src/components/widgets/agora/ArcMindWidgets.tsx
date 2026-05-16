@@ -481,10 +481,21 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
     let value = generateValue(src);
     if (src.id === "hyperliquid") {
       try {
-        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6000) });
-        const data = await res.json() as { ethereum?: { usd?: number } };
-        const ethPrice = data.ethereum?.usd;
-        if (ethPrice) value = `${(ethPrice / 1.3).toFixed(0)} M OI`;
+        const res = await fetch("https://api.hyperliquid.xyz/info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "metaAndAssetCtxs" }),
+          signal: AbortSignal.timeout(8_000),
+        });
+        const data = await res.json() as [{ universe: { name: string }[] }, { openInterest: string; funding: string }[]];
+        const ethIdx = data[0].universe.findIndex((u) => u.name === "ETH");
+        if (ethIdx >= 0 && data[1][ethIdx]) {
+          const ctx = data[1][ethIdx];
+          const oiNum = parseFloat(ctx.openInterest);
+          const oiStr = isNaN(oiNum) ? ctx.openInterest : `${(oiNum / 1e6).toFixed(1)}M`;
+          const fr = parseFloat(ctx.funding);
+          value = `${oiStr} OI · ${isNaN(fr) ? ctx.funding : (fr * 100).toFixed(4)}% funding`;
+        }
       } catch { /* fall back to deterministic */ }
     } else {
       await new Promise(r => setTimeout(r, 800));
