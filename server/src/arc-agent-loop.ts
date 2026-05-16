@@ -140,10 +140,12 @@ export async function arcAgentLoop(): Promise<void> {
     const registry = new ethers.Contract(REGISTRY, REGISTRY_ABI, wallet);
     const agentId32 = toBytes32(AGENT_ID);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (registry.recordDecision(agentId32, decisionHash) as Promise<any>);
+    const r = registry as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const receipt = await tx.wait() as any;
-    const txHash: string = receipt?.hash ?? tx?.hash ?? "unknown";
+    const tx = await (r.recordDecision(agentId32, decisionHash) as Promise<any>);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const receipt = await (tx.wait() as Promise<any>);
+    const txHash: string = (receipt?.hash ?? tx?.hash ?? "unknown") as string;
 
     console.log(`${tag} Recorded → ${txHash} | https://testnet.arcscan.app/tx/${txHash}`);
     appendLog({ ...payload, decisionHash, txHash });
