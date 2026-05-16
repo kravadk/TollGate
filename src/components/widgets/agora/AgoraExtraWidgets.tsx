@@ -13,11 +13,20 @@ const SERVER_URL = (import.meta.env as Record<string, string | undefined>)["VITE
 // ── Adaptive Portfolio Manager ──────────────────────────────────────────────────
 
 const ASSETS = [
-  { symbol: "USDC",  weight: 40, price: 1.000,  color: "#1652F0" },
-  { symbol: "ETH",   weight: 30, price: 3412.50, color: "#627EEA" },
-  { symbol: "BTC",   weight: 20, price: 67840.0, color: "#F7931A" },
-  { symbol: "ARC",   weight: 10, price: 2.14,    color: "#4B7BFF" },
+  { symbol: "USDC", weight: 40, price: 1.000,  color: "#1652F0" },
+  { symbol: "ETH",  weight: 30, price: 3412.50, color: "#627EEA" },
+  { symbol: "BTC",  weight: 20, price: 67840.0, color: "#F7931A" },
+  { symbol: "ARC",  weight: 10, price: 2.14,    color: "#4B7BFF" },
 ];
+
+async function fetchLivePrices(): Promise<{ eth: number; btc: number }> {
+  const res = await fetch(
+    "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd",
+    { signal: AbortSignal.timeout(6_000) }
+  );
+  const data = await res.json() as { ethereum?: { usd: number }; bitcoin?: { usd: number } };
+  return { eth: data.ethereum?.usd ?? 3412.50, btc: data.bitcoin?.usd ?? 67840.0 };
+}
 
 type Holding = { symbol: string; weight: number; value: number; price: number; color: string };
 type RebalanceTrade = { from: string; to: string; amount: number; hash: string; ts: string };
@@ -35,24 +44,41 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
 
   async function rebalance() {
     setRunning(true);
-    setPhase("Fetching Arc L1 price feeds via x402…");
-    await new Promise(r => setTimeout(r, 900));
-    setPhase("Running ML signal (momentum + mean-reversion)…");
-    await new Promise(r => setTimeout(r, 1000));
+    setPhase("Fetching live prices via CoinGecko…");
+
+    let liveEth = ASSETS[1].price, liveBtc = ASSETS[2].price;
+    try { ({ eth: liveEth, btc: liveBtc } = await fetchLivePrices()); } catch { /* fallback */ }
+
+    setPhase("Calling Portfolio Rebalance API via x402…");
+    let rebalanceReceiptId: string | null = null;
+    try {
+      const pRes = await fetch(`${SERVER_URL}/api/gateway/svc_arc_oracle`, {
+        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-portfolio" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (pRes.ok) {
+        const pData = await pRes.json() as { receiptId?: string };
+        rebalanceReceiptId = pData.receiptId ?? null;
+      }
+    } catch { /* non-blocking */ }
 
     const seed = Date.now();
+    const ethDir = liveEth > ASSETS[1].price ? 1 : -1;
     const newWeights = ASSETS.map((a, i) => {
-      const drift = (deterministicScore(`${seed}-${i}`, 0, 8) - 4) * 1.5;
-      return Math.max(5, Math.min(60, a.weight + drift));
+      const signal = i === 1 ? ethDir * 4 : i === 2 ? ethDir * 2 : -ethDir;
+      const noise = ((seed >> (i * 5)) & 0xf) / 8 - 1;
+      return Math.max(5, Math.min(60, a.weight + signal + noise));
     });
     const wSum = newWeights.reduce((s, w) => s + w, 0);
     const normalized = newWeights.map(w => w / wSum * 100);
 
-    setPhase("Executing rebalance via Circle CCTP…");
-    await new Promise(r => setTimeout(r, 1200));
+    setPhase(rebalanceReceiptId ? `x402 receipt ${rebalanceReceiptId.slice(0, 12)}… — applying trades` : "Applying rebalance…");
+    await new Promise(r => setTimeout(r, 600));
 
+    const livePrices = [1.000, liveEth, liveBtc, ASSETS[3].price];
     const newHoldings = ASSETS.map((a, i) => ({
       ...a,
+      price: livePrices[i],
       weight: +normalized[i].toFixed(1),
       value: +(total * normalized[i] / 100).toFixed(2),
     }));
@@ -65,7 +91,7 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
           from: delta < 0 ? a.symbol : "USDC",
           to: delta < 0 ? "USDC" : a.symbol,
           amount: +Math.abs(delta).toFixed(2),
-          hash: hashId("trade", `${a.symbol}-${seed}`).slice(0, 18),
+          hash: (rebalanceReceiptId ?? hashId("trade", `${a.symbol}-${seed}`)).slice(0, 14) + (i > 0 ? `[${i}]` : ""),
           ts: new Date().toLocaleTimeString(),
         });
       }
