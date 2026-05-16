@@ -21,6 +21,7 @@ import {
   ArcMindReasoningWidget,
   ArcMindSignalHubWidget,
   ArcMindKillSwitchWidget,
+  ArcDecisionLogWidget,
 } from "../../components/widgets/agora/ArcMindWidgets";
 
 // ── Re-exports (kept for backward compat) ──────────────────────────────────────
@@ -37,6 +38,7 @@ export {
   ArcMindReasoningWidget,
   ArcMindSignalHubWidget,
   ArcMindKillSwitchWidget,
+  ArcDecisionLogWidget,
 } from "../../components/widgets/agora/ArcMindWidgets";
 
 // ── Signature block ────────────────────────────────────────────────────────────
@@ -137,7 +139,10 @@ export function renderTab(
     nodes.push(<ArcMindReasoningWidget key="reasoning" workspace={workspace} />);
   }
   if (tab.includes("signal") || tab.includes("hub")) {
-    nodes.push(<ArcMindSignalHubWidget key="signal" workspace={workspace} />);
+    nodes.push(
+      <ArcDecisionLogWidget key="declog" />,
+      <ArcMindSignalHubWidget key="signal" workspace={workspace} />,
+    );
   }
   if (tab.includes("kill") || tab.includes("risk")) {
     nodes.push(<ArcMindKillSwitchWidget key="kill" workspace={workspace} />);

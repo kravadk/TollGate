@@ -14,6 +14,8 @@
 //   GET  /api/status/activity
 //   GET  /api/status/x402-log
 
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { env, isProd } from "./env.js";
@@ -309,6 +311,22 @@ apiRouter.get("/events/payments", (req: Request, res: Response) => {
 });
 
 // ─── Status / observability ────────────────────────────────────────────────
+
+const ARC_LOG = join(process.cwd(), "data", "arc-decisions.jsonl");
+
+apiRouter.get("/arc-decisions", (_req: Request, res: Response) => {
+  if (!existsSync(ARC_LOG)) return res.json({ decisions: [] });
+  try {
+    const lines = readFileSync(ARC_LOG, "utf8").trim().split("\n").filter(Boolean);
+    const decisions = lines
+      .slice(-20)
+      .reverse()
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    res.json({ decisions });
+  } catch {
+    res.json({ decisions: [] });
+  }
+});
 
 export const statusRouter = Router();
 

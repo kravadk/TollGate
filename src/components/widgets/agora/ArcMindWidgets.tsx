@@ -3,6 +3,7 @@ import { safeAmt } from "../../../lib/validate";
 import {
   Copy, Eye, Lock, Play, Pause, Shield, Zap, Brain,
   ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCheck, ExternalLink,
+  Activity,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
@@ -574,6 +575,90 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
       {decision && (
         <div className="rounded-lg bg-white/5 border border-cyan-500/30 p-3 text-xs text-gray-300 leading-relaxed">
           <span className="text-cyan-400 font-semibold">Decision: </span>{decision}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Decision Log ──────────────────────────────────────────────── */
+
+interface ArcDecision {
+  ts: string;
+  decision: "BUY" | "SELL" | "HOLD";
+  ethPrice: number;
+  oiValue: string;
+  fundingRate: string;
+  txHash: string | null;
+}
+
+const SERVER = import.meta.env.VITE_SERVER_URL ?? "";
+
+export function ArcDecisionLogWidget() {
+  const [decisions, setDecisions] = useState<ArcDecision[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    try {
+      const res = await fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(8_000) });
+      const data = await res.json() as { decisions: ArcDecision[] };
+      setDecisions(data.decisions ?? []);
+    } catch { /* server may be down */ }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const decisionColor = (d: string) =>
+    d === "BUY" ? "text-green-400" : d === "SELL" ? "text-red-400" : "text-yellow-400";
+
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-950/20 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Activity className="w-5 h-5 text-violet-400" />
+        <h3 className="font-semibold text-white">Autonomous Decision Log</h3>
+        <span className="ml-auto text-xs text-gray-500">live · 30 min ticks</span>
+      </div>
+      <p className="text-xs text-gray-400">
+        Real on-chain decisions recorded by ArcMind every 30 min via ArcMindRegistry.recordDecision().
+      </p>
+
+      {loading ? (
+        <div className="text-xs text-gray-500 text-center py-4">Loading…</div>
+      ) : decisions.length === 0 ? (
+        <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-center text-xs text-gray-500">
+          No decisions recorded yet — server starts on next deploy tick.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {decisions.map((d, i) => (
+            <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3 flex items-center gap-3">
+              <span className={`text-sm font-bold w-10 shrink-0 ${decisionColor(d.decision)}`}>{d.decision}</span>
+              <div className="flex-1 min-w-0 text-xs text-gray-400 space-y-0.5">
+                <div className="flex gap-3">
+                  <span>ETH <span className="text-gray-200">${d.ethPrice?.toLocaleString()}</span></span>
+                  <span>OI <span className="text-gray-200">{d.oiValue}</span></span>
+                </div>
+                <div className="text-gray-600">{new Date(d.ts).toLocaleString()}</div>
+              </div>
+              {d.txHash ? (
+                <a
+                  href={`https://testnet.arcscan.app/tx/${d.txHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-violet-400 hover:text-violet-300"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              ) : (
+                <span className="shrink-0 w-3.5 h-3.5" />
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
