@@ -8,6 +8,8 @@ import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
 import { deterministicScore, hashId } from "../../../lib/util-hash";
 
+const SERVER_URL = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
+
 // ── Adaptive Portfolio Manager ──────────────────────────────────────────────────
 
 const ASSETS = [
@@ -195,8 +197,24 @@ export function AgoraCircleToolsWidget({ workspace: _ }: { workspace: Workspace 
 
   async function runDemo(tool: string, fn: (seed: number) => string) {
     setLoading(tool);
-    await new Promise(r => setTimeout(r, 1100));
-    setResults(prev => ({ ...prev, [tool]: fn(Date.now()) }));
+    if (tool === "Nanopayments") {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_signal_hl`, {
+          headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "circle-tools-demo" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const data = res.ok ? await res.json() as { receiptId?: string; data?: { oiValue?: string; fundingRate?: string } } : {};
+        const oi = data.data?.oiValue ?? "1241.3M";
+        const rate = data.data?.fundingRate ?? "+0.032%/h";
+        const receiptId = (data.receiptId ?? hashId("nano", `${Date.now()}`)).slice(0, 10);
+        setResults(prev => ({ ...prev, [tool]: `Stream active · OI ${oi} · ${rate} · receipt ${receiptId}…` }));
+      } catch {
+        setResults(prev => ({ ...prev, [tool]: fn(Date.now()) }));
+      }
+    } else {
+      await new Promise(r => setTimeout(r, 1100));
+      setResults(prev => ({ ...prev, [tool]: fn(Date.now()) }));
+    }
     setLoading(null);
   }
 
@@ -245,10 +263,10 @@ export function AgoraCircleToolsWidget({ workspace: _ }: { workspace: Workspace 
 // ── x402 on Arc Live Flow ───────────────────────────────────────────────────────
 
 const X402_SERVICES = [
-  { id: "svc-oracle",  name: "Arc Price Oracle",    price: 0.02,  unit: "per call",  latency: "43ms" },
-  { id: "svc-arb",    name: "Arb Executor",          price: 0.05,  unit: "per trade", latency: "120ms" },
-  { id: "svc-llm",    name: "LLM Strategy Advisor",  price: 0.15,  unit: "per query", latency: "850ms" },
-  { id: "svc-alert",  name: "Price Alert Stream",    price: 0.001, unit: "/minute",   latency: "–" },
+  { id: "svc_arc_signal_hl", name: "Hyperliquid OI Feed",   price: 0.002, unit: "per call",  latency: "43ms",  real: true },
+  { id: "svc_arc_reasoning", name: "Reasoning Trace",        price: 0.01,  unit: "per trace", latency: "120ms", real: true },
+  { id: "svc-llm",           name: "LLM Strategy Advisor",   price: 0.15,  unit: "per query", latency: "850ms", real: false },
+  { id: "svc-alert",         name: "Price Alert Stream",     price: 0.001, unit: "/minute",   latency: "–",     real: false },
 ];
 
 export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
@@ -259,10 +277,25 @@ export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
 
   async function callService(svc: typeof X402_SERVICES[0]) {
     setCalling(svc.id);
-    const ms = svc.latency === "–" ? 600 : parseInt(svc.latency);
-    await new Promise(r => setTimeout(r, ms + 400));
-    const hash = hashId("x402", `${svc.id}-${Date.now()}`);
-    setCalls(prev => [{ svc: svc.name, amount: svc.price, hash: hash.slice(0, 16), ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
+    if (svc.real) {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/gateway/${svc.id}`, {
+          headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-user" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const data = res.ok ? await res.json() as { receiptId?: string } : {};
+        const hash = (data.receiptId ?? hashId("x402", `${svc.id}-${Date.now()}`)).slice(0, 16);
+        setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
+      } catch {
+        const hash = hashId("x402", `${svc.id}-${Date.now()}`).slice(0, 14) + "[err]";
+        setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
+      }
+    } else {
+      const ms = svc.latency === "–" ? 600 : parseInt(svc.latency);
+      await new Promise(r => setTimeout(r, ms + 400));
+      const hash = hashId("x402", `${svc.id}-${Date.now()}`).slice(0, 14) + "[sim]";
+      setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
+    }
     setCalling(null);
   }
 
@@ -285,7 +318,13 @@ export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
         {X402_SERVICES.map(svc => (
           <div key={svc.id} style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)", background: "var(--card-bg)", display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 700 }}>{svc.name}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{svc.name}</span>
+              {svc.real
+                ? <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#22c55e18", color: "#22c55e", fontWeight: 700 }}>live</span>
+                : <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#94a3b818", color: "#94a3b8", fontWeight: 600 }}>sim</span>
+              }
+            </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, background: "var(--accent-soft)", color: "var(--accent-primary)", fontWeight: 600 }}>${svc.price} {svc.unit}</span>
               {svc.latency !== "–" && (

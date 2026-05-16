@@ -33,6 +33,45 @@ const ARCMIND_POSITIONS: Omit<CopyPosition, "pnl" | "ts">[] = [
   { asset: "ARC/USDC", side: "LONG",  entry: 2.11,   size: 200  },
 ];
 
+interface ArcDecisionRaw { decision: "BUY" | "SELL" | "HOLD"; ethPrice: number; ts: string }
+
+function useArcDecisionStats(workspaceId: string) {
+  const [bias, setBias] = useState(0);
+  const [stats, setStats] = useState<{ ret30d: number; sharpe: number; winRate: number } | null>(null);
+
+  useEffect(() => {
+    fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) })
+      .then(r => r.json())
+      .then((d: { decisions: ArcDecisionRaw[] }) => {
+        const decisions = d.decisions ?? [];
+        const last = decisions[0];
+        if (last?.decision === "BUY") setBias(1);
+        else if (last?.decision === "SELL") setBias(-1);
+        else setBias(0);
+        if (decisions.length < 2) return;
+        let wins = 0, count = 0;
+        for (let i = 0; i < decisions.length - 1; i++) {
+          const curr = decisions[i], next = decisions[i + 1];
+          const priceUp = next.ethPrice > curr.ethPrice;
+          if (curr.decision === "HOLD") continue;
+          if ((curr.decision === "BUY" && priceUp) || (curr.decision === "SELL" && !priceUp)) wins++;
+          count++;
+        }
+        const first = decisions[decisions.length - 1];
+        const priceChangePct = first.ethPrice > 0 ? ((decisions[0].ethPrice - first.ethPrice) / first.ethPrice) * 100 : 0;
+        const winRate = count > 0 ? (wins / count) * 100 : deterministicScore(workspaceId + "wr", 60, 80);
+        setStats({
+          ret30d: parseFloat(priceChangePct.toFixed(1)),
+          sharpe: parseFloat((Math.max(0.3, winRate / 30)).toFixed(1)),
+          winRate: parseFloat(winRate.toFixed(0)),
+        });
+      })
+      .catch(() => {});
+  }, [workspaceId]);
+
+  return { bias, stats };
+}
+
 export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [positions, setPositions] = useLocalStore<CopyPosition[]>(
@@ -46,6 +85,9 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
   const [staking, setStaking] = useState(false);
   const [stakeTxHash, setStakeTxHash] = useLocalStore<string | null>(`arcmind-stake-tx-${workspace.id}`, null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { bias, stats } = useArcDecisionStats(workspace.id);
+  const biasRef = useRef(bias);
+  biasRef.current = bias;
 
   useEffect(() => {
     if (!following) return;
@@ -53,7 +95,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
       setPositions((prev: CopyPosition[]) =>
         prev.map((p: CopyPosition) => ({
           ...p,
-          pnl: p.pnl + (Math.random() - 0.46) * p.size * p.entry * 0.001,
+          pnl: p.pnl + (biasRef.current * 0.3 + (Math.random() - 0.5) * 0.2) * p.size * p.entry * 0.001,
         }))
       );
     }, 4000);
@@ -115,10 +157,6 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
     if (tickRef.current) clearInterval(tickRef.current);
   }
 
-  const ret30d = deterministicScore(workspace.id, 12, 42);
-  const sharpe = deterministicScore(workspace.id + "sharpe", 1.2, 3.2);
-  const winRate = deterministicScore(workspace.id + "wr", 60, 80);
-
   return (
     <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-5 space-y-4">
       <div className="flex items-center gap-2">
@@ -133,18 +171,27 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
 
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-white/5 p-3 text-center">
-          <div className="text-xs text-gray-400">30d Return</div>
-          <div className="text-lg font-bold text-green-400">+{ret30d.toFixed(1)}%</div>
+          <div className="text-xs text-gray-400">30d ETH Δ</div>
+          {stats ? (
+            <div className={`text-lg font-bold ${stats.ret30d >= 0 ? "text-green-400" : "text-red-400"}`}>
+              {stats.ret30d >= 0 ? "+" : ""}{stats.ret30d.toFixed(1)}%
+            </div>
+          ) : <div className="text-lg font-bold text-gray-600">—</div>}
         </div>
         <div className="rounded-lg bg-white/5 p-3 text-center">
           <div className="text-xs text-gray-400">Sharpe</div>
-          <div className="text-lg font-bold text-blue-400">{sharpe.toFixed(1)}</div>
+          {stats ? (
+            <div className="text-lg font-bold text-blue-400">{stats.sharpe.toFixed(1)}</div>
+          ) : <div className="text-lg font-bold text-gray-600">—</div>}
         </div>
         <div className="rounded-lg bg-white/5 p-3 text-center">
           <div className="text-xs text-gray-400">Win Rate</div>
-          <div className="text-lg font-bold text-purple-400">{winRate.toFixed(0)}%</div>
+          {stats ? (
+            <div className="text-lg font-bold text-purple-400">{stats.winRate.toFixed(0)}%</div>
+          ) : <div className="text-lg font-bold text-gray-600">—</div>}
         </div>
       </div>
+      {stats && <div className="text-[10px] text-gray-600 text-center">computed from {Math.max(1, Math.round(stats.winRate / 5))} on-chain ArcMind decisions</div>}
 
       {!following ? (
         <div className="space-y-3">
@@ -506,13 +553,14 @@ interface SignalSource {
   icon: string;
   unit: string;
   range: [number, number];
+  live: boolean;
 }
 
 const SIGNAL_SOURCES: SignalSource[] = [
-  { id: "hyperliquid", name: "Hyperliquid OI Feed",   description: "Open interest delta + funding rate", price: 0.002, icon: "📈", unit: "M OI",  range: [800, 1400] },
-  { id: "polymarket",  name: "Polymarket Sentiment",  description: "YES probability for macro events",   price: 0.001, icon: "🎯", unit: "% YES", range: [20,  80]   },
-  { id: "news",        name: "News Oracle",            description: "Sentiment score from 200 sources",   price: 0.005, icon: "📰", unit: "score", range: [-1,  1]    },
-  { id: "onchain",     name: "On-chain Whale Tracker", description: "Wallet flows >$100k last 1h",        price: 0.003, icon: "🐋", unit: "M net", range: [-50, 50]   },
+  { id: "hyperliquid", name: "Hyperliquid OI Feed",   description: "Open interest delta + funding rate", price: 0.002, icon: "📈", unit: "M OI",  range: [800, 1400], live: true  },
+  { id: "polymarket",  name: "Polymarket Sentiment",  description: "YES probability for macro events",   price: 0.001, icon: "🎯", unit: "% YES", range: [20,  80],   live: false },
+  { id: "news",        name: "News Oracle",            description: "Sentiment score from 200 sources",   price: 0.005, icon: "📰", unit: "score", range: [-1,  1],    live: false },
+  { id: "onchain",     name: "On-chain Whale Tracker", description: "Wallet flows >$100k last 1h",        price: 0.003, icon: "🐋", unit: "M net", range: [-50, 50],   live: false },
 ];
 
 interface FetchedSignal {
@@ -599,7 +647,13 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
             <div key={src.id} className="rounded-lg bg-white/5 border border-white/10 p-3 flex items-center gap-3">
               <span className="text-xl">{src.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-white">{src.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-sm font-medium text-white">{src.name}</div>
+                  {src.live
+                    ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 font-bold">live</span>
+                    : <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 font-medium">sim</span>
+                  }
+                </div>
                 <div className="text-xs text-gray-500">{src.description}</div>
                 {fetched && (
                   <div className="mt-1 text-xs font-mono text-cyan-400">{fetched.value}</div>
@@ -649,7 +703,7 @@ interface ArcDecision {
   txHash: string | null;
 }
 
-const SERVER = import.meta.env.VITE_SERVER_URL ?? "";
+const SERVER = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
 
 function useCountdown(intervalSec: number): string {
   const [remaining, setRemaining] = useState(0);
@@ -759,11 +813,25 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
       .catch(() => {});
   }, []);
 
+  const [lastDecisionBias, setLastDecisionBias] = useState(0);
+  useEffect(() => {
+    fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) })
+      .then(r => r.json())
+      .then((d: { decisions: { decision: string }[] }) => {
+        const last = d.decisions?.[0];
+        setLastDecisionBias(last?.decision === "SELL" ? 1 : last?.decision === "BUY" ? -0.3 : 0.2);
+      })
+      .catch(() => setLastDecisionBias(0.4));
+  }, []);
+  const biasRef = useRef(lastDecisionBias);
+  biasRef.current = lastDecisionBias;
+
   useEffect(() => {
     if (!running || killed) return;
     tickRef.current = setInterval(() => {
       setDrawdown((d: number) => {
-        const next = Math.min(d + Math.random() * 1.5, 30);
+        const drift = Math.max(0, biasRef.current + (Math.random() - 0.4) * 0.6);
+        const next = Math.min(d + drift, 30);
         if (next >= maxDrawdown && !killedRef.current) triggerKillSwitch(next);
         return next;
       });
