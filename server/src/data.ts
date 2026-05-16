@@ -74,6 +74,14 @@ export const services: Service[] = [
     sampleResponse: { pair: "mETH/USDY", retPct: 12.4, maxDdPct: 6.1, sharpe: 1.3, trades: 42 } }),
 
   // Agora / ArcMind
+  svc({ id: "svc_arc_oracle", workspaceIds: ["agora"], name: "Arc Price Oracle", category: "data", priceUsd: 0.02,
+    network: "arc-testnet",
+    description: "Real-time USDC price feed across Arc, Arbitrum, and Base — used by arbitrage agents to spot cross-chain gaps.",
+    sampleResponse: { arc: 1.0001, base: 0.9998, arb: 1.0000, gapBps: 30, recommended: "arb" } }),
+  svc({ id: "svc_arc_arb", workspaceIds: ["agora"], name: "Cross-Chain Arb Executor", category: "trading", priceUsd: 0.05,
+    network: "arc-testnet",
+    description: "Executes a cross-chain USDC arbitrage via CCTP: routes the optimal leg, monitors finality, returns net profit.",
+    sampleResponse: { profit: "0.12", ttl: "420ms", cctpTx: "0xabc7f3e2d1c5b4a9..." } }),
   svc({ id: "svc_arc_reasoning", workspaceIds: ["agora"], name: "ArcMind Reasoning Trace", category: "inference", priceUsd: 0.01,
     network: "arc-testnet",
     description: "Buy one ArcMind step-by-step decision log via Circle Gateway Nanopayments. Includes signal inputs, Kelly sizing, and outcome hash.",
