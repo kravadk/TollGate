@@ -2,12 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { safeAmt } from "../../../lib/validate";
 import {
   Copy, Eye, Lock, Play, Pause, Shield, Zap, Brain,
-  ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCheck,
+  ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCheck, ExternalLink,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
 import { useAppState } from "../../../app-state";
 import { deterministicScore, hashId } from "../../../lib/util-hash";
+import {
+  isAgoraEscrowConfigured, isAgoraRegistryConfigured,
+  stakeToEscrow, registerArcAgent, recordArcDecision,
+  arcExplorerTxUrl,
+} from "../../../lib/agora";
 
 /* ─── Copy Trading ─────────────────────────────────────────────── */
 
@@ -36,6 +41,9 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
   const [stake, setStake] = useState("10");
   const [following, setFollowing] = useState(false);
   const [totalPnl, setTotalPnl] = useState(0);
+  const [stakeErr, setStakeErr] = useState<string | null>(null);
+  const [staking, setStaking] = useState(false);
+  const [stakeTxHash, setStakeTxHash] = useLocalStore<string | null>(`arcmind-stake-tx-${workspace.id}`, null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -55,9 +63,33 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
     setTotalPnl(positions.reduce((s: number, p: CopyPosition) => s + p.pnl, 0));
   }, [positions]);
 
-  function startCopying() {
+  async function startCopying() {
     const amt = safeAmt(stake, 10_000) ?? 10;
     const now = Date.now();
+    setStakeErr(null);
+
+    if (isAgoraEscrowConfigured()) {
+      setStaking(true);
+      try {
+        const { txHash } = await stakeToEscrow(amt);
+        setStakeTxHash(txHash);
+        emitReceipt({
+          workspaceId: workspace.id,
+          serviceName: `Stake to CopyTradeEscrow — $${amt} USDC`,
+          amount: amt,
+          currency: "USDC",
+          network: "arc-l1",
+          kind: "arcmind.copy.stake",
+          payload: { txHash },
+        });
+      } catch (e: unknown) {
+        setStakeErr((e as { message?: string }).message ?? "Stake failed or rejected.");
+        setStaking(false);
+        return;
+      }
+      setStaking(false);
+    }
+
     const pos: CopyPosition[] = ARCMIND_POSITIONS.map((p, i) => ({
       ...p,
       pnl: 0,
@@ -128,12 +160,19 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
             <div className="flex justify-between"><span>Auto-exit on drawdown</span><span className="text-yellow-400">&gt;15%</span></div>
             <div className="flex justify-between"><span>Settlement</span><span>USDC · Arc L1 (ERC-8183)</span></div>
           </div>
+          {stakeErr && <div className="text-xs text-red-400">{stakeErr}</div>}
           <button
             onClick={startCopying}
-            className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold py-2.5 transition-colors"
+            disabled={staking}
+            className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
           >
-            Start Copy Trading
+            {staking ? "Approving USDC + staking…" : isAgoraEscrowConfigured() ? "Stake & Start Copy Trading" : "Start Copy Trading"}
           </button>
+          {isAgoraEscrowConfigured() && !staking && (
+            <p className="text-[10.5px] text-gray-600 text-center">
+              Real USDC stake via CopyTradeEscrow on Arc L1 (MetaMask)
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -157,6 +196,17 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
               </div>
             ))}
           </div>
+          {stakeTxHash && (
+            <a
+              href={arcExplorerTxUrl(stakeTxHash)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Stake tx on Arc testnet
+            </a>
+          )}
           <button
             onClick={stopCopying}
             className="w-full rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-sm font-semibold py-2.5 transition-colors"
@@ -226,6 +276,40 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [revenue, setRevenue] = useLocalStore<number>(`arcmind-revenue-${workspace.id}`, 0);
+  const [agentId, setAgentId] = useLocalStore<string | null>(`arcmind-agent-id-${workspace.id}`, null);
+  const [regTxHash, setRegTxHash] = useLocalStore<string | null>(`arcmind-reg-tx-${workspace.id}`, null);
+  const [decTxHash, setDecTxHash] = useLocalStore<string | null>(`arcmind-dec-tx-${workspace.id}`, null);
+  const [onchainErr, setOnchainErr] = useState<string | null>(null);
+  const [onchainLoading, setOnchainLoading] = useState<"register" | "record" | null>(null);
+
+  async function registerAgent() {
+    setOnchainErr(null);
+    setOnchainLoading("register");
+    try {
+      const { agentId: id, txHash } = await registerArcAgent("arcmind-v1", JSON.stringify({ name: "ArcMind", version: "1.0", workspace: workspace.id }));
+      setAgentId(id);
+      setRegTxHash(txHash);
+    } catch (e: unknown) {
+      setOnchainErr((e as { message?: string }).message ?? "Register failed.");
+    } finally {
+      setOnchainLoading(null);
+    }
+  }
+
+  async function recordDecision() {
+    if (!agentId) return;
+    setOnchainErr(null);
+    setOnchainLoading("record");
+    try {
+      const payload = JSON.stringify({ agentId, traces: purchased, ts: Date.now() });
+      const { txHash } = await recordArcDecision(agentId, payload);
+      setDecTxHash(txHash);
+    } catch (e: unknown) {
+      setOnchainErr((e as { message?: string }).message ?? "Record failed.");
+    } finally {
+      setOnchainLoading(null);
+    }
+  }
 
   function buyTrace(trace: Trace) {
     if (purchased.includes(trace.id)) return;
@@ -315,6 +399,41 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
           );
         })}
       </div>
+
+      {isAgoraRegistryConfigured() && (
+        <div className="border-t border-white/10 pt-4 space-y-3">
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">On-chain Registry</div>
+          {onchainErr && <div className="text-xs text-red-400">{onchainErr}</div>}
+          <div className="flex gap-2">
+            <button
+              onClick={registerAgent}
+              disabled={!!agentId || onchainLoading !== null}
+              className="flex-1 rounded-lg bg-indigo-600/60 hover:bg-indigo-600 disabled:opacity-40 text-white text-xs font-semibold py-2 transition-colors"
+            >
+              {onchainLoading === "register" ? "Registering…" : agentId ? "Registered ✓" : "Register Agent"}
+            </button>
+            <button
+              onClick={recordDecision}
+              disabled={!agentId || purchased.length === 0 || onchainLoading !== null}
+              className="flex-1 rounded-lg bg-indigo-800/60 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-semibold py-2 transition-colors"
+            >
+              {onchainLoading === "record" ? "Recording…" : "Record Decision"}
+            </button>
+          </div>
+          {regTxHash && (
+            <a href={arcExplorerTxUrl(regTxHash)} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300">
+              <ExternalLink className="w-3 h-3" /> registerAgent tx ↗
+            </a>
+          )}
+          {decTxHash && (
+            <a href={arcExplorerTxUrl(decTxHash)} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300">
+              <ExternalLink className="w-3 h-3" /> recordDecision tx ↗
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -459,6 +578,7 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
   const [maxDrawdown, setMaxDrawdown] = useLocalStore<number>(`arcmind-ks-threshold-${workspace.id}`, 15);
   const [killed, setKilled] = useLocalStore<boolean>(`arcmind-ks-killed-${workspace.id}`, false);
   const [running, setRunning] = useState(false);
+  const [killSig, setKillSig] = useLocalStore<string | null>(`arcmind-ks-sig-${workspace.id}`, null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const killedRef = useRef(killed);
   killedRef.current = killed;
@@ -476,10 +596,20 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, killed, maxDrawdown]);
 
-  function triggerKillSwitch(dd: number) {
+  async function triggerKillSwitch(dd: number) {
     if (tickRef.current) clearInterval(tickRef.current);
     setRunning(false);
     setKilled(true);
+    const msg = `killswitch:${workspace.id}:drawdown=${dd.toFixed(2)}%:ts=${Date.now()}`;
+    let sig: string | null = null;
+    try {
+      const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+      if (eth) {
+        const accounts = await eth.request({ method: "eth_requestAccounts" }) as string[];
+        sig = await eth.request({ method: "personal_sign", params: [msg, accounts[0]] }) as string;
+        setKillSig(sig);
+      }
+    } catch { /* user rejected — proceed without sig */ }
     emitReceipt({
       workspaceId: workspace.id,
       serviceName: `Kill Switch triggered — drawdown ${dd.toFixed(1)}%`,
@@ -487,7 +617,7 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
       currency: "USDC",
       network: "arc-l1",
       kind: "arcmind.killswitch.trigger",
-      payload: { drawdown: dd, txHash: hashId("ks", `${workspace.id}-${Date.now()}`) },
+      payload: { drawdown: dd, sig: sig ?? "demo", txHash: hashId("ks", `${workspace.id}-${Date.now()}`) },
     });
   }
 
@@ -574,6 +704,12 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
             <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />
             Kill Switch triggered. All positions closed. ERC-8183 job paused. Remaining USDC refunded.
           </div>
+          {killSig && (
+            <div className="rounded-lg bg-white/5 p-2.5 text-[10px] font-mono text-gray-500 break-all leading-relaxed">
+              <span className="text-gray-400 font-sans font-semibold">EIP-191 kill order: </span>
+              {killSig.slice(0, 32)}…{killSig.slice(-8)}
+            </div>
+          )}
           <button onClick={reset} className="w-full rounded-lg border border-white/20 text-gray-400 hover:bg-white/5 text-sm py-2 transition-colors">
             Reset &amp; Re-arm
           </button>

@@ -178,7 +178,7 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
       serviceName: `0G Compute · ${m.name}${sealed ? " · sealed" : ""}`,
       amount: Number(c.toFixed(4)),
       currency: "USDC",
-      network: workspace.networks[0] ?? "0g-testnet",
+      network: workspace.networks[0] ?? "0g-mainnet",
       kind: "0g.inference",
       payload: { model: m.id, modelName: m.name, prompt: sealed ? `enc:${sealHash?.slice(0, 16)}…` : p, tokens: tk, response, sealed, strategy: strategyMode, attestationId, sealHash, batchId },
     });
@@ -216,7 +216,7 @@ export function InferenceJobRunner({ workspace }: { workspace: Workspace }) {
         serviceName: `0G Compute · ${og.model || model.name}${sealed ? " · sealed" : ""}`,
         amount,
         currency: "USDC",
-        network: workspace.networks[0] ?? "0g-testnet",
+        network: workspace.networks[0] ?? "0g-mainnet",
         kind: "0g.inference",
         payload: {
           model: og.model || model.id, modelName: model.name,

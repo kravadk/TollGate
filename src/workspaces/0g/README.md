@@ -20,7 +20,7 @@ Agents pay-per-call for AI inference and decentralised storage on the 0G network
 | TEE & Privacy | TEE attestation badge, private sealed context API (Seal-encrypted) |
 | MCP server | 9 tools — Claude Desktop agents call TollGate APIs natively via tool-use |
 | Economy Dashboard | Live SSE payment feed, receipt NFT chips, total volume |
-| Network toggle | Mainnet (chainId 16661) ↔ Testnet Galileo (chainId 16602) — persisted in localStorage |
+| Network toggle | Mainnet (chainId 16661) — persisted in localStorage |
 
 ## Contracts deployed
 
@@ -33,18 +33,6 @@ Agents pay-per-call for AI inference and decentralised storage on the 0G network
 | `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
 | `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
 | `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
-
-### 0G Testnet — Galileo (chainId 16602)
-
-| Contract | Address |
-|---|---|
-| `AgentReceiptRegistry` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://chainscan-galileo.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
-| `AgentIdentityRegistry` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://chainscan-galileo.0g.ai/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
-| `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan-galileo.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
-| `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan-galileo.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
-| `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan-galileo.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
-
-Deployer: `0x82736f84Ad234566180F902237e2Fb4c35177bDB`
 
 ## Paid APIs (x402 services)
 

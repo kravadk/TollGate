@@ -26,7 +26,6 @@ const HEADER: Record<PaymentStage, string> = {
 
 // Static gas estimates per network (USD) — shown as a pre-flight hint.
 const GAS_EST: Record<string, string> = {
-  "0g-testnet":        "~$0.001",
   "0g-mainnet":        "~$0.002",
   "mantle-sepolia":    "~$0.002",
   "mantle-mainnet":    "~$0.003",

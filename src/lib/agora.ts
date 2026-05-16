@@ -9,6 +9,7 @@
  *
  * Same graceful-degradation pattern as src/lib/arbitrum.ts and src/lib/mantle.ts.
  */
+import { BrowserProvider, Contract, encodeBytes32String } from "ethers";
 import type { NetworkMode } from "./chains";
 
 function env(key: string): string | undefined {
@@ -61,6 +62,78 @@ function getEth(): Eip1193 {
   const eth = typeof window !== "undefined" ? (window as unknown as { ethereum?: Eip1193 }).ethereum : undefined;
   if (!eth) throw new Error("No EIP-1193 wallet detected — install MetaMask.");
   return eth;
+}
+
+// ── ABI fragments ─────────────────────────────────────────────────────────────
+
+const REGISTRY_ABI = [
+  "function registerAgent(bytes32 builderId, string calldata metadata) external returns (bytes32 agentId)",
+  "function recordDecision(bytes32 agentId, bytes32 decisionHash) external returns (uint256 index)",
+  "function getReputation(bytes32 agentId) external view returns (uint256)",
+];
+
+const ESCROW_ABI = [
+  "function stake(uint256 amount) external",
+  "function totalStaked() view returns (uint256)",
+];
+
+const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+];
+
+const ARC_USDC = "0x3600000000000000000000000000000000000000";
+
+// ── On-chain write helpers ────────────────────────────────────────────────────
+
+export async function stakeToEscrow(amountUsdc: number): Promise<{ txHash: string }> {
+  const cfg = getAgoraConfig();
+  if (!cfg.escrowAddress) throw new Error("CopyTradeEscrow not configured.");
+  await switchToArc();
+  const eth = getEth();
+  await eth.request({ method: "eth_requestAccounts" });
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const amountWei = BigInt(Math.round(amountUsdc * 1_000_000)); // USDC 6 decimals
+  const usdc = new Contract(ARC_USDC, ERC20_ABI, signer);
+  await (await usdc.approve(cfg.escrowAddress, amountWei)).wait();
+  const escrow = new Contract(cfg.escrowAddress, ESCROW_ABI, signer);
+  const tx = await escrow.stake(amountWei);
+  const receipt = await tx.wait() as { hash: string };
+  return { txHash: receipt.hash };
+}
+
+export async function registerArcAgent(domain: string, metadata: string): Promise<{ agentId: string; txHash: string }> {
+  const cfg = getAgoraConfig();
+  if (!cfg.registryAddress) throw new Error("ArcMindRegistry not configured.");
+  await switchToArc();
+  const eth = getEth();
+  await eth.request({ method: "eth_requestAccounts" });
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const builderId = encodeBytes32String(domain.slice(0, 31));
+  const registry = new Contract(cfg.registryAddress, REGISTRY_ABI, signer);
+  const tx = await registry.registerAgent(builderId, metadata);
+  const receipt = await tx.wait() as { hash: string; logs?: { topics?: string[] }[] };
+  const agentId = receipt.logs?.find((l) => l.topics && l.topics.length > 1)?.topics?.[1] ?? null;
+  return { agentId: agentId ?? "0x" + "0".repeat(64), txHash: receipt.hash };
+}
+
+export async function recordArcDecision(agentId: string, decisionJson: string): Promise<{ txHash: string }> {
+  const cfg = getAgoraConfig();
+  if (!cfg.registryAddress) throw new Error("ArcMindRegistry not configured.");
+  await switchToArc();
+  const eth = getEth();
+  await eth.request({ method: "eth_requestAccounts" });
+  const provider = new BrowserProvider(eth as never);
+  const signer = await provider.getSigner();
+  const enc = new TextEncoder();
+  const raw = enc.encode(decisionJson);
+  const hashBuf = await crypto.subtle.digest("SHA-256", raw);
+  const decisionHash = "0x" + Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  const registry = new Contract(cfg.registryAddress, REGISTRY_ABI, signer);
+  const tx = await registry.recordDecision(agentId, decisionHash);
+  const receipt = await tx.wait() as { hash: string };
+  return { txHash: receipt.hash };
 }
 
 export async function switchToArc(): Promise<void> {

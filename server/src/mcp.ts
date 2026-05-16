@@ -154,7 +154,7 @@ export const TOOLS = [
       type: "object",
       properties: {
         address: { type: "string", description: "0x-prefixed EVM address" },
-        chain: { type: "string", description: "0g-mainnet (default) or 0g-testnet" },
+        chain: { type: "string", description: "0g-mainnet (default)" },
       },
       required: ["address"],
     },
@@ -424,7 +424,7 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       const address = String(args["address"] ?? "").trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return { error: "invalid_address" };
       const chain = String(args["chain"] ?? "0g-mainnet");
-      const rpc = chain === "0g-testnet" ? "https://evmrpc-testnet.0g.ai" : "https://evmrpc.0g.ai";
+      const rpc = "https://evmrpc.0g.ai";
       try {
         const r = await fetch(rpc, {
           method: "POST",

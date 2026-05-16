@@ -22,3 +22,5 @@ screenshots/
 # All markdown files are local only — only root README is committed
 *.md
 !README.md
+
+.vercel

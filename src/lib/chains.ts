@@ -24,8 +24,8 @@ export const WORKSPACE_CHAINS: Record<string, WorkspaceChains> = {
       explorer: "https://chainscan.0g.ai", rpcUrl: "https://evmrpc.0g.ai",
     },
     testnet: {
-      hex: "0x40da", chainId: 16602, name: "0G Galileo", native: "0G",
-      explorer: "https://chainscan-galileo.0g.ai", rpcUrl: "https://evmrpc-testnet.0g.ai",
+      hex: "0x4115", chainId: 16661, name: "0G Mainnet", native: "0G",
+      explorer: "https://chainscan.0g.ai", rpcUrl: "https://evmrpc.0g.ai",
     },
   },
   mantle: {

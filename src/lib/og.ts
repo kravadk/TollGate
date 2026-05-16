@@ -41,17 +41,13 @@ export type OgConfig = {
   storageIndexer: string | null;
 };
 
-export function getOgConfig(mode?: NetworkMode): OgConfig {
-  const isTestnet = mode === "testnet";
-  const defaultExplorer = isTestnet ? "https://chainscan-galileo.0g.ai" : "https://chainscan.0g.ai";
-  const defaultChainHex = isTestnet ? "0x40da" : OG_DEFAULT_CHAIN_HEX;
-  const registryVar = isTestnet ? "VITE_0G_TESTNET_REGISTRY_ADDRESS" : "VITE_0G_REGISTRY_ADDRESS";
-  const explorer = (env("VITE_0G_EXPLORER") ?? defaultExplorer).replace(/\/+$/, "");
+export function getOgConfig(_mode?: NetworkMode): OgConfig {
+  const explorer = (env("VITE_0G_EXPLORER") ?? "https://chainscan.0g.ai").replace(/\/+$/, "");
   const chainRaw = env("VITE_0G_CHAIN_ID");
-  let chainHex = defaultChainHex;
-  if (chainRaw && !isTestnet) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
+  let chainHex = OG_DEFAULT_CHAIN_HEX;
+  if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);
   return {
-    registryAddress: env(registryVar) ?? null,
+    registryAddress: env("VITE_0G_REGISTRY_ADDRESS") ?? null,
     explorerBase: explorer,
     chainHex,
     storageIndexer: env("VITE_0G_STORAGE_INDEXER") ?? null,

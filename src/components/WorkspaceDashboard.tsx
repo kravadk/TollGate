@@ -1147,12 +1147,12 @@ function AgentCheckpointWidget({ workspace }: { workspace: Workspace }) {
     const size = (payload.length / 1024).toFixed(1) + " KB";
     const ckpt: AgentCheckpoint = { id, hash, size, agentId, label, ts: new Date().toISOString() };
     setCheckpoints((p) => [ckpt, ...p].slice(0, 10));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Save", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.checkpoint.save", payload: { hash, label, agentId, size } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Save", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.checkpoint.save", payload: { hash, label, agentId, size } });
     setSaving(false);
   };
   const restore = (ckpt: AgentCheckpoint) => {
     setRestored(ckpt.id);
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Restore", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.checkpoint.restore", payload: { hash: ckpt.hash, label: ckpt.label, agentId: ckpt.agentId } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Restore", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.checkpoint.restore", payload: { hash: ckpt.hash, label: ckpt.label, agentId: ckpt.agentId } });
   };
 
   return (
@@ -1768,7 +1768,7 @@ function SealedPayloadVault({ workspace }: { workspace: Workspace }) {
     const sealId = "seal_" + hashId("seal", hash, 8);
     const digest = hash.slice(0, 32);
     setSeals((prev) => [{ sealId, recipient: recipient.trim() || "(unset)", digest, createdAt: new Date().toISOString() }, ...prev].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Sealed Payload", amount: 0.008, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.seal", payload: { sealId, recipient: recipient.trim(), digest } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Sealed Payload", amount: 0.008, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.seal", payload: { sealId, recipient: recipient.trim(), digest } });
     setUnsealId(sealId);
     setSealing(false);
   };

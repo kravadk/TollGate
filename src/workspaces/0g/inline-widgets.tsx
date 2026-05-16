@@ -203,7 +203,7 @@ export function OgDemoFlow({
       serviceName: "0G Compute · Risk Assessment",
       amount: 0.03,
       currency: "USDC",
-      network: workspace.networks[0] ?? "0g-testnet",
+      network: workspace.networks[0] ?? "0g-mainnet",
       kind: "0g.inference",
       payload: { prompt: OG_DEMO_PROMPT, response: content, ogCompute: live, provider, chatID, verified },
     });
@@ -608,13 +608,13 @@ export function OgSocialFeedWidget({ workspace }: { workspace: Workspace }) {
     const id = "sp_" + hash.slice(0, 6);
     const post: SocialPost = { id, author: address ?? "agid_0g_local", content: draft.trim(), hash: hash.slice(0, 12), link: `0g://feed/${hash.slice(0, 12)}`, tips: 0, ts: new Date().toISOString() };
     setPosts((p) => [post, ...p].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Publish", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.social.publish", payload: { hash: post.hash, link: post.link, contentLength: draft.length } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Publish", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.social.publish", payload: { hash: post.hash, link: post.link, contentLength: draft.length } });
     setDraft("");
     setPublishing(false);
   };
   const tip = (id: string) => {
     setPosts((p) => p.map((post) => post.id === id ? { ...post, tips: post.tips + 1 } : post));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Tip", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.social.tip", payload: { postId: id } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Tip", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.social.tip", payload: { postId: id } });
   };
 
   return (
@@ -920,7 +920,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     await sleep(viaGateway ? 250 : 650);
     const r1 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Strategist hires Executor",
-      amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.a2a.hire", agentName: "Strategist agent",
+      amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.a2a.hire", agentName: "Strategist agent",
       payload: { from: STRATEGIST, to: EXECUTOR, via: viaGateway ? "x402-gateway" : "x402-simulated" },
     });
     setRows((p) => [...p, { id: r1.id, label: "Strategist → Executor · hire", amount: 0.02, currency: "USDC" }]);
@@ -944,7 +944,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     setSignal({ verdict, confidence, live, provider });
     const r2 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Agent-to-agent · 0G Compute signal · ${verdict}`,
-      amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.a2a.signal", agentName: "Executor agent",
+      amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.a2a.signal", agentName: "Executor agent",
       payload: { from: EXECUTOR, to: "0g-compute", verdict, confidence, ogCompute: live, provider, prompt },
     });
     setRows((p) => [...p, { id: r2.id, label: `Executor → 0G Compute · ${verdict} ${confidence}%`, amount: 0.03, currency: "USDC" }]);
@@ -962,7 +962,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     setDecision({ txHash, onChain });
     const r3 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Executor records decision",
-      amount: 0, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.a2a.execute",
+      amount: 0, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.a2a.execute",
       agentName: "Executor agent", status: onChain ? "verified" : undefined,
       payload: { from: EXECUTOR, verdict, confidence, decisionHash: decisionHashHex, contextHash: contextHashHex, txHash, onChain },
     });
@@ -1200,7 +1200,7 @@ export function OgTradingArenaWidget({ workspace }: { workspace: Workspace }) {
     const sealed = og.ok && og.verified ? true : sealedMode && og.ok;
     const s: TradingSignal = { id: "sig_" + hashId("0g", attestationId, 8), pair, strategy, signal, confidence, attestationId, sealed, ts: new Date().toLocaleTimeString() };
     setSignals((prev) => [s, ...prev].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Trading Arena · ${pair}`, amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.trading.signal", payload: { pair, strategy, signal, confidence, attestationId, sealed: sealedMode } });
+    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Trading Arena · ${pair}`, amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.trading.signal", payload: { pair, strategy, signal, confidence, attestationId, sealed: sealedMode } });
     setBusy(false);
   };
   const sigColor = (s: TradingSignal["signal"]) => s === "BUY" ? "#1fb58a" : s === "SELL" ? "#e63946" : "var(--muted)";
@@ -1360,7 +1360,7 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
         txHash: result.txHash === "already-registered" ? undefined : result.txHash,
       };
       setList((prev) => [reg, ...prev.filter((x) => x.wallet.toLowerCase() !== result.walletAddress.toLowerCase())].slice(0, 20));
-      emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.agentid.register", payload: { agentId: reg.agentId, wallet: result.walletAddress, role, dailyCapUsd, sealed, txHash: result.txHash } });
+      emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.agentid.register", payload: { agentId: reg.agentId, wallet: result.walletAddress, role, dailyCapUsd, sealed, txHash: result.txHash } });
     } catch (e) {
       const raw = (e as Error).message ?? String(e);
       setRegError(raw.startsWith("Set VITE") ? "On-chain registration is not available on this network. Connect MetaMask to 0G Mainnet and try again." : raw);
@@ -1503,7 +1503,7 @@ export function RevenueSplitConsole({ workspace }: { workspace: Workspace }) {
     rows.forEach((row) => {
       const pct = parseFloat(row.pct) || 0;
       if (pct <= 0) return;
-      emitReceipt({ workspaceId: workspace.id, serviceId: svcId, serviceName: `${svc?.name ?? "Service"} · Revenue Share`, amount: Number((p * pct / 100).toFixed(4)), currency: "USDC", network: workspace.networks[0] ?? "0g-testnet", kind: "0g.revenue.split", payload: { recipient: row.wallet.trim() || "(unset)", pct, batchId, serviceId: svcId } });
+      emitReceipt({ workspaceId: workspace.id, serviceId: svcId, serviceName: `${svc?.name ?? "Service"} · Revenue Share`, amount: Number((p * pct / 100).toFixed(4)), currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.revenue.split", payload: { recipient: row.wallet.trim() || "(unset)", pct, batchId, serviceId: svcId } });
     });
     setDone(batchId);
   };
@@ -2128,7 +2128,7 @@ export function OgJobScheduler({ workspace }: { workspace: Workspace }) {
           serviceName: `Scheduled · ${j.modelId}`,
           amount: 0.022,
           currency: "USDC",
-          network: workspace.networks[0] ?? "0g-testnet",
+          network: workspace.networks[0] ?? "0g-mainnet",
           kind: "0g.inference",
           payload: { model: j.modelId, prompt: j.prompt, scheduled: true, jobId: j.id },
         });
@@ -2517,7 +2517,7 @@ export function OgMultiSigApprove({ workspace }: { workspace: Workspace }) {
       serviceName: "Multi-Sig Release",
       amount: 0,
       currency: "USDC",
-      network: workspace.networks[0] ?? "0g-testnet",
+      network: workspace.networks[0] ?? "0g-mainnet",
       kind: "0g.multisig.release",
       payload: { receiptId, signers: signers.filter((s) => s.signed).map((s) => ({ id: s.id, sig: s.sig })), threshold: THRESHOLD },
     });
