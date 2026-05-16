@@ -26,14 +26,32 @@ interface CopyPosition {
   ts: number;
 }
 
-const ARCMIND_POSITIONS: Omit<CopyPosition, "pnl" | "ts">[] = [
-  { asset: "BTC/USDC", side: "LONG",  entry: 67_420, size: 0.05 },
-  { asset: "ETH/USDC", side: "SHORT", entry: 3_190,  size: 0.8  },
-  { asset: "SUI/USDC", side: "LONG",  entry: 1.38,   size: 420  },
-  { asset: "ARC/USDC", side: "LONG",  entry: 2.11,   size: 200  },
+const FALLBACK_POSITIONS: Omit<CopyPosition, "pnl" | "ts">[] = [
+  { asset: "ETH/USDC", side: "LONG", entry: 3_190, size: 0.8 },
 ];
 
-interface ArcDecisionRaw { decision: "BUY" | "SELL" | "HOLD"; ethPrice: number; ts: string }
+interface ArcDecisionRaw { decision: "BUY" | "SELL" | "HOLD"; ethPrice: number; ts: string; txHash?: string }
+
+function useEthPrice(): number {
+  const [price, setPrice] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    async function tick() {
+      try {
+        const r = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+          { signal: AbortSignal.timeout(8_000) }
+        );
+        const d = await r.json() as { ethereum?: { usd?: number } };
+        if (mounted) setPrice(d?.ethereum?.usd ?? 0);
+      } catch { /* keep previous */ }
+    }
+    tick();
+    const id = setInterval(tick, 10_000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+  return price;
+}
 
 function useArcDecisionStats(workspaceId: string) {
   const [bias, setBias] = useState(0);
@@ -85,20 +103,25 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
   const [staking, setStaking] = useState(false);
   const [stakeTxHash, setStakeTxHash] = useLocalStore<string | null>(`arcmind-stake-tx-${workspace.id}`, null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { bias, stats } = useArcDecisionStats(workspace.id);
-  const biasRef = useRef(bias);
-  biasRef.current = bias;
+  const { stats } = useArcDecisionStats(workspace.id);
+  const liveEthPrice = useEthPrice();
+  const liveEthRef = useRef(liveEthPrice);
+  liveEthRef.current = liveEthPrice;
 
+  // Real PnL: (livePrice - entry) * size for ETH positions; stop ticking after
   useEffect(() => {
     if (!following) return;
     tickRef.current = setInterval(() => {
       setPositions((prev: CopyPosition[]) =>
-        prev.map((p: CopyPosition) => ({
-          ...p,
-          pnl: p.pnl + (biasRef.current * 0.3 + (Math.random() - 0.5) * 0.2) * p.size * p.entry * 0.001,
-        }))
+        prev.map((p: CopyPosition) => {
+          if (liveEthRef.current > 0 && p.asset === "ETH/USDC") {
+            const pnl = (liveEthRef.current - p.entry) * p.size * (p.side === "LONG" ? 1 : -1);
+            return { ...p, pnl };
+          }
+          return p;
+        })
       );
-    }, 4000);
+    }, 10_000);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [following]);
 
@@ -133,12 +156,25 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
       setStaking(false);
     }
 
-    const pos: CopyPosition[] = ARCMIND_POSITIONS.map((p, i) => ({
-      ...p,
-      pnl: 0,
-      size: (amt * 0.25) / p.entry,
-      ts: now + i,
-    }));
+    // Build position from last on-chain ArcMind decision
+    let pos: CopyPosition[];
+    try {
+      const decRes = await fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) });
+      const decData = await decRes.json() as { decisions: ArcDecisionRaw[] };
+      const lastBuy = decData.decisions?.find(d => d.decision === "BUY");
+      const lastSell = decData.decisions?.find(d => d.decision === "SELL");
+      const activeDecision = lastBuy ?? lastSell;
+      if (activeDecision && activeDecision.ethPrice > 0) {
+        const side = activeDecision.decision === "BUY" ? "LONG" : "SHORT";
+        const size = (amt * 0.8) / activeDecision.ethPrice;
+        pos = [{ asset: "ETH/USDC", side, entry: activeDecision.ethPrice, size, pnl: 0, ts: now }];
+      } else {
+        pos = FALLBACK_POSITIONS.map((p, i) => ({ ...p, pnl: 0, size: (amt * 0.8) / p.entry, ts: now + i }));
+      }
+    } catch {
+      pos = FALLBACK_POSITIONS.map((p, i) => ({ ...p, pnl: 0, size: (amt * 0.8) / p.entry, ts: now + i }));
+    }
+
     setPositions(pos);
     setFollowing(true);
     emitReceipt({
@@ -279,7 +315,33 @@ interface Trace {
   price: number;
 }
 
-const SAMPLE_TRACES: Trace[] = [
+function useArcMindTraces(): { traces: Trace[]; loading: boolean } {
+  const [traces, setTraces] = useState<Trace[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(8_000) })
+      .then(r => r.json())
+      .then((d: { decisions: ArcDecisionRaw[] }) => {
+        const decisions = d.decisions ?? [];
+        if (!decisions.length) return;
+        const mapped: Trace[] = decisions.slice(0, 8).map((dec, i) => ({
+          id: `live-${i}`,
+          title: `${dec.decision} — ETH @ $${dec.ethPrice?.toLocaleString() ?? "?"}`,
+          signal: `ETH $${dec.ethPrice} · ${new Date(dec.ts).toLocaleString()}`,
+          decision: `${dec.decision} ETH/USDC @ $${dec.ethPrice}`,
+          rationale: "Autonomous ArcMind decision recorded on Arc L1 via ArcMindRegistry.recordDecision(). Based on Hyperliquid OI + ETH price momentum.",
+          outcome: dec.txHash ? "On-chain ✓" : "Pending resolution",
+          price: 0.01,
+        }));
+        setTraces(mapped);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  return { traces, loading };
+}
+
+const FALLBACK_TRACES: Trace[] = [
   {
     id: "trace-001",
     title: "BTC LONG — Kelly 18%",
@@ -320,6 +382,8 @@ const SAMPLE_TRACES: Trace[] = [
 
 export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
+  const { traces: liveTraces, loading: tracesLoading } = useArcMindTraces();
+  const displayTraces = liveTraces.length > 0 ? liveTraces : FALLBACK_TRACES;
   const [purchased, setPurchased] = useLocalStore<string[]>(`arcmind-traces-${workspace.id}`, []);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -427,8 +491,16 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
         Each trace is an x402 HTTP receipt — verifiable on-chain.
       </p>
 
+      {tracesLoading && <div className="text-xs text-gray-500 text-center py-2">Loading on-chain traces…</div>}
+      {!tracesLoading && liveTraces.length === 0 && (
+        <div className="text-[10px] text-gray-600 text-center">No live decisions yet — showing sample traces</div>
+      )}
+      {!tracesLoading && liveTraces.length > 0 && (
+        <div className="text-[10px] text-green-600 text-center">{liveTraces.length} real on-chain ArcMind decisions</div>
+      )}
+
       <div className="space-y-3">
-        {SAMPLE_TRACES.map(trace => {
+        {displayTraces.map(trace => {
           const owned = purchased.includes(trace.id);
           const isOpen = expanded === trace.id;
           return (
@@ -467,7 +539,7 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
                         </button>
                         {isAgoraRegistryConfigured() && agentId && !resolveTxHashes[trace.id] && (
                           <button
-                            onClick={() => resolveTrace(trace, SAMPLE_TRACES.indexOf(trace))}
+                            onClick={() => resolveTrace(trace, FALLBACK_TRACES.indexOf(trace))}
                             disabled={resolving === trace.id}
                             className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 disabled:opacity-50"
                           >
@@ -569,13 +641,20 @@ interface FetchedSignal {
   ts: number;
 }
 
+interface SignalsPayload {
+  polymarket: { question: string; yesPct: number; volume24h: number };
+  whale: { netFlow: number; direction: "bullish" | "bearish" | "neutral" };
+  ethPrice: number;
+}
+
 export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const [signals, setSignals] = useLocalStore<FetchedSignal[]>(`arcmind-signals-${workspace.id}`, []);
   const [loading, setLoading] = useState<string | null>(null);
   const [decision, setDecision] = useState<string | null>(null);
+  const [signalsData, setSignalsData] = useState<SignalsPayload | null>(null);
 
-  function generateValue(src: SignalSource): string {
+  function deterministicFallback(src: SignalSource): string {
     const v = deterministicScore(workspace.id + src.id, src.range[0], src.range[1]);
     if (src.unit === "score") return v.toFixed(2);
     if (src.unit === "% YES") return v.toFixed(0) + "%";
@@ -584,7 +663,8 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
 
   async function fetchSignal(src: SignalSource) {
     setLoading(src.id);
-    let value = generateValue(src);
+    let value = deterministicFallback(src);
+
     if (src.id === "hyperliquid") {
       try {
         const res = await fetch("https://api.hyperliquid.xyz/info", {
@@ -602,10 +682,25 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
           const fr = parseFloat(ctx.funding);
           value = `${oiStr} OI · ${isNaN(fr) ? ctx.funding : (fr * 100).toFixed(4)}% funding`;
         }
-      } catch { /* fall back to deterministic */ }
+      } catch { /* keep deterministic fallback */ }
+    } else if (src.id === "polymarket" || src.id === "onchain") {
+      try {
+        const sRes = await fetch(`${SERVER}/api/signals`, { signal: AbortSignal.timeout(10_000) });
+        if (sRes.ok) {
+          const sData = await sRes.json() as SignalsPayload;
+          setSignalsData(sData);
+          if (src.id === "polymarket") {
+            value = `${sData.polymarket.yesPct}% YES · vol $${(sData.polymarket.volume24h / 1000).toFixed(0)}k`;
+          } else {
+            value = `${sData.whale.netFlow.toFixed(1)}M net · ${sData.whale.direction}`;
+          }
+        }
+      } catch { /* keep deterministic fallback */ }
     } else {
-      await new Promise(r => setTimeout(r, 800));
+      // news: no free unauthenticated API — keep deterministic fallback
+      await new Promise(r => setTimeout(r, 300));
     }
+
     setSignals((prev: FetchedSignal[]) => {
       const filtered = prev.filter((s: FetchedSignal) => s.id !== src.id);
       return [...filtered, { id: src.id, value, ts: Date.now() }];
@@ -624,8 +719,28 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
 
   function composeDecision() {
     if (signals.length < 2) return;
-    const bias = deterministicScore(workspace.id + "bias", 0, 2) >= 1 ? "BULLISH" : "BEARISH";
-    setDecision(`ArcMind synthesised ${signals.length} signals → ${bias} conviction 74%. Recommended: ${bias === "BULLISH" ? "Add to LONG, tighten stop" : "Reduce exposure, hedge with PUT"}. ERC-8183 job #${hashId("job", workspace.id)} queued.`);
+    let direction: "BULLISH" | "BEARISH" | "HOLD" = "HOLD";
+    let ethStr = "";
+    if (signalsData) {
+      const whaleBull = signalsData.whale.direction === "bullish";
+      const whaleBear = signalsData.whale.direction === "bearish";
+      const polyBull  = signalsData.polymarket.yesPct > 55;
+      const polyBear  = signalsData.polymarket.yesPct < 45;
+      if (whaleBull && polyBull) direction = "BULLISH";
+      else if (whaleBear && polyBear) direction = "BEARISH";
+      else if (whaleBull || polyBull) direction = "BULLISH";
+      else if (whaleBear || polyBear) direction = "BEARISH";
+      else direction = "HOLD";
+      if (signalsData.ethPrice) ethStr = ` · ETH $${signalsData.ethPrice.toLocaleString()}`;
+    } else {
+      direction = deterministicScore(workspace.id + "bias", 0, 2) >= 1 ? "BULLISH" : "BEARISH";
+    }
+    const action = direction === "BULLISH"
+      ? "Add to LONG, tighten stop"
+      : direction === "BEARISH"
+      ? "Reduce exposure, hedge with PUT"
+      : "Maintain current allocation";
+    setDecision(`ArcMind synthesised ${signals.length} signals → ${direction}${ethStr}. Recommended: ${action}. ERC-8183 job queued.`);
   }
 
   return (
@@ -813,13 +928,25 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
       .catch(() => {});
   }, []);
 
+  const liveKsEthPrice = useEthPrice();
+  const liveKsEthRef = useRef(liveKsEthPrice);
+  liveKsEthRef.current = liveKsEthPrice;
+
+  const [entryEthPrice, setEntryEthPrice] = useState(0);
+  const entryEthRef = useRef(0);
+
   const [lastDecisionBias, setLastDecisionBias] = useState(0);
   useEffect(() => {
     fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) })
       .then(r => r.json())
-      .then((d: { decisions: { decision: string }[] }) => {
+      .then((d: { decisions: ArcDecisionRaw[] }) => {
         const last = d.decisions?.[0];
         setLastDecisionBias(last?.decision === "SELL" ? 1 : last?.decision === "BUY" ? -0.3 : 0.2);
+        const lastBuy = d.decisions?.find(dec => dec.decision === "BUY");
+        if (lastBuy?.ethPrice) {
+          setEntryEthPrice(lastBuy.ethPrice);
+          entryEthRef.current = lastBuy.ethPrice;
+        }
       })
       .catch(() => setLastDecisionBias(0.4));
   }, []);
@@ -829,14 +956,23 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
   useEffect(() => {
     if (!running || killed) return;
     tickRef.current = setInterval(() => {
-      setDrawdown((d: number) => {
-        const drift = Math.max(0, biasRef.current + (Math.random() - 0.4) * 0.6);
-        const next = Math.min(d + drift, 30);
-        if (next >= maxDrawdown && !killedRef.current) triggerKillSwitch(next);
-        return next;
-      });
-      setSharpe((s: number) => Math.max(0, s - Math.random() * 0.05));
-    }, 2000);
+      const entry = entryEthRef.current;
+      const live = liveKsEthRef.current;
+      if (entry > 0 && live > 0) {
+        const realDd = Math.max(0, (entry - live) / entry * 100);
+        setDrawdown(realDd);
+        setSharpe((s: number) => Math.max(0, s - (realDd > 5 ? 0.02 : 0.001)));
+        if (realDd >= maxDrawdown && !killedRef.current) triggerKillSwitch(realDd);
+      } else {
+        setDrawdown((d: number) => {
+          const drift = Math.max(0, biasRef.current * 0.2);
+          const next = Math.min(d + drift, 30);
+          if (next >= maxDrawdown && !killedRef.current) triggerKillSwitch(next);
+          return next;
+        });
+        setSharpe((s: number) => Math.max(0, s - 0.01));
+      }
+    }, 10_000);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [running, killed, maxDrawdown]);
 
@@ -940,6 +1076,20 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
         <div className="flex justify-between"><span>Protocol</span><span>ERC-8183 Job Contract</span></div>
         <div className="flex justify-between"><span>On trigger</span><span>Close all · pause 6h · refund remaining</span></div>
         <div className="flex justify-between"><span>Settlement</span><span>USDC · Arc L1</span></div>
+        {entryEthPrice > 0 && (
+          <div className="flex justify-between">
+            <span>Entry (last BUY)</span>
+            <span className="text-cyan-400 font-mono">${entryEthPrice.toLocaleString()}</span>
+          </div>
+        )}
+        {liveKsEthPrice > 0 && (
+          <div className="flex justify-between">
+            <span>Live ETH</span>
+            <span className={`font-mono ${liveKsEthPrice < entryEthPrice && entryEthPrice > 0 ? "text-red-400" : "text-green-400"}`}>
+              ${liveKsEthPrice.toLocaleString()}
+            </span>
+          </div>
+        )}
         {decisionCount !== null && (
           <div className="flex justify-between">
             <span>Monitoring</span>

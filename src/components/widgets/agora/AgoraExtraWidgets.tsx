@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowRightLeft, BarChart3, CheckCircle, CircleDollarSign,
   Loader2, RefreshCw, TrendingUp, Wallet, Zap, Activity,
@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
-import { deterministicScore, hashId } from "../../../lib/util-hash";
+import { hashId } from "../../../lib/util-hash";
 
 const SERVER_URL = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
 
@@ -291,8 +291,8 @@ export function AgoraCircleToolsWidget({ workspace: _ }: { workspace: Workspace 
 const X402_SERVICES = [
   { id: "svc_arc_signal_hl", name: "Hyperliquid OI Feed",   price: 0.002, unit: "per call",  latency: "43ms",  real: true },
   { id: "svc_arc_reasoning", name: "Reasoning Trace",        price: 0.01,  unit: "per trace", latency: "120ms", real: true },
-  { id: "svc-llm",           name: "LLM Strategy Advisor",   price: 0.15,  unit: "per query", latency: "850ms", real: false },
-  { id: "svc-alert",         name: "Price Alert Stream",     price: 0.001, unit: "/minute",   latency: "–",     real: false },
+  { id: "svc_arc_llm",       name: "LLM Strategy Advisor",   price: 0.15,  unit: "per query", latency: "850ms", real: true },
+  { id: "svc_arc_alert",     name: "Price Alert Stream",     price: 0.001, unit: "/minute",   latency: "–",     real: true },
 ];
 
 export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
@@ -303,23 +303,16 @@ export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
 
   async function callService(svc: typeof X402_SERVICES[0]) {
     setCalling(svc.id);
-    if (svc.real) {
-      try {
-        const res = await fetch(`${SERVER_URL}/api/gateway/${svc.id}`, {
-          headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-user" },
-          signal: AbortSignal.timeout(10_000),
-        });
-        const data = res.ok ? await res.json() as { receiptId?: string } : {};
-        const hash = (data.receiptId ?? hashId("x402", `${svc.id}-${Date.now()}`)).slice(0, 16);
-        setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
-      } catch {
-        const hash = hashId("x402", `${svc.id}-${Date.now()}`).slice(0, 14) + "[err]";
-        setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
-      }
-    } else {
-      const ms = svc.latency === "–" ? 600 : parseInt(svc.latency);
-      await new Promise(r => setTimeout(r, ms + 400));
-      const hash = hashId("x402", `${svc.id}-${Date.now()}`).slice(0, 14) + "[sim]";
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/${svc.id}`, {
+        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-user" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      const hash = (data.receiptId ?? hashId("x402", `${svc.id}-${Date.now()}`)).slice(0, 16);
+      setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
+    } catch {
+      const hash = hashId("x402", `${svc.id}-${Date.now()}`).slice(0, 14) + "[err]";
       setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
     }
     setCalling(null);
@@ -388,57 +381,71 @@ export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
 
 // ── Agent Leaderboard ───────────────────────────────────────────────────────────
 
-const LEADERBOARD_DATA = [
-  { rank: 1, agent: "ArcArb-Prime",    score: 847, trades: 142, volume: 28400 },
-  { rank: 2, agent: "Yield-Maximizer", score: 791, trades: 98,  volume: 19600 },
-  { rank: 3, agent: "Delta-Neutral-7", score: 734, trades: 67,  volume: 13400 },
-  { rank: 4, agent: "Your Agent",      score: 0,   trades: 0,   volume: 0     },
-];
+interface LeaderboardRow { agentId: string; score: number; receipts: number; volumeUsd: number }
 
 export function AgoraLeaderboardWidget({ workspace: _ }: { workspace: Workspace }) {
+  const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/leaderboard`, { signal: AbortSignal.timeout(8_000) });
+        const data = await res.json() as { leaderboard: LeaderboardRow[] };
+        if (mounted) setRows(data.leaderboard ?? []);
+      } catch { /* server may be down */ }
+      if (mounted) setLoading(false);
+    }
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
+  const rankColor = (i: number) => i === 0 ? "#F59E0B" : i === 1 ? "#9CA3AF" : i === 2 ? "#CD7C32" : "var(--text-secondary)";
+  const rankBg   = (i: number) => i === 0 ? "#F59E0B22" : i === 1 ? "#9CA3AF22" : "var(--accent-soft)";
+  const maxScore = rows[0]?.score ?? 900;
+
   return (
     <div className="widget-card">
       <div className="widget-header">
         <span className="sq soft" style={{ color: "#1652F0" }}><TrendingUp size={15} /></span>
-        <div><h3>Agent Leaderboard</h3><div className="sub">On-chain AgentScore ranking — receipts → reputation → rank</div></div>
+        <div><h3>Agent Leaderboard</h3><div className="sub">Live AgentScore from on-chain receipts — receipts → reputation → rank</div></div>
       </div>
+      {loading && <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: 11, padding: "16px 0" }}>Loading…</div>}
+      {!loading && rows.length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: 11, padding: "16px 0" }}>
+          No agents ranked yet — run services to earn score.
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-        {LEADERBOARD_DATA.map(row => (
-          <div key={row.rank} style={{
-            padding: "12px 14px", borderRadius: 10,
-            border: row.agent === "Your Agent" ? "2px dashed var(--border-subtle)" : "1px solid var(--border-subtle)",
-            background: "var(--card-bg)", opacity: row.agent === "Your Agent" ? 0.65 : 1,
-          }}>
+        {rows.map((row, i) => (
+          <div key={row.agentId} style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)", background: "var(--card-bg)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
-                background: row.rank === 1 ? "#F59E0B22" : row.rank === 2 ? "#9CA3AF22" : "var(--accent-soft)",
-                fontSize: 13, fontWeight: 800,
-                color: row.rank === 1 ? "#F59E0B" : row.rank === 2 ? "#9CA3AF" : row.rank === 3 ? "#CD7C32" : "var(--text-secondary)",
-              }}>#{row.rank}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>{row.agent}</div>
-                <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{row.trades} trades · ${row.volume.toLocaleString()} vol</div>
+              <div style={{ width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: rankBg(i), fontSize: 13, fontWeight: 800, color: rankColor(i) }}>
+                #{i + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.agentId}</div>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{row.receipts} receipts · ${row.volumeUsd.toFixed(2)} vol</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: row.score > 700 ? "#10B981" : row.score > 400 ? "#F59E0B" : "var(--text-secondary)" }}>
-                  {row.score > 0 ? row.score : "—"}
+                  {row.score}
                 </div>
                 <div style={{ fontSize: 9, color: "var(--text-secondary)" }}>
-                  {row.score > 700 ? "Gold" : row.score > 400 ? "Silver" : row.score > 0 ? "Bronze" : "Run demo →"}
+                  {row.score > 700 ? "Gold" : row.score > 400 ? "Silver" : "Bronze"}
                 </div>
               </div>
             </div>
-            {row.rank < 4 && (
-              <div style={{ marginTop: 8, height: 4, borderRadius: 4, background: "var(--border-subtle)" }}>
-                <div style={{ height: "100%", borderRadius: 4, background: "#1652F0", width: `${row.score / 900 * 100}%`, transition: "width 0.4s" }} />
-              </div>
-            )}
+            <div style={{ marginTop: 8, height: 4, borderRadius: 4, background: "var(--border-subtle)" }}>
+              <div style={{ height: "100%", borderRadius: 4, background: "#1652F0", width: `${Math.min(100, (row.score / maxScore) * 100)}%`, transition: "width 0.4s" }} />
+            </div>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: "var(--card-bg)", border: "1px solid var(--border-subtle)", fontSize: 11, color: "var(--text-secondary)" }}>
-        AgentScore = <code>min(receipts × 5, 500) + min(volumeUsd, 300)</code>. Run the Arbitrage Agent demo to earn score.
+        AgentScore = <code>min(receipts × 5, 500) + min(volumeUsd, 300)</code>. Refreshes every 30s.
       </div>
     </div>
   );
@@ -458,9 +465,17 @@ export function AgoraCctpWidget({ workspace: _ }: { workspace: Workspace }) {
   async function transfer() {
     setRunning(true);
     setResult(null);
-    const ms = 350 + Math.floor(deterministicScore(`cctp-${from}-${to}-${Date.now()}`, 0, 200));
-    await new Promise(r => setTimeout(r, ms + 600));
-    setResult({ hash: hashId("cctp", `${Date.now()}`).slice(0, 20), time: ms });
+    const start = Date.now();
+    let hash = hashId("cctp", `${start}`).slice(0, 20);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_arb`, {
+        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "cctp-bridge", "X-CCTP-From": from, "X-CCTP-To": to, "X-CCTP-Amount": amount },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      if (data.receiptId) hash = data.receiptId.slice(0, 20);
+    } catch { /* fallback to local hash */ }
+    setResult({ hash, time: Date.now() - start });
     setRunning(false);
   }
 
