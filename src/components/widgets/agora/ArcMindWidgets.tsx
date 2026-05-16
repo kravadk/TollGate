@@ -102,6 +102,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
   const [stakeErr, setStakeErr] = useState<string | null>(null);
   const [staking, setStaking] = useState(false);
   const [stakeTxHash, setStakeTxHash] = useLocalStore<string | null>(`arcmind-stake-tx-${workspace.id}`, null);
+  const [stakeGasless, setStakeGasless] = useLocalStore<boolean>(`arcmind-stake-gasless-${workspace.id}`, false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { stats } = useArcDecisionStats(workspace.id);
   const liveEthPrice = useEthPrice();
@@ -137,8 +138,9 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
     if (isAgoraEscrowConfigured()) {
       setStaking(true);
       try {
-        const { txHash } = await stakeToEscrow(amt);
+        const { txHash, gasless } = await stakeToEscrow(amt);
         setStakeTxHash(txHash);
+        setStakeGasless(gasless);
         emitReceipt({
           workspaceId: workspace.id,
           serviceName: `Stake to CopyTradeEscrow — $${amt} USDC`,
@@ -281,15 +283,23 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
             ))}
           </div>
           {stakeTxHash && (
-            <a
-              href={arcExplorerTxUrl(stakeTxHash)}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Stake tx on Arc testnet
-            </a>
+            <div className="space-y-1">
+              <a
+                href={arcExplorerTxUrl(stakeTxHash)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Stake tx on Arc testnet
+              </a>
+              {stakeGasless && (
+                <div className="flex items-center gap-1.5 text-xs text-green-400">
+                  <Zap className="w-3 h-3" />
+                  Gasless via Circle Paymaster — gas paid in USDC
+                </div>
+              )}
+            </div>
           )}
           <button
             onClick={stopCopying}

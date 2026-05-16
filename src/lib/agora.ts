@@ -84,9 +84,48 @@ const ERC20_ABI = [
 
 const ARC_USDC = "0x3600000000000000000000000000000000000000";
 
+// ── Circle Paymaster (ERC-4337) ───────────────────────────────────────────────
+//
+// If VITE_ARC_PAYMASTER_URL is set, we call pm_sponsorUserOperation before the
+// stake tx to check whether Circle Paymaster will cover gas. With a regular
+// MetaMask EOA the actual tx still pays gas; in production a SmartAccount would
+// send the fully sponsored UserOperation via a Bundler instead.
+
+const ENTRYPOINT_V06 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
+
+async function checkPaymasterSponsorship(
+  paymasterUrl: string,
+  from: string,
+  calldata: string,
+  nonce: number,
+): Promise<boolean> {
+  const userOp = {
+    sender: from,
+    nonce: `0x${nonce.toString(16)}`,
+    initCode: "0x",
+    callData: calldata,
+    callGasLimit: "0x186a0",
+    verificationGasLimit: "0x186a0",
+    preVerificationGas: "0x5208",
+    maxFeePerGas: "0x3b9aca00",
+    maxPriorityFeePerGas: "0x3b9aca00",
+    paymasterAndData: "0x",
+    signature: "0x",
+  };
+  const res = await fetch(paymasterUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "pm_sponsorUserOperation", params: [userOp, ENTRYPOINT_V06] }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) return false;
+  const data = await res.json() as { result?: { paymasterAndData?: string } };
+  return !!(data.result?.paymasterAndData);
+}
+
 // ── On-chain write helpers ────────────────────────────────────────────────────
 
-export async function stakeToEscrow(amountUsdc: number): Promise<{ txHash: string }> {
+export async function stakeToEscrow(amountUsdc: number): Promise<{ txHash: string; gasless: boolean }> {
   const cfg = getAgoraConfig();
   if (!cfg.escrowAddress) throw new Error("CopyTradeEscrow not configured.");
   await switchToArc();
@@ -94,13 +133,29 @@ export async function stakeToEscrow(amountUsdc: number): Promise<{ txHash: strin
   await eth.request({ method: "eth_requestAccounts" });
   const provider = new BrowserProvider(eth as never);
   const signer = await provider.getSigner();
+
+  // Circle Paymaster sponsorship check (optional — graceful fallback if absent)
+  let gasless = false;
+  const paymasterUrl = env("VITE_ARC_PAYMASTER_URL");
+  if (paymasterUrl) {
+    try {
+      const from = await signer.getAddress();
+      const nonce = await provider.getTransactionCount(from);
+      // encode stake(amountWei) calldata for the sponsorship check
+      const escrowIface = new Interface(ESCROW_ABI);
+      const amountWeiCheck = BigInt(Math.round(amountUsdc * 1_000_000));
+      const calldata = escrowIface.encodeFunctionData("stake", [amountWeiCheck]);
+      gasless = await checkPaymasterSponsorship(paymasterUrl, from, calldata, nonce);
+    } catch { /* paymaster unavailable — proceed without it */ }
+  }
+
   const amountWei = BigInt(Math.round(amountUsdc * 1_000_000)); // USDC 6 decimals
   const usdc = new Contract(ARC_USDC, ERC20_ABI, signer);
   await (await usdc.approve(cfg.escrowAddress, amountWei)).wait();
   const escrow = new Contract(cfg.escrowAddress, ESCROW_ABI, signer);
   const tx = await escrow.stake(amountWei);
   const receipt = await tx.wait() as { hash: string };
-  return { txHash: receipt.hash };
+  return { txHash: receipt.hash, gasless };
 }
 
 export async function registerArcAgent(domain: string, metadata: string): Promise<{ agentId: string; txHash: string }> {
