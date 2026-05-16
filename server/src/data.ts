@@ -73,6 +73,20 @@ export const services: Service[] = [
     description: "Agent pays per backtest run; returns return / drawdown / Sharpe + a receipt.",
     sampleResponse: { pair: "mETH/USDY", retPct: 12.4, maxDdPct: 6.1, sharpe: 1.3, trades: 42 } }),
 
+  // Agora / ArcMind
+  svc({ id: "svc_arc_reasoning", workspaceIds: ["agora"], name: "ArcMind Reasoning Trace", category: "inference", priceUsd: 0.01,
+    network: "arc-testnet",
+    description: "Buy one ArcMind step-by-step decision log via Circle Gateway Nanopayments. Includes signal inputs, Kelly sizing, and outcome hash.",
+    sampleResponse: { traceId: "trace-001", signal: "RSI(14)=28, OI spike +$420M", decision: "LONG BTC 18%", rationale: "Kelly f*=0.18, edge=0.62", outcome: "+14.3%", outcomeHash: "0x…" } }),
+  svc({ id: "svc_arc_signal_hl", workspaceIds: ["agora"], name: "ArcMind · Hyperliquid OI Feed", category: "data", priceUsd: 0.002,
+    network: "arc-testnet",
+    description: "Real-time ETH open interest delta and funding rate from Hyperliquid — sub-cent Nanopayment.",
+    sampleResponse: { asset: "ETH", oiValue: "1241.3M", fundingRate: "+0.032%/h", trend: "expanding" } }),
+  svc({ id: "svc_arc_copytrade", workspaceIds: ["agora"], name: "ArcMind · CopyTrade Stake Receipt", category: "trading", priceUsd: 1.00,
+    network: "arc-testnet",
+    description: "Receipt for staking USDC alongside ArcMind in CopyTradeEscrow.sol. Slash-bonded: drawdown >15% triggers automatic settlement.",
+    sampleResponse: { positionId: "pos_…", escrow: "0x24Cb6d1bE131006e8CB2cb7fBa5675725f9E6Da8", killThreshold: "15%", performanceFee: "5%" } }),
+
 ];
 
 export const agents: AgentPolicy[] = [

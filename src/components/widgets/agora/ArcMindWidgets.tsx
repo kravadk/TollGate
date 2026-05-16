@@ -284,6 +284,8 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
   const [onchainLoading, setOnchainLoading] = useState<"register" | "record" | null>(null);
   const [resolveTxHashes, setResolveTxHashes] = useLocalStore<Record<string, string>>(`arcmind-resolve-tx-${workspace.id}`, {});
   const [resolving, setResolving] = useState<string | null>(null);
+  const [buying, setBuying] = useState<string | null>(null);
+  const [buyErr, setBuyErr] = useState<string | null>(null);
 
   async function resolveTrace(trace: Trace, index: number) {
     setResolving(trace.id);
@@ -327,19 +329,34 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
     }
   }
 
-  function buyTrace(trace: Trace) {
-    if (purchased.includes(trace.id)) return;
-    setPurchased((prev: string[]) => [...prev, trace.id]);
-    setRevenue((r: number) => r + trace.price);
-    emitReceipt({
-      workspaceId: workspace.id,
-      serviceName: `Reasoning Trace: ${trace.title}`,
-      amount: trace.price,
-      currency: "USDC",
-      network: "arc-l1",
-      kind: "arcmind.trace.purchase",
-      payload: { traceId: trace.id, txHash: hashId("trace", `${trace.id}-${workspace.id}`) },
-    });
+  async function buyTrace(trace: Trace) {
+    if (purchased.includes(trace.id) || buying) return;
+    setBuying(trace.id);
+    setBuyErr(null);
+    try {
+      const res = await fetch(`${SERVER}/api/gateway/svc_arc_reasoning`, {
+        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-user" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) throw new Error(`Gateway ${res.status}`);
+      const data = await res.json() as { receiptId?: string };
+      const receiptId = data.receiptId ?? hashId("trace", `${trace.id}-${workspace.id}`);
+      setPurchased((prev: string[]) => [...prev, trace.id]);
+      setRevenue((r: number) => r + trace.price);
+      emitReceipt({
+        workspaceId: workspace.id,
+        serviceName: `Reasoning Trace: ${trace.title}`,
+        amount: trace.price,
+        currency: "USDC",
+        network: "arc-l1",
+        kind: "arcmind.trace.purchase",
+        payload: { traceId: trace.id, receiptId },
+      });
+    } catch (e: unknown) {
+      setBuyErr((e as { message?: string }).message ?? "Purchase failed.");
+    } finally {
+      setBuying(null);
+    }
   }
 
   function copyJson(trace: Trace) {
@@ -420,12 +437,19 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
                       </div>
                     </>
                   ) : (
-                    <button
-                      onClick={() => buyTrace(trace)}
-                      className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 transition-colors"
-                    >
-                      Unlock for ${trace.price} USDC
-                    </button>
+                    <div className="space-y-1.5">
+                      <button
+                        onClick={() => buyTrace(trace)}
+                        disabled={buying === trace.id}
+                        className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-semibold py-2 transition-colors"
+                      >
+                        {buying === trace.id ? "Processing x402…" : `Unlock for $${trace.price} USDC`}
+                      </button>
+                      {buyErr && buying === null && (
+                        <div className="text-[10.5px] text-red-400">{buyErr}</div>
+                      )}
+                      <div className="text-[10px] text-gray-600 text-center">Circle Gateway Nanopayment · Arc testnet</div>
+                    </div>
                   )}
                 </div>
               )}
@@ -722,9 +746,18 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
   const [killed, setKilled] = useLocalStore<boolean>(`arcmind-ks-killed-${workspace.id}`, false);
   const [running, setRunning] = useState(false);
   const [killSig, setKillSig] = useLocalStore<string | null>(`arcmind-ks-sig-${workspace.id}`, null);
+  const [decisionCount, setDecisionCount] = useState<number | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const killedRef = useRef(killed);
   killedRef.current = killed;
+
+  // Load real decision count from server to show on-chain grounding
+  useEffect(() => {
+    fetch(`${SERVER}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) })
+      .then(r => r.json())
+      .then((d: { decisions?: unknown[] }) => setDecisionCount(d.decisions?.length ?? 0))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!running || killed) return;
@@ -839,6 +872,12 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
         <div className="flex justify-between"><span>Protocol</span><span>ERC-8183 Job Contract</span></div>
         <div className="flex justify-between"><span>On trigger</span><span>Close all · pause 6h · refund remaining</span></div>
         <div className="flex justify-between"><span>Settlement</span><span>USDC · Arc L1</span></div>
+        {decisionCount !== null && (
+          <div className="flex justify-between">
+            <span>Monitoring</span>
+            <span className="text-violet-400">{decisionCount} on-chain decisions</span>
+          </div>
+        )}
       </div>
 
       {killed ? (

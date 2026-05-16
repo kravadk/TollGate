@@ -1,9 +1,9 @@
 import { type ReactNode, useState, useEffect } from "react";
-import { TrendingUp, CircleDollarSign, Zap, ShieldCheck } from "lucide-react";
+import { TrendingUp, Brain, Copy, Zap, ShieldCheck, Activity, Shield } from "lucide-react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
-import { Robot, Code, Receipt as RIco } from "../../icons402";
+import { Receipt as RIco } from "../../icons402";
 import { getAgoraConfig, getArcAgentStats } from "../../lib/agora";
 import { useNetworkMode } from "../../hooks/useNetworkMode";
 import { useLocalStore } from "../../lib/storage";
@@ -43,14 +43,14 @@ export {
 
 // ── Signature block ────────────────────────────────────────────────────────────
 export const signature: SigBlock = {
-  title: "Arc L1 agent commerce",
-  sub: "Circle tools powering autonomous cross-chain arbitrage on Arc mainnet",
-  headers: ["Tool", "Role", "Latency", "Status"],
+  title: "ArcMind — Slash-Bonded Trading Agent",
+  sub: "Autonomous BUY/SELL/HOLD decisions recorded on Arc L1 · reasoning traces sold via Circle Gateway Nanopayments",
+  headers: ["Layer", "Role", "Circle Tool", "Status"],
   rows: [
-    ["USDC", "settlement currency", "<1s", "active"],
-    ["CCTP", "Arc ↔ Base cross-chain", "<500ms", "active"],
-    ["Paymaster", "gas sponsorship", "free", "active"],
-    ["Nanopayments", "streaming receipts", "real-time", "active"],
+    ["Decision loop", "30-min autonomous signals", "ArcMindRegistry", "active"],
+    ["Trace marketplace", "$0.01/view via Nanopayments", "Gateway x402", "active"],
+    ["Copy-trade escrow", "USDC stake + slash-bond", "USDC · Contracts", "active"],
+    ["Kill switch", "auto-exit on drawdown >15%", "ERC-8183 escrow", "active"],
   ],
   accentCol: 3,
 };
@@ -58,42 +58,40 @@ export const signature: SigBlock = {
 // ── Cards ──────────────────────────────────────────────────────────────────────
 export function cards({
   onGoTab,
-  onOpenPayment,
   wsReceipts,
-  def,
   onGoReceipts,
 }: CardCtx & { onGoReceipts: () => void }): CardDef[] {
   return [
     {
       light: true,
+      ico: Activity,
+      title: "ArcMind Signal Hub",
+      sub: "Live BUY/SELL/HOLD · real Hyperliquid OI · on-chain log",
+      onClick: () => onGoTab("signal"),
+    },
+    {
+      ico: Brain,
+      title: "Buy Reasoning Traces",
+      sub: "$0.01/trace via Circle Gateway Nanopayments",
+      onClick: () => onGoTab("reasoning"),
+    },
+    {
+      ico: Copy,
+      title: "Copy-Trade with slash-bond",
+      sub: "Stake USDC · auto-exit on drawdown >15%",
+      onClick: () => onGoTab("copy"),
+    },
+    {
+      ico: Shield,
+      title: "Kill Switch monitor",
+      sub: "EIP-191 signed · ERC-8183 auto-close",
+      onClick: () => onGoTab("kill"),
+    },
+    {
       ico: TrendingUp,
-      title: "Run cross-chain arb demo",
-      sub: "ETH/USDC gap Arc vs Base · $0.05 · CCTP",
-      onClick: () => { onGoTab("arbitrage") || onGoTab("arb"); },
-    },
-    {
-      ico: CircleDollarSign,
-      title: "Adaptive portfolio rebalancer",
-      sub: "multi-asset · USDC settlement · Paymaster",
-      onClick: () => onGoTab("portfolio"),
-    },
-    {
-      ico: Zap,
-      title: "Pay-per-inference on Arc",
-      sub: "x402 → USDC → instant settlement",
-      onClick: () => { if (def) onOpenPayment(def); },
-    },
-    {
-      ico: Robot,
-      title: "ArcArb Agent settings",
-      sub: "daily limit $20 · auto-pay on · CCTP",
-      onClick: () => onGoTab("agent"),
-    },
-    {
-      ico: Code,
-      title: "Circle Tools — CCTP & Nanopayments",
-      sub: "CCTP bridge · Gateway · Paymaster",
-      onClick: () => { onGoTab("circle") || onGoTab("gateway"); },
+      title: "Arb demo — Arc vs Base",
+      sub: "ETH/USDC gap · CCTP · $0.05",
+      onClick: () => onGoTab("arbitrage"),
     },
     {
       ico: RIco,
@@ -228,6 +226,64 @@ function AgoraEcosystemLinks() {
   return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Arc Testnet · chainId 5042002" : "Arc Mainnet"} accent="#F59E0B" />;
 }
 
+// ── Live traction strip ────────────────────────────────────────────────────────
+const SERVER_URL = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
+
+function ArcMindTractionStrip() {
+  const [decisions, setDecisions] = useState<number>(0);
+  const [traces, setTraces] = useState<number>(0);
+  const [volumeUsd, setVolumeUsd] = useState<number>(0);
+  const [uptimeDays, setUptimeDays] = useState<number>(0);
+
+  async function load() {
+    try {
+      const [decRes, recRes] = await Promise.all([
+        fetch(`${SERVER_URL}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) }),
+        fetch(`${SERVER_URL}/api/receipts?workspace=agora`, { signal: AbortSignal.timeout(6_000) }),
+      ]);
+      if (decRes.ok) {
+        const d = await decRes.json() as { decisions: { ts: string }[] };
+        setDecisions(d.decisions?.length ?? 0);
+        if (d.decisions?.length) {
+          const oldest = d.decisions[d.decisions.length - 1].ts;
+          const days = (Date.now() - new Date(oldest).getTime()) / 86_400_000;
+          setUptimeDays(Math.max(0, Math.round(days)));
+        }
+      }
+      if (recRes.ok) {
+        const r = await recRes.json() as { receipts: { amount: number }[]; count: number };
+        const traceReceipts = r.receipts?.filter((rec: { amount: number }) => rec.amount <= 0.05) ?? [];
+        setTraces(traceReceipts.length);
+        setVolumeUsd(r.receipts?.reduce((s: number, rec: { amount: number }) => s + rec.amount, 0) ?? 0);
+      }
+    } catch { /* server may be down */ }
+  }
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const stats = [
+    { label: "Decisions on-chain", value: decisions.toString(), accent: "#8b5cf6" },
+    { label: "Traces sold", value: traces.toString(), accent: "#6366f1" },
+    { label: "Total volume", value: `$${volumeUsd.toFixed(2)}`, accent: "#22c55e" },
+    { label: "Uptime", value: uptimeDays > 0 ? `${uptimeDays}d` : "live", accent: "#f59e0b" },
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
+      {stats.map((s) => (
+        <div key={s.label} style={{ background: "var(--bg-2)", borderRadius: 10, border: "1px solid var(--line-2)", padding: "10px 14px" }}>
+          <div style={{ fontSize: ".62rem", color: "var(--muted)", marginBottom: 3 }}>{s.label}</div>
+          <div style={{ fontSize: "1.1rem", fontWeight: 800, color: s.accent, fontVariantNumeric: "tabular-nums" }}>{s.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Overview extra ─────────────────────────────────────────────────────────────
 export function renderOverviewExtra(
   workspace: Workspace,
@@ -236,6 +292,7 @@ export function renderOverviewExtra(
 ): ReactNode | null {
   return (
     <>
+      <ArcMindTractionStrip />
       <ArcContractsPanel workspace={workspace} />
       <AgoraEcosystemLinks />
     </>
