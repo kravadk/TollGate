@@ -49,6 +49,22 @@ async function fetchEthPrice(): Promise<number | null> {
     const data = await res.json() as { ethereum?: { usd?: number } };
     return data?.ethereum?.usd ?? null;
   } catch {
+    // Render can hit CoinGecko limits during deploy restarts. Hyperliquid allMids
+    // is a real market source and keeps the agent loop from going decisionless.
+  }
+
+  try {
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "allMids" }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as Record<string, string>;
+    const eth = parseFloat(data["ETH"] ?? "");
+    return Number.isFinite(eth) ? eth : null;
+  } catch {
     return null;
   }
 }
