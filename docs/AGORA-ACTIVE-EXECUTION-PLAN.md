@@ -78,6 +78,7 @@
 - [x] Task 24: Perps/liquidation protection lane.
 - [x] Task 25: Cross-platform arbitrage profitability lane.
 - [ ] Task 26: Final production smoke and submission summary refresh.
+- [x] Task 27: Starter flow, business model, and delivery rules.
 
 ---
 
@@ -918,3 +919,25 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 - [x] `npm run build`
 - [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`
 - [x] Production deploy poll checked `https://toll-gatee.vercel.app/live`; new sections were not live yet, so production smoke remains pending.
+
+---
+
+## Task 27: Starter Flow, Business Model, and Delivery Rules
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** competitors feel finished because new users understand where to begin, how alerts reach them, and how the product makes money. This closes the remaining basic-product gaps without inventing fake integrations.
+
+**Implementation checklist:**
+- [x] Add first-run goal picker: avoid bad copy trades, find safer leader, inspect agent, prepare live copy.
+- [x] Add first-run checklist: goal, risk, simulation, proof, paid receipt.
+- [x] Add business model block: trace unlock, protected portfolio start, future builder fees, future profit-share.
+- [x] Add alert delivery rules for in-app, browser, webhook, and Telegram with honest local/configured states.
+- [x] Add webhook/Telegram fields in Settings without fake send success.
+- [x] Add Escape-to-close and accessible labels for drawers.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] Playwright desktop/mobile `/live`: starter flow, business model, delivery settings, and Escape-close work with no horizontal overflow or console errors.
+- [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`

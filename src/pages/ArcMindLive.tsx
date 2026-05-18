@@ -42,6 +42,7 @@ type FeedbackPrompt = "clarity" | "trust" | "willingness" | "confusion";
 type PortfolioPolicy = "monitoring" | "paused" | "reduced" | "stopped";
 type StrategyId = "copyguard-balanced" | "usyc-defense" | "social-alpha" | "arb-aware";
 type AskPromptId = "why-stop" | "what-changed" | "source-mattered" | "lower-risk" | "copy-safe" | "custom";
+type StarterGoal = "avoid-losses" | "find-leader" | "inspect-agent" | "go-live";
 
 type LeaderScore = {
   id: string;
@@ -221,6 +222,33 @@ const ASK_PROMPTS: Array<{ id: AskPromptId; label: string }> = [
   { id: "source-mattered", label: "Which source mattered?" },
   { id: "lower-risk", label: "How do I lower risk?" },
   { id: "copy-safe", label: "When is COPY safe?" },
+];
+
+const STARTER_GOALS: Array<{ id: StarterGoal; label: string; detail: string; cta: string }> = [
+  {
+    id: "avoid-losses",
+    label: "Avoid bad copy trades",
+    detail: "Start conservative, tighten stop rules, and ask why a leader should be stopped.",
+    cta: "Set defense",
+  },
+  {
+    id: "find-leader",
+    label: "Find a safer leader",
+    detail: "Use balanced sizing, inspect copy candidates, and compare decay evidence.",
+    cta: "Find leader",
+  },
+  {
+    id: "inspect-agent",
+    label: "Inspect the agent",
+    detail: "Stay read-only, open source proof, and verify the latest decision trail.",
+    cta: "Inspect proof",
+  },
+  {
+    id: "go-live",
+    label: "Prepare live copy",
+    detail: "Switch to live execution, keep manual approval on, then connect Arc wallet.",
+    cta: "Prepare live",
+  },
 ];
 
 const STRATEGY_GALLERY: StrategyCard[] = [
@@ -532,6 +560,10 @@ export function ArcMindLive() {
   const [sourceProofOpen, setSourceProofOpen] = useState(false);
   const [askPrompt, setAskPrompt] = useState<AskPromptId>("why-stop");
   const [customQuestion, setCustomQuestion] = useState("");
+  const [starterGoal, setStarterGoal] = useState<StarterGoal>(() => {
+    const saved = window.localStorage.getItem("arcmind-starter-goal");
+    return saved === "avoid-losses" || saved === "find-leader" || saved === "inspect-agent" || saved === "go-live" ? saved : "avoid-losses";
+  });
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => {
     const saved = window.localStorage.getItem("arcmind-execution-mode");
     return saved === "live" || saved === "walkthrough" ? saved : "walkthrough";
@@ -547,6 +579,8 @@ export function ArcMindLive() {
   const [notifyNewTrace, setNotifyNewTrace] = useState(() => window.localStorage.getItem("arcmind-notify-new-trace") === "on");
   const [notifyProviderOutage, setNotifyProviderOutage] = useState(() => window.localStorage.getItem("arcmind-notify-provider-outage") !== "off");
   const [browserNotifyEnabled, setBrowserNotifyEnabled] = useState(() => window.localStorage.getItem("arcmind-browser-notify") === "on");
+  const [webhookUrl, setWebhookUrl] = useState(() => window.localStorage.getItem("arcmind-webhook-url") ?? "");
+  const [telegramTarget, setTelegramTarget] = useState(() => window.localStorage.getItem("arcmind-telegram-target") ?? "");
   const [selectedLeader, setSelectedLeader] = useState<LeaderScore | null>(null);
   const [scenario, setScenario] = useState<"none" | "funding" | "drawdown" | "calm" | "liquidity">("none");
   const [verification, setVerification] = useState<Verification | null>(null);
@@ -812,11 +846,27 @@ export function ArcMindLive() {
   useEffect(() => {
     window.localStorage.setItem("arcmind-portfolio-policy", portfolioPolicy);
     window.localStorage.setItem("arcmind-strategy-id", selectedStrategyId);
-  }, [portfolioPolicy, selectedStrategyId]);
+    window.localStorage.setItem("arcmind-starter-goal", starterGoal);
+    window.localStorage.setItem("arcmind-webhook-url", webhookUrl.trim());
+    window.localStorage.setItem("arcmind-telegram-target", telegramTarget.trim());
+  }, [portfolioPolicy, selectedStrategyId, starterGoal, webhookUrl, telegramTarget]);
 
   useEffect(() => {
     void loadSimulation(simLeaderId);
   }, [riskProfile, amountUsd, maxDrawdownPct, simLeaderId, payload?.latestDecision?.decisionHash]);
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSourceProofOpen(false);
+      setSelectedLeader(null);
+      setJudgeOpen(false);
+      setSettingsOpen(false);
+      setAlertsOpen(false);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, []);
 
   const latest = payload?.latestDecision ?? null;
   const leaders = latest?.leaderScores ?? [];
@@ -867,6 +917,13 @@ export function ArcMindLive() {
     { id: "trace", label: "Trace proof", ok: Boolean(traceReceipt), detail: traceReceipt ? "paid trace receipt" : "locked until $0.01 payment" },
     { id: "portfolio", label: "Portfolio", ok: Boolean(portfolioReceipt), detail: portfolioReceipt ? portfolioPolicy : "receipt required for live copy" },
     { id: "monitor", label: "Monitoring", ok: Boolean(latest), detail: latest ? `${latest.primaryAction ?? latest.decision} ${timeAgo(latest.ts)}` : "waiting for agent loop" },
+  ];
+  const starterSteps = [
+    { label: "Choose goal", done: Boolean(starterGoal), detail: STARTER_GOALS.find((goal) => goal.id === starterGoal)?.label ?? "Pick one path" },
+    { label: "Set risk", done: Boolean(riskProfile && maxDrawdownPct), detail: `${riskProfile}, ${maxDrawdownPct}% stop` },
+    { label: "Run simulation", done: Boolean(simulation), detail: simulation ? `${simulation.portfolio.copyAllocations.length} copy legs` : "waiting for backend simulation" },
+    { label: "Inspect proof", done: sourceProofRows.length > 0 || Boolean(decisionReplay?.events.length), detail: sourceProofRows.length ? `${sourceProofRows.length} proof rows` : "source proof pending" },
+    { label: "Pay only when ready", done: Boolean(traceReceipt || portfolioReceipt), detail: traceReceipt || portfolioReceipt ? "verified receipt exists" : "wallet payment required for live receipt" },
   ];
   const backtestRows = (payload?.decisions ?? []).slice(0, 6).map((decision, index, rows) => {
     const previous = rows[index + 1];
@@ -1053,6 +1110,38 @@ export function ArcMindLive() {
     { label: "Quote status", value: configuredSources.length >= 2 ? "watching" : "needs quotes", detail: "Requires at least two executable venue quotes before detect-route-execute is honest." },
     { label: "Reject reason", value: "No executable quote", detail: "The calculator shows route math but refuses to claim profit without a signed venue response." },
   ];
+  const feeRows = [
+    {
+      label: "Reasoning trace",
+      value: "$0.01",
+      status: traceReceipt ? "receipt verified" : "live when paid",
+      detail: "User pays only to unlock the full structured trace. A receipt appears only after wallet payment and backend verification.",
+    },
+    {
+      label: "Protected portfolio start",
+      value: `$${amountUsd.toFixed(0)} USDC`,
+      status: portfolioReceipt ? "receipt verified" : "wallet-gated",
+      detail: "Creates the protected copy request and audit row after Arc payment. Walkthrough mode cannot create local receipts.",
+    },
+    {
+      label: "Future builder fees",
+      value: "off",
+      status: "not integrated",
+      detail: "Potential Polymarket-style attribution is shown as roadmap until a real venue/builder-code integration exists.",
+    },
+    {
+      label: "Profit-sharing option",
+      value: "research",
+      status: "not live",
+      detail: "A Zignaly-like success fee could align incentives later, but no profit-share is charged in this hackathon demo.",
+    },
+  ];
+  const deliveryRows = [
+    { label: "In-app alerts", value: "active", detail: "Pulled from /api/arc-alerts with local read/unread state." },
+    { label: "Browser alerts", value: browserNotifyEnabled ? "enabled" : "opt-in", detail: "Critical local browser alerts require explicit permission." },
+    { label: "Webhook", value: webhookUrl.trim() ? "configured locally" : "not configured", detail: webhookUrl.trim() ? "Saved locally for future backend delivery; no fake send is performed." : "Paste an endpoint when backend delivery is added." },
+    { label: "Telegram", value: telegramTarget.trim() ? "configured locally" : "not configured", detail: telegramTarget.trim() ? "Saved locally as routing metadata; no bot message is claimed." : "Add a chat or handle after a real bot token/service exists." },
+  ];
   const mm = secsLeft !== null ? String(Math.floor(secsLeft / 60)).padStart(2, "0") : "--";
   const ss = secsLeft !== null ? String(secsLeft % 60).padStart(2, "0") : "--";
   const progress = secsLeft !== null ? Math.max(0, Math.min(100, (1 - secsLeft / (LOOP_MS / 1000)) * 100)) : 0;
@@ -1108,6 +1197,31 @@ export function ArcMindLive() {
     setMaxDrawdownPct(strategy.maxDrawdownPct);
     if (strategy.id === "usyc-defense") setPortfolioPolicy("reduced");
     if (strategy.id === "copyguard-balanced") setPortfolioPolicy("monitoring");
+  }
+
+  function applyStarterGoal(goal: StarterGoal) {
+    setStarterGoal(goal);
+    if (goal === "avoid-losses") {
+      applyStrategy(STRATEGY_GALLERY.find((strategy) => strategy.id === "usyc-defense") ?? STRATEGY_GALLERY[1]!);
+      setAskPrompt("why-stop");
+      setPortfolioPolicy("reduced");
+      return;
+    }
+    if (goal === "find-leader") {
+      applyStrategy(STRATEGY_GALLERY.find((strategy) => strategy.id === "copyguard-balanced") ?? STRATEGY_GALLERY[0]!);
+      setAskPrompt("copy-safe");
+      setPortfolioPolicy("monitoring");
+      return;
+    }
+    if (goal === "inspect-agent") {
+      setExecutionMode("walkthrough");
+      setAskPrompt("source-mattered");
+      setSourceProofOpen(true);
+      return;
+    }
+    setExecutionMode("live");
+    setManualApproval(true);
+    setAskPrompt("lower-risk");
   }
 
   async function buyTrace() {
@@ -1415,6 +1529,39 @@ export function ArcMindLive() {
               {!isArcWallet && walletAddress && <button onClick={switchToArc}>Switch to Arc</button>}
               <a href={ARC_FAUCET} target="_blank" rel="noreferrer">Get testnet USDC <ExternalLink size={12} /></a>
             </div>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
+          <Section>
+            <div className="am-panel-title"><Wallet size={18} /> User Starter Flow <strong>{STARTER_GOALS.find((goal) => goal.id === starterGoal)?.label}</strong></div>
+            <p className="am-muted">
+              A first-time user can pick a goal, get safe defaults, inspect proof, run simulation, and only then switch to live wallet execution.
+            </p>
+            <div className="am-goal-grid">
+              {STARTER_GOALS.map((goal) => (
+                <button key={goal.id} className={starterGoal === goal.id ? "is-active" : ""} onClick={() => applyStarterGoal(goal.id)}>
+                  <b>{goal.label}</b>
+                  <p>{goal.detail}</p>
+                  <span>{goal.cta}</span>
+                </button>
+              ))}
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><CheckCircle2 size={18} /> First-Run Checklist <strong>{starterSteps.filter((step) => step.done).length}/{starterSteps.length}</strong></div>
+            <div className="am-starter-steps">
+              {starterSteps.map((step, index) => (
+                <div key={step.label} className={step.done ? "is-ok" : ""}>
+                  <span>{step.done ? <CheckCircle2 size={14} /> : index + 1}</span>
+                  <div><b>{step.label}</b><p>{step.detail}</p></div>
+                </div>
+              ))}
+            </div>
+            <p className="am-readonly-hint">
+              The starter flow changes local preferences and simulation inputs only. Paid actions still require Arc wallet confirmation.
+            </p>
           </Section>
         </section>
 
@@ -1775,7 +1922,7 @@ export function ArcMindLive() {
               {!alerts.length && !alertsError && <p className="am-muted">{alertsLoading ? "Loading alerts..." : "No active alerts."}</p>}
             </div>
             <div className="am-delivery">
-              <span>In-app active</span><span>{browserNotifyEnabled ? "Browser on" : "Browser opt-in"}</span><span>Webhook next</span>
+              <span>In-app active</span><span>{browserNotifyEnabled ? "Browser on" : "Browser opt-in"}</span><span>{webhookUrl.trim() ? "Webhook saved" : "Webhook off"}</span><span>{telegramTarget.trim() ? "Telegram saved" : "Telegram off"}</span>
             </div>
           </Section>
 
@@ -1813,6 +1960,50 @@ export function ArcMindLive() {
                   <div><b>{item.title}</b><p>{item.detail}</p></div>
                 </a>
               ))}
+            </div>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
+          <Section>
+            <div className="am-panel-title"><CircleDollarSign size={18} /> Business Model <strong>judge-ready</strong></div>
+            <p className="am-muted">
+              ArcMind explains how it can earn without hiding incentives. Current monetization is receipt-based; venue attribution and profit-sharing stay clearly marked as future integrations.
+            </p>
+            <div className="am-fee-grid">
+              {feeRows.map((row) => (
+                <div key={row.label}>
+                  <span>{row.status}</span>
+                  <b>{row.value}</b>
+                  <p>{row.label}</p>
+                  <small>{row.detail}</small>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><Bell size={18} /> Alert Delivery Rules <strong>no fake sends</strong></div>
+            <div className="am-delivery-grid">
+              {deliveryRows.map((row) => (
+                <div key={row.label}>
+                  <b>{row.label}</b>
+                  <span>{row.value}</span>
+                  <p>{row.detail}</p>
+                </div>
+              ))}
+            </div>
+            <div className="am-setting-grid">
+              <label className="am-field">
+                <span>Webhook endpoint</span>
+                <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.currentTarget.value)} placeholder="https://example.com/arcmind-alerts" />
+                <small>Saved locally until backend delivery is added.</small>
+              </label>
+              <label className="am-field">
+                <span>Telegram target</span>
+                <input value={telegramTarget} onChange={(e) => setTelegramTarget(e.currentTarget.value)} placeholder="@handle or chat id" />
+                <small>Routing note only; no message is claimed.</small>
+              </label>
             </div>
           </Section>
         </section>
@@ -1958,7 +2149,7 @@ export function ArcMindLive() {
         <div className="am-drawer" role="dialog" aria-modal="true">
           <div className="am-drawer__backdrop" onClick={() => setSourceProofOpen(false)} />
           <div className="am-drawer__panel">
-            <button className="am-close" onClick={() => setSourceProofOpen(false)}><X size={16} /></button>
+            <button className="am-close" aria-label="Close source proof" onClick={() => setSourceProofOpen(false)}><X size={16} /></button>
             <h2>Source Proof Board</h2>
             <p className="am-muted">
               A compact evidence ledger for the current live demo: configured data sources, decision replay steps, and which Agora RFB each proof supports.
@@ -1988,7 +2179,7 @@ export function ArcMindLive() {
         <div className="am-drawer" role="dialog" aria-modal="true">
           <div className="am-drawer__backdrop" onClick={() => setSelectedLeader(null)} />
           <div className="am-drawer__panel">
-            <button className="am-close" onClick={() => setSelectedLeader(null)}><X size={16} /></button>
+            <button className="am-close" aria-label="Close leader profile" onClick={() => setSelectedLeader(null)}><X size={16} /></button>
             <h2>{selectedLeader.name}</h2>
             <p className="am-muted">{selectedLeader.decaySummary ?? selectedLeader.reason}</p>
             <div className="am-metric-grid">
@@ -2050,7 +2241,7 @@ export function ArcMindLive() {
         <div className="am-drawer" role="dialog" aria-modal="true">
           <div className="am-drawer__backdrop" onClick={() => setJudgeOpen(false)} />
           <div className="am-drawer__panel">
-            <button className="am-close" onClick={() => setJudgeOpen(false)}><X size={16} /></button>
+            <button className="am-close" aria-label="Close judge walkthrough" onClick={() => setJudgeOpen(false)}><X size={16} /></button>
             <h2>Judge Walkthrough</h2>
             <p className="am-muted">
               Fast path for async review: inspect the live agent state, verify Arc evidence, then try paid actions with a wallet. Read-only rows do not create receipts.
@@ -2138,7 +2329,7 @@ export function ArcMindLive() {
         <div className="am-drawer" role="dialog" aria-modal="true">
           <div className="am-drawer__backdrop" onClick={() => setSettingsOpen(false)} />
           <div className="am-drawer__panel">
-            <button className="am-close" onClick={() => setSettingsOpen(false)}><X size={16} /></button>
+            <button className="am-close" aria-label="Close settings" onClick={() => setSettingsOpen(false)}><X size={16} /></button>
             <h2>Settings</h2>
             <p className="am-muted">These settings shape portfolio requests and alerts. They are stored locally and sent with live portfolio creation; read-only walkthrough still creates no receipt.</p>
             <h3>Risk Profile</h3>
@@ -2165,6 +2356,18 @@ export function ArcMindLive() {
             <label className="am-toggle"><span>Leader risk and decay alerts</span><input type="checkbox" checked={notifyLeaderRisk} onChange={(e) => setNotifyLeaderRisk(e.currentTarget.checked)} /></label>
             <label className="am-toggle"><span>New reasoning trace available</span><input type="checkbox" checked={notifyNewTrace} onChange={(e) => setNotifyNewTrace(e.currentTarget.checked)} /></label>
             <label className="am-toggle"><span>Provider outage or unavailable data</span><input type="checkbox" checked={notifyProviderOutage} onChange={(e) => setNotifyProviderOutage(e.currentTarget.checked)} /></label>
+            <div className="am-setting-grid">
+              <label className="am-field">
+                <span>Webhook endpoint</span>
+                <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.currentTarget.value)} placeholder="https://example.com/arcmind-alerts" />
+                <small>Stored locally as routing metadata. Backend delivery is not claimed yet.</small>
+              </label>
+              <label className="am-field">
+                <span>Telegram target</span>
+                <input value={telegramTarget} onChange={(e) => setTelegramTarget(e.currentTarget.value)} placeholder="@handle or chat id" />
+                <small>Stored locally until a real bot/service is configured.</small>
+              </label>
+            </div>
 
             <h3>Interface</h3>
             <label className="am-toggle"><span>Motion</span><input type="checkbox" checked={softMotion} onChange={(e) => setSoftMotion(e.currentTarget.checked)} /></label>
@@ -2183,7 +2386,7 @@ export function ArcMindLive() {
         <div className="am-drawer" role="dialog" aria-modal="true">
           <div className="am-drawer__backdrop" onClick={() => setAlertsOpen(false)} />
           <div className="am-drawer__panel">
-            <button className="am-close" onClick={() => setAlertsOpen(false)}><X size={16} /></button>
+            <button className="am-close" aria-label="Close alerts" onClick={() => setAlertsOpen(false)}><X size={16} /></button>
             <h2>Alerts</h2>
             <p className="am-muted">CopyGuard alerts are pulled from `/api/arc-alerts` and kept as local read/unread state on this device.</p>
             <div className="am-alert-toolbar">
@@ -2272,6 +2475,18 @@ export function ArcMindLive() {
         .am-policy-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
         .am-policy-controls button { border: 1px solid #26364d; background: #101827; color: #d8e4f6; border-radius: 10px; padding: 9px 10px; font-weight: 900; cursor: pointer; }
         .am-policy-controls button.is-active { border-color: #60A5FA66; background: #60A5FA18; color: #bfdbfe; }
+        .am-goal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+        .am-goal-grid button { border: 1px solid #1b2a40; background: #08111e; color: inherit; border-radius: 13px; padding: 12px; text-align: left; cursor: pointer; min-width: 0; }
+        .am-goal-grid button.is-active { border-color: #10B98166; background: #10B98112; }
+        .am-goal-grid b { display: block; color: #dbeafe; line-height: 1.25; }
+        .am-goal-grid p { color: #9fb2cc; margin: 6px 0 9px; font-size: .76rem; line-height: 1.45; }
+        .am-goal-grid span { display: inline-flex; color: #a7f3d0; border: 1px solid #10B98144; background: #10B98112; border-radius: 999px; padding: 5px 8px; font-size: .66rem; font-weight: 950; }
+        .am-starter-steps { display: grid; gap: 9px; }
+        .am-starter-steps > div { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: center; border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 10px; }
+        .am-starter-steps > div.is-ok { border-color: #10B98155; background: #10B98110; }
+        .am-starter-steps > div > span { width: 26px; height: 26px; border: 1px solid #26364d; border-radius: 999px; display: grid; place-items: center; color: #9fb2cc; font-weight: 950; font-size: .72rem; }
+        .am-starter-steps b { display: block; line-height: 1.25; }
+        .am-starter-steps p { color: #9fb2cc; margin: 3px 0 0; font-size: .74rem; line-height: 1.4; overflow-wrap: anywhere; }
         .am-rfb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
         .am-rfb-grid > div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 12px; min-width: 0; }
         .am-rfb-grid span { display: inline-flex; border: 1px solid #60A5FA44; background: #60A5FA12; color: #bfdbfe; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 8px; }
@@ -2326,6 +2541,13 @@ export function ArcMindLive() {
         .am-risk-grid span { display: block; color: #7890ad; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 900; margin-bottom: 6px; }
         .am-risk-grid b { display: block; color: #dbeafe; font-size: 1.05rem; line-height: 1.15; overflow-wrap: anywhere; }
         .am-risk-grid p { color: #9fb2cc; margin: 6px 0 0; font-size: .76rem; line-height: 1.45; }
+        .am-fee-grid, .am-delivery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+        .am-fee-grid div, .am-delivery-grid div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 12px; min-width: 0; }
+        .am-fee-grid span, .am-delivery-grid span { display: inline-flex; color: #bfdbfe; border: 1px solid #60A5FA44; background: #60A5FA12; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 8px; text-transform: uppercase; }
+        .am-fee-grid b, .am-delivery-grid b { display: block; color: #dbeafe; font-size: 1.05rem; line-height: 1.15; overflow-wrap: anywhere; }
+        .am-fee-grid p, .am-delivery-grid p { color: #f5f7fb; margin: 7px 0 4px; font-size: .78rem; line-height: 1.35; }
+        .am-fee-grid small { display: block; color: #7890ad; font-size: .68rem; line-height: 1.4; overflow-wrap: anywhere; }
+        .am-delivery-grid p { color: #9fb2cc; }
         .am-block-head { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
         .am-block-head h2 { margin: 0; font-size: 1.05rem; }
         .am-block-head p { color: #7890ad; font-size: .75rem; margin: 4px 0 0; }
@@ -2489,7 +2711,7 @@ export function ArcMindLive() {
           .am-topbar { flex-wrap: wrap; }
           .am-mode-switch { min-width: 100%; order: 5; }
           .am-judgebtn, .am-walletbtn { flex: 1 1 auto; justify-content: center; }
-          .am-controls, .am-hash-grid, .am-stat-grid, .am-traction-grid, .am-profile-grid, .am-setting-grid, .am-feedback-prompts, .am-sim-leaders, .am-sim-result, .am-readiness-checks, .am-source-grid, .am-rfb-grid, .am-policy-controls, .am-backtest-score, .am-profile-metrics, .am-ask-input, .am-prediction-grid, .am-risk-grid { grid-template-columns: 1fr; }
+          .am-controls, .am-hash-grid, .am-stat-grid, .am-traction-grid, .am-profile-grid, .am-setting-grid, .am-feedback-prompts, .am-sim-leaders, .am-sim-result, .am-readiness-checks, .am-source-grid, .am-rfb-grid, .am-policy-controls, .am-backtest-score, .am-profile-metrics, .am-ask-input, .am-prediction-grid, .am-risk-grid, .am-goal-grid, .am-fee-grid, .am-delivery-grid { grid-template-columns: 1fr; }
           .am-share-card { grid-template-columns: 1fr; }
           .am-share-card button { justify-content: center; }
           .am-segment { grid-template-columns: 1fr; }
