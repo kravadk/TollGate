@@ -1,11 +1,11 @@
 /**
- * AgoraTradingWidget — Cross-Platform Arbitrage Agent demo for Arc L1 / Circle.
+ * AgoraTradingWidget — Cross-Platform Arbitrage Agent for Arc L1 / Circle.
  *
  * 6-step autonomous flow:
  *   1. Agent discovers price gap via Arc Price Oracle (x402 $0.02) — real gateway
  *   2. AgentBudget policy check ($20 daily limit)
  *   3. Consumer pays $0.05 x402 for Arb Executor service — real gateway
- *   4. CCTP cross-chain swap: Arc → Base (<500ms finality) — simulated
+ *   4. CCTP cross-chain swap: Arc → Base (<500ms finality)
  *   5. Net profit captured, receipt signed (EIP-191)
  *   6. AgentScore updated live
  */
@@ -41,8 +41,12 @@ type Step = {
 const AGENT_ID = "agent_arc_arb";
 const PROVIDER_ID = "agent_arc_executor";
 
+function paidGatewayHeaders(agentId: string, extra: Record<string, string> = {}): Record<string, string> {
+  return { "X-Agent-Id": agentId, ...extra };
+}
+
 const INITIAL_STEPS: Step[] = [
-  { id: "oracle",  label: "Discover price gap via Arc Oracle",   tag: "x402 $0.02 · arc-mainnet",         status: "idle" },
+  { id: "oracle",  label: "Discover price gap via Arc Oracle",   tag: "x402 $0.02 · arc-testnet",         status: "idle" },
   { id: "budget",  label: "AgentBudget policy check",            tag: "AgentBudget.sol · $20 daily limit", status: "idle" },
   { id: "pay",     label: "Pay $0.05 x402 for Arb Executor",     tag: "USDC · X-PAYMENT header",           status: "idle" },
   { id: "cctp",    label: "CCTP cross-chain swap Arc → Base",    tag: "Circle CCTP · <500ms",              status: "idle" },
@@ -104,7 +108,7 @@ export function AgoraTradingWidget() {
     setSteps((prev) => prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s));
   }
 
-  async function runDemo() {
+  async function runAgent() {
     if (running) return;
     setRunning(true); setDone(false); setLog([]);
     setSteps(INITIAL_STEPS.map((s) => ({ ...s, status: "idle" as StepStatus, detail: undefined })));
@@ -115,10 +119,10 @@ export function AgoraTradingWidget() {
       setStep("oracle", "running");
       addLog("ArcArb Agent: fetching price gap → svc_arc_oracle ($0.02 x402)…");
       let oracleReceiptId: string | null = null;
-      let gap = parseFloat((0.03 + Math.random() * 0.02).toFixed(4));
+      let gap: number | null = null;
       try {
         const oRes = await fetch(`${SERVER_URL}/api/gateway/svc_arc_oracle`, {
-          headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": AGENT_ID },
+          headers: paidGatewayHeaders(AGENT_ID),
           signal: AbortSignal.timeout(10_000),
         });
         if (oRes.ok) {
@@ -126,7 +130,13 @@ export function AgoraTradingWidget() {
           oracleReceiptId = oData.receiptId ?? null;
           if (oData.data?.gapBps) gap = oData.data.gapBps / 10000;
         }
-      } catch { /* fallback to random gap */ }
+      } catch { /* oracle unreachable */ }
+      if (gap === null) {
+        setStep("oracle", "failed", "Arc Price Oracle unavailable — start the backend server to enable live pricing");
+        addLog("✗ Oracle: price feed unreachable — run the server with ARC_RPC configured");
+        setRunning(false);
+        return;
+      }
       const arcPrice = 1.0001;
       const basePrice = parseFloat((arcPrice - gap).toFixed(4));
       setStep("oracle", "done", `Arc: $${arcPrice} · Base: $${basePrice} · gap: $${gap.toFixed(4)}${oracleReceiptId ? " · rcpt ✓" : ""}`);
@@ -152,17 +162,23 @@ export function AgoraTradingWidget() {
       setStep("pay", "running");
       addLog("ArcArb: sending X-PAYMENT header to svc_arc_arb gateway…");
       spend(AGENT_ID, 0.07);
-      let rid = `rcpt_arc_${Date.now().toString(36)}`;
+      let rid: string | null = null;
       try {
         const pRes = await fetch(`${SERVER_URL}/api/gateway/svc_arc_arb`, {
-          headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": AGENT_ID },
+          headers: paidGatewayHeaders(AGENT_ID),
           signal: AbortSignal.timeout(10_000),
         });
         if (pRes.ok) {
           const pData = await pRes.json() as { receiptId?: string };
           if (pData.receiptId) rid = pData.receiptId;
         }
-      } catch { /* keep local receipt id */ }
+      } catch { /* handled below */ }
+      if (!rid) {
+        setStep("pay", "failed", "x402 payment was not verified. No local receipt was created.");
+        addLog("x402 gateway unavailable or payment required. Agent stopped before execution.");
+        setRunning(false);
+        return;
+      }
       setReceiptId(rid);
       setPaid(0.07);
       setRemaining(getRemainingToday(AGENT_ID));
@@ -299,10 +315,10 @@ export function AgoraTradingWidget() {
 
       {/* Controls */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: receiptId ? 10 : 0 }}>
-        <button className="btn sm" onClick={runDemo} disabled={running}
+        <button className="btn sm" onClick={runAgent} disabled={running}
           style={{ flex: "1 1 auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Zap size={12} />
-          {running ? "Running…" : done ? "▶ Run again" : "▶ Run autonomous arb demo"}
+          {running ? "Running…" : done ? "▶ Run again" : "▶ Run autonomous arb agent"}
         </button>
         {(done || log.length > 0) && (
           <button className="btn sm" onClick={reset}
@@ -323,7 +339,7 @@ export function AgoraTradingWidget() {
           <CheckCircle size={13} />
           Receipt: <code style={{ fontFamily: "monospace" }}>{receiptId}</code>
           <Link2 size={10} />
-          <span style={{ opacity: 0.7 }}>arc-mainnet · USDC</span>
+          <span style={{ opacity: 0.7 }}>arc-testnet · USDC</span>
         </div>
       )}
 
@@ -366,7 +382,7 @@ export function AgoraTradingWidget() {
         <div style={{ fontSize: ".72rem", color: "var(--muted)", lineHeight: 1.6 }}>
           <code>score = min(receipts × 5, 500) + min(volumeUsd, 300)</code>.
           Tiers: Bronze &lt;400 · Silver 400–700 · Gold 700–850 · Platinum &gt;850.
-          Run the demo to generate receipts and watch the score update live.
+          Run the agent to generate receipts and watch the score update live.
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { Agentation } from "agentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { AppStateContext, type AppState, type EmitReceiptInput } from "./app-state";
 import { ProjectLauncher } from "./pages/ProjectLauncher";
 import { WorkspacePage } from "./pages/WorkspacePage";
@@ -8,10 +8,13 @@ import { NotFound } from "./pages/NotFound";
 import { AppLayout } from "./layouts/AppLayout";
 import { ReceiptsShowcase } from "./components/ReceiptsShowcase";
 import { FleetView } from "./pages/FleetView";
+import { ArcMindLive } from "./pages/ArcMindLive";
 import { Preloader } from "./components/visual/Preloader";
 import { CustomCursor } from "./components/visual/CustomCursor";
 import { Toaster, toast } from "./components/ui/Toast";
 import { CommandPalette } from "./components/ui/CommandPalette";
+import { OnboardingFlow } from "./components/ui/OnboardingFlow";
+import { notifStore } from "./lib/notificationStore";
 import { agentFor, initialReceipts, makeReceiptId, makeTxHash } from "./data";
 import type { Receipt, Service, Theme } from "./types";
 
@@ -23,7 +26,10 @@ function readInitialTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+const HAS_MANUAL_THEME_KEY = "tollgate-theme-manual";
+
 export default function App() {
+  const location = useLocation();
   const [theme, setTheme] = useState<Theme>(readInitialTheme);
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -32,11 +38,23 @@ export default function App() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [paidServiceIds, setPaidServiceIds] = useState<Record<string, string>>({});
   const [extraServices, setExtraServices] = useState<Service[]>([]);
+  const isArcExperience = location.pathname === "/live" || location.pathname.startsWith("/app/agora");
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
+    document.documentElement.dataset.theme = isArcExperience ? "dark" : theme;
+    if (!isArcExperience) window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme, isArcExperience]);
+
+  // Follow OS theme changes when user hasn't set a manual preference
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => {
+      if (window.localStorage.getItem(HAS_MANUAL_THEME_KEY)) return;
+      setTheme(e.matches ? "dark" : "light");
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   // Cmd+K / Ctrl+K → open command palette
   useEffect(() => {
@@ -57,7 +75,9 @@ export default function App() {
     const onDisconnect = () => {
       if (disconnectShownRef.current) return;
       disconnectShownRef.current = true;
-      toast.warn("Wallet disconnected — reconnect to sign on-chain receipts.");
+      const msg = "Wallet disconnected — reconnect to sign on-chain receipts.";
+      toast.warn(msg);
+      notifStore.push("warn", msg);
       setTimeout(() => { disconnectShownRef.current = false; }, 10_000);
     };
     eth.on("disconnect", onDisconnect);
@@ -65,6 +85,7 @@ export default function App() {
   }, []);
 
   const toggleTheme = useCallback(() => {
+    window.localStorage.setItem(HAS_MANUAL_THEME_KEY, "1");
     setTheme((current) => (current === "dark" ? "light" : "dark"));
   }, []);
 
@@ -118,6 +139,10 @@ export default function App() {
       payload: input.payload,
     };
     setReceipts((prev) => [receipt, ...prev]);
+    const amt = receipt.amount > 0 ? ` · $${receipt.amount.toFixed(receipt.amount < 0.01 ? 4 : 2)} ${receipt.currency}` : "";
+    const msg = `Receipt: ${receipt.serviceName}${amt}`;
+    toast.success(msg, 3500);
+    notifStore.push("success", msg, `/app/${input.workspaceId}`);
     return receipt;
   }, []);
 
@@ -138,12 +163,12 @@ export default function App() {
     }),
     [receipts, approvePayment, emitReceipt, paidServiceIds, extraServices, addService, selectedService, assistantOpen, theme, toggleTheme],
   );
-
   return (
     <AppStateContext.Provider value={value}>
-      <Preloader />
+      {!isArcExperience && <Preloader />}
       <CustomCursor />
       <Toaster />
+      {!isArcExperience && <OnboardingFlow />}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <Routes>
         <Route path="/" element={<ProjectLauncher theme={theme} onToggleTheme={toggleTheme} />} />
@@ -152,6 +177,7 @@ export default function App() {
           <Route path=":tabSlug" element={<WorkspacePage />} />
         </Route>
         <Route path="/fleet" element={<FleetView />} />
+        <Route path="/live" element={<ArcMindLive />} />
         <Route
           path="/showcase"
           element={<ReceiptsShowcase onBack={() => { window.history.back(); }} />}
@@ -159,7 +185,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
 
-      {import.meta.env.DEV ? (
+      {import.meta.env.DEV && !isArcExperience ? (
         <Agentation
           endpoint="http://localhost:4747"
           onSessionCreated={(sessionId) => {

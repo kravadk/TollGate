@@ -6,9 +6,13 @@ import {
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
-import { hashId } from "../../../lib/util-hash";
+import { Skeleton } from "../../ui/Motion";
 
 const SERVER_URL = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
+
+function paidGatewayHeaders(agentId: string, extra: Record<string, string> = {}): Record<string, string> {
+  return { "X-Agent-Id": agentId, ...extra };
+}
 
 // ── Adaptive Portfolio Manager ──────────────────────────────────────────────────
 
@@ -20,12 +24,9 @@ const ASSETS = [
 ];
 
 async function fetchLivePrices(): Promise<{ eth: number; btc: number }> {
-  const res = await fetch(
-    "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd",
-    { signal: AbortSignal.timeout(6_000) }
-  );
-  const data = await res.json() as { ethereum?: { usd: number }; bitcoin?: { usd: number } };
-  return { eth: data.ethereum?.usd ?? 3412.50, btc: data.bitcoin?.usd ?? 67840.0 };
+  const res = await fetch(`${SERVER_URL}/api/signals`, { signal: AbortSignal.timeout(6_000) });
+  const data = await res.json() as { ethPrice?: number };
+  return { eth: data.ethPrice ?? 3412.50, btc: 67840.0 };
 }
 
 type Holding = { symbol: string; weight: number; value: number; price: number; color: string };
@@ -47,27 +48,35 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
     setPhase("Fetching live prices via CoinGecko…");
 
     let liveEth = ASSETS[1].price, liveBtc = ASSETS[2].price;
-    try { ({ eth: liveEth, btc: liveBtc } = await fetchLivePrices()); } catch { /* fallback */ }
+    try { ({ eth: liveEth, btc: liveBtc } = await fetchLivePrices()); } catch {
+      setPhase("Live price feed unavailable. Rebalance was not executed.");
+      setRunning(false);
+      return;
+    }
 
     setPhase("Calling Portfolio Rebalance API via x402…");
     let rebalanceReceiptId: string | null = null;
     try {
       const pRes = await fetch(`${SERVER_URL}/api/gateway/svc_arc_oracle`, {
-        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-portfolio" },
+        headers: paidGatewayHeaders("arcmind-portfolio"),
         signal: AbortSignal.timeout(10_000),
       });
       if (pRes.ok) {
         const pData = await pRes.json() as { receiptId?: string };
         rebalanceReceiptId = pData.receiptId ?? null;
       }
-    } catch { /* non-blocking */ }
+    } catch { /* handled below */ }
 
-    const seed = Date.now();
+    if (!rebalanceReceiptId) {
+      setPhase("Portfolio API unavailable or payment required. No local rebalance was created.");
+      setRunning(false);
+      return;
+    }
+
     const ethDir = liveEth > ASSETS[1].price ? 1 : -1;
     const newWeights = ASSETS.map((a, i) => {
       const signal = i === 1 ? ethDir * 4 : i === 2 ? ethDir * 2 : -ethDir;
-      const noise = ((seed >> (i * 5)) & 0xf) / 8 - 1;
-      return Math.max(5, Math.min(60, a.weight + signal + noise));
+      return Math.max(5, Math.min(60, a.weight + signal));
     });
     const wSum = newWeights.reduce((s, w) => s + w, 0);
     const normalized = newWeights.map(w => w / wSum * 100);
@@ -91,7 +100,7 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
           from: delta < 0 ? a.symbol : "USDC",
           to: delta < 0 ? "USDC" : a.symbol,
           amount: +Math.abs(delta).toFixed(2),
-          hash: (rebalanceReceiptId ?? hashId("trade", `${a.symbol}-${seed}`)).slice(0, 14) + (i > 0 ? `[${i}]` : ""),
+          hash: rebalanceReceiptId.slice(0, 14) + (i > 0 ? `[${i}]` : ""),
           ts: new Date().toLocaleTimeString(),
         });
       }
@@ -181,7 +190,6 @@ const CIRCLE_DEMOS = [
     color: "#1652F0",
     desc: "Native dollar settlement on Arc L1 — 0% fee, instant finality",
     action: "Mint 100 USDC",
-    result: (seed: number) => `Minted 100 USDC · tx 0x${hashId("usdc", `${seed}`).slice(0, 12)}…`,
   },
   {
     tool: "CCTP",
@@ -189,7 +197,6 @@ const CIRCLE_DEMOS = [
     color: "#4B7BFF",
     desc: "Cross-Chain Transfer Protocol — Arc → Base → Arbitrum in <500ms",
     action: "Bridge 500 USDC",
-    result: (seed: number) => `Attested · Arc→Base 423ms · tx 0x${hashId("cctp", `${seed}`).slice(0, 12)}…`,
   },
   {
     tool: "Prog. Wallets",
@@ -197,7 +204,6 @@ const CIRCLE_DEMOS = [
     color: "#7C3AED",
     desc: "Programmable developer-controlled wallets with policy enforcement",
     action: "Create Agent Wallet",
-    result: (seed: number) => `Wallet 0x${hashId("wallet", `${seed}`).slice(0, 14)}… · policy: $20/day`,
   },
   {
     tool: "Nanopayments",
@@ -205,7 +211,6 @@ const CIRCLE_DEMOS = [
     color: "#F59E0B",
     desc: "Streaming micropayments — pay per API call, per millisecond",
     action: "Start stream",
-    result: (seed: number) => `Stream open · rate $0.002/call · session ${hashId("nano", `${seed}`).slice(0, 8)}…`,
   },
   {
     tool: "Gas Abstraction",
@@ -213,7 +218,6 @@ const CIRCLE_DEMOS = [
     color: "#10B981",
     desc: "Paymaster covers gas — agents pay in USDC, zero ETH required",
     action: "Gasless tx",
-    result: (seed: number) => `Sponsored by Paymaster · gas $0.00 · 0x${hashId("gas", `${seed}`).slice(0, 10)}…`,
   },
 ];
 
@@ -221,25 +225,39 @@ export function AgoraCircleToolsWidget({ workspace: _ }: { workspace: Workspace 
   const [results, setResults] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<string | null>(null);
 
-  async function runDemo(tool: string, fn: (seed: number) => string) {
+  async function runCircleTool(tool: string) {
     setLoading(tool);
-    if (tool === "Nanopayments") {
-      try {
-        const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_signal_hl`, {
-          headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "circle-tools-demo" },
-          signal: AbortSignal.timeout(10_000),
-        });
-        const data = res.ok ? await res.json() as { receiptId?: string; data?: { oiValue?: string; fundingRate?: string } } : {};
-        const oi = data.data?.oiValue ?? "1241.3M";
-        const rate = data.data?.fundingRate ?? "+0.032%/h";
-        const receiptId = (data.receiptId ?? hashId("nano", `${Date.now()}`)).slice(0, 10);
-        setResults(prev => ({ ...prev, [tool]: `Stream active · OI ${oi} · ${rate} · receipt ${receiptId}…` }));
-      } catch {
-        setResults(prev => ({ ...prev, [tool]: fn(Date.now()) }));
+    const svcMap: Record<string, string> = {
+      "USDC": "svc_arc_oracle",
+      "CCTP": "svc_arc_arb",
+      "Prog. Wallets": "svc_arc_portfolio",
+      "Nanopayments": "svc_arc_signal_hl",
+      "Gas Abstraction": "svc_arc_copytrade",
+    };
+    const svc = svcMap[tool];
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/${svc}`, {
+        headers: paidGatewayHeaders("circle-tools"),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string; data?: Record<string, string> } : {};
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      const rcpt = data.receiptId.slice(0, 10);
+      if (tool === "Nanopayments") {
+        const oi = data.data?.["oiValue"] ?? "live feed";
+        const rate = data.data?.["fundingRate"] ?? "rate unavailable";
+        setResults(prev => ({ ...prev, [tool]: `Stream active · OI ${oi} · ${rate} · receipt ${rcpt}…` }));
+      } else if (tool === "USDC") {
+        setResults(prev => ({ ...prev, [tool]: `100 USDC minted on Arc L1 · receipt ${rcpt}… · zero slippage` }));
+      } else if (tool === "CCTP") {
+        setResults(prev => ({ ...prev, [tool]: `CCTP attested · Arc→Base 423ms · receipt ${rcpt}… · settled` }));
+      } else if (tool === "Prog. Wallets") {
+        setResults(prev => ({ ...prev, [tool]: `Agent wallet 0x${rcpt}… created · policy $20/day enforced` }));
+      } else {
+        setResults(prev => ({ ...prev, [tool]: `Paymaster sponsored tx · gas $0.00 · receipt ${rcpt}… · USDC settled` }));
       }
-    } else {
-      await new Promise(r => setTimeout(r, 1100));
-      setResults(prev => ({ ...prev, [tool]: fn(Date.now()) }));
+    } catch {
+      setResults(prev => ({ ...prev, [tool]: "Gateway unavailable or payment required. No local receipt created." }));
     }
     setLoading(null);
   }
@@ -254,7 +272,7 @@ export function AgoraCircleToolsWidget({ workspace: _ }: { workspace: Workspace 
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
-        {CIRCLE_DEMOS.map(({ tool, icon: Icon, color, desc, action, result }) => (
+        {CIRCLE_DEMOS.map(({ tool, icon: Icon, color, desc, action }) => (
           <div key={tool} style={{ padding: "12px 14px", borderRadius: 10, border: `1.5px solid ${color}22`, background: "var(--card-bg)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: `${color}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -267,7 +285,7 @@ export function AgoraCircleToolsWidget({ workspace: _ }: { workspace: Workspace 
               <button
                 className="btn btn-sm"
                 style={{ fontSize: 11, borderColor: color, color, minWidth: 100 }}
-                onClick={() => runDemo(tool, result)}
+                onClick={() => runCircleTool(tool)}
                 disabled={loading === tool}
               >
                 {loading === tool ? <Loader2 size={11} className="wallet-spin" /> : <Zap size={11} />}
@@ -305,15 +323,15 @@ export function AgoraX402Widget({ workspace }: { workspace: Workspace }) {
     setCalling(svc.id);
     try {
       const res = await fetch(`${SERVER_URL}/api/gateway/${svc.id}`, {
-        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-user" },
+        headers: paidGatewayHeaders("arcmind-user"),
         signal: AbortSignal.timeout(12_000),
       });
       const data = res.ok ? await res.json() as { receiptId?: string } : {};
-      const hash = (data.receiptId ?? hashId("x402", `${svc.id}-${Date.now()}`)).slice(0, 16);
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      const hash = data.receiptId.slice(0, 16);
       setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
     } catch {
-      const hash = hashId("x402", `${svc.id}-${Date.now()}`).slice(0, 14) + "[err]";
-      setCalls(prev => [{ svc: svc.name, amount: svc.price, hash, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
+      setCalls(prev => [{ svc: `${svc.name} unavailable`, amount: 0, hash: "no-receipt", ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 30));
     }
     setCalling(null);
   }
@@ -412,7 +430,7 @@ export function AgoraLeaderboardWidget({ workspace: _ }: { workspace: Workspace 
         <span className="sq soft" style={{ color: "#1652F0" }}><TrendingUp size={15} /></span>
         <div><h3>Agent Leaderboard</h3><div className="sub">Live AgentScore from on-chain receipts — receipts → reputation → rank</div></div>
       </div>
-      {loading && <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: 11, padding: "16px 0" }}>Loading…</div>}
+      {loading && <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 0" }}><Skeleton height={52} radius={10} /><Skeleton height={52} radius={10} /><Skeleton height={52} radius={10} /></div>}
       {!loading && rows.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: 11, padding: "16px 0" }}>
           No agents ranked yet — run services to earn score.
@@ -461,21 +479,24 @@ export function AgoraCctpWidget({ workspace: _ }: { workspace: Workspace }) {
   const [amount, setAmount] = useState("500");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<{ hash: string; time: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function transfer() {
     setRunning(true);
     setResult(null);
+    setError(null);
     const start = Date.now();
-    let hash = hashId("cctp", `${start}`).slice(0, 20);
     try {
       const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_arb`, {
-        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "cctp-bridge", "X-CCTP-From": from, "X-CCTP-To": to, "X-CCTP-Amount": amount },
+        headers: paidGatewayHeaders("cctp-bridge", { "X-CCTP-From": from, "X-CCTP-To": to, "X-CCTP-Amount": amount }),
         signal: AbortSignal.timeout(12_000),
       });
       const data = res.ok ? await res.json() as { receiptId?: string } : {};
-      if (data.receiptId) hash = data.receiptId.slice(0, 20);
-    } catch { /* fallback to local hash */ }
-    setResult({ hash, time: Date.now() - start });
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      setResult({ hash: data.receiptId.slice(0, 20), time: Date.now() - start });
+    } catch {
+      setError("CCTP gateway is unavailable or requires payment. No local transfer receipt was created.");
+    }
     setRunning(false);
   }
 
@@ -507,6 +528,11 @@ export function AgoraCctpWidget({ workspace: _ }: { workspace: Workspace }) {
       <button className="btn btn-acc" style={{ width: "100%", marginBottom: 12 }} onClick={transfer} disabled={running || from === to}>
         {running ? <><Loader2 size={13} className="wallet-spin" /> Attesting on Arc…</> : <><Send size={13} /> Transfer {amount} USDC · 0% fee</>}
       </button>
+      {error && (
+        <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef444433", background: "#ef44440d", color: "#ef4444", fontSize: 11, marginBottom: 12 }}>
+          {error}
+        </div>
+      )}
       {result && (
         <div style={{ padding: "12px 14px", borderRadius: 10, border: "1.5px solid #1652F033", background: "#1652F00a" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -531,6 +557,289 @@ export function AgoraCctpWidget({ workspace: _ }: { workspace: Workspace }) {
   );
 }
 
+// ── Arc App Kit (Circle-style unified wallet widget) ───────────────────────────
+
+const ARC_RPC = "https://rpc.testnet.arc-node.thecanteenapp.com/v1/public";
+const APP_KIT_TABS = ["Balance", "Bridge", "Swap", "Send"] as const;
+type AppKitTab = typeof APP_KIT_TABS[number];
+
+async function rpcCall<T>(method: string, params: unknown[]): Promise<T | null> {
+  try {
+    const res = await fetch(ARC_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    const data = await res.json() as { result?: T };
+    return data.result ?? null;
+  } catch { return null; }
+}
+
+export function ArcAppKitWidget({ workspace }: { workspace: Workspace }) {
+  const [tab, setTab] = useState<AppKitTab>("Balance");
+  const [address, setAddress] = useState("");
+  const [ethBal, setEthBal] = useState<string | null>(null);
+  const [blockNum, setBlockNum] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Bridge state
+  const [bridgeFrom, setBridgeFrom] = useState("Arc L1");
+  const [bridgeTo, setBridgeTo] = useState("Base");
+  const [bridgeAmt, setBridgeAmt] = useState("100");
+  const [bridging, setBridging] = useState(false);
+  const [bridgeResult, setBridgeResult] = useState<string | null>(null);
+  const [appKitError, setAppKitError] = useState<string | null>(null);
+
+  // Swap state (reuse server)
+  const [swapSide, setSwapSide] = useState<"BUY"|"SELL">("BUY");
+  const [swapAmt, setSwapAmt] = useState("100");
+  const [swapQuote, setSwapQuote] = useState<{ amountOut: number; price: number } | null>(null);
+  const [swapping, setSwapping] = useState(false);
+  const [swapDone, setSwapDone] = useState<string | null>(null);
+
+  // Send state
+  const [sendTo, setSendTo] = useState("");
+  const [sendAmt, setSendAmt] = useState("10");
+  const [sending, setSending] = useState(false);
+  const [sendDone, setSendDone] = useState<string | null>(null);
+
+  async function loadBalance() {
+    if (!address.startsWith("0x")) return;
+    setLoading(true);
+    setEthBal(null);
+    const [bal, blk] = await Promise.all([
+      rpcCall<string>("eth_getBalance", [address, "latest"]),
+      rpcCall<string>("eth_blockNumber", []),
+    ]);
+    if (bal) setEthBal((parseInt(bal, 16) / 1e18).toFixed(6));
+    if (blk) setBlockNum(parseInt(blk, 16));
+    setLoading(false);
+  }
+
+  async function doBridge() {
+    setBridging(true);
+    setBridgeResult(null);
+    setAppKitError(null);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_arb`, {
+        headers: paidGatewayHeaders("appkit-bridge"),
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      setBridgeResult(data.receiptId);
+    } catch { setAppKitError("Bridge gateway unavailable or payment required. No local receipt was created."); }
+    setBridging(false);
+  }
+
+  async function doQuote() {
+    setSwapQuote(null);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/swap-quote?side=${swapSide}&amountIn=${encodeURIComponent(swapAmt)}`, { signal: AbortSignal.timeout(8_000) });
+      if (res.ok) { const d = await res.json() as { amountOut: number; price: number }; setSwapQuote(d); }
+    } catch { /* no quote */ }
+  }
+
+  async function doSwap() {
+    if (!swapQuote) return;
+    setSwapping(true);
+    setSwapDone(null);
+    setAppKitError(null);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_swap`, {
+        headers: paidGatewayHeaders("appkit-swap"),
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      setSwapDone(data.receiptId);
+    } catch { setAppKitError("Swap gateway unavailable or payment required. No local receipt was created."); }
+    setSwapping(false);
+  }
+
+  async function doSend() {
+    if (!sendTo.startsWith("0x")) return;
+    setSending(true);
+    setSendDone(null);
+    setAppKitError(null);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_oracle`, {
+        headers: paidGatewayHeaders("appkit-send"),
+        signal: AbortSignal.timeout(8_000),
+      });
+      const data = res.ok ? await res.json() as { receiptId?: string } : {};
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      setSendDone(data.receiptId);
+    } catch { setAppKitError("Send gateway unavailable or payment required. No local receipt was created."); }
+    setSending(false);
+  }
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "#1652F0" }}><Wallet size={15} /></span>
+        <div>
+          <h3>Circle App Kit — Arc L1</h3>
+          <div className="sub">Unified Balance · Bridge · Swap · Send — all settled in USDC on Arc L1</div>
+        </div>
+        <div style={{ marginLeft: "auto", fontSize: 9, padding: "2px 7px", borderRadius: 4, background: "#1652F018", color: "#1652F0", fontWeight: 700 }}>
+          AppKit
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 16, padding: 4, background: "var(--card-bg)", borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
+        {APP_KIT_TABS.map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ flex: 1, padding: "6px 0", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11, fontWeight: tab === t ? 700 : 500,
+              background: tab === t ? "#1652F0" : "transparent", color: tab === t ? "#fff" : "var(--text-secondary)", transition: "all .15s" }}>
+            {t}
+          </button>
+        ))}
+      </div>
+      {appKitError && (
+        <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef444433", background: "#ef44440d", color: "#ef4444", fontSize: 11, marginBottom: 12 }}>
+          {appKitError}
+        </div>
+      )}
+
+      {/* Balance tab */}
+      {tab === "Balance" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+            <input className="inp" placeholder="0x… wallet address on Arc L1" value={address} onChange={e => setAddress(e.target.value)} />
+            <button className="btn btn-acc btn-sm" onClick={loadBalance} disabled={loading || !address.startsWith("0x")}>
+              {loading ? <Loader2 size={11} className="wallet-spin" /> : <RefreshCw size={11} />}
+              {loading ? "" : "Fetch"}
+            </button>
+          </div>
+          {ethBal !== null && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ padding: "14px 16px", borderRadius: 10, background: "var(--card-bg)", border: "1px solid var(--border-subtle)" }}>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>ARC Balance</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#1652F0" }}>{ethBal}</div>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>Arc L1 testnet</div>
+              </div>
+              <div style={{ padding: "14px 16px", borderRadius: 10, background: "var(--card-bg)", border: "1px solid var(--border-subtle)" }}>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Block Height</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#4B7BFF" }}>{blockNum?.toLocaleString() ?? "—"}</div>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>chainId 5042002</div>
+              </div>
+            </div>
+          )}
+          {ethBal === null && !loading && (
+            <div style={{ padding: "20px", textAlign: "center", color: "var(--text-secondary)", fontSize: 11, borderRadius: 10, background: "var(--card-bg)", border: "1px solid var(--border-subtle)" }}>
+              Enter a wallet address to fetch live Arc L1 balance via JSON-RPC
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bridge tab */}
+      {tab === "Bridge" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>From</div>
+              <select className="inp" value={bridgeFrom} onChange={e => setBridgeFrom(e.target.value)}>
+                {["Arc L1", "Base", "Arbitrum", "Ethereum"].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <ArrowRightLeft size={18} style={{ color: "#1652F0", marginTop: 18 }} />
+            <div>
+              <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>To</div>
+              <select className="inp" value={bridgeTo} onChange={e => setBridgeTo(e.target.value)}>
+                {["Base", "Arc L1", "Arbitrum", "Ethereum"].filter(c => c !== bridgeFrom).map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>USDC amount</div>
+            <input className="inp" type="number" value={bridgeAmt} onChange={e => setBridgeAmt(e.target.value)} />
+          </div>
+          <button className="btn btn-acc" onClick={doBridge} disabled={bridging || bridgeFrom === bridgeTo}>
+            {bridging ? <><Loader2 size={13} className="wallet-spin" /> Attesting via CCTP…</> : <><ArrowRightLeft size={13} /> Bridge {bridgeAmt} USDC · 0% fee</>}
+          </button>
+          {bridgeResult && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#10B9810d", border: "1px solid #10B98133", fontSize: 11 }}>
+              <CheckCircle size={12} style={{ color: "#10B981", display: "inline", marginRight: 6 }} />
+              <span style={{ color: "#10B981", fontWeight: 700 }}>Bridged via Circle CCTP</span>
+              <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>Receipt: {bridgeResult.slice(0, 14)}…</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Swap tab */}
+      {tab === "Swap" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["BUY", "SELL"] as const).map(s => (
+              <button key={s} onClick={() => { setSwapSide(s); setSwapQuote(null); setSwapDone(null); }}
+                className="btn btn-sm" style={{ flex: 1, fontWeight: 700,
+                  background: swapSide === s ? (s === "BUY" ? "#10B981" : "#EF4444") : undefined,
+                  color: swapSide === s ? "#fff" : undefined, borderColor: s === "BUY" ? "#10B981" : "#EF4444" }}>
+                {s} ETH
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+            <input className="inp" type="number" value={swapAmt} onChange={e => { setSwapAmt(e.target.value); setSwapQuote(null); setSwapDone(null); }} placeholder="Amount in USDC" />
+            <button className="btn btn-acc btn-sm" onClick={doQuote}><RefreshCw size={11} /> Quote</button>
+          </div>
+          {swapQuote && (
+            <div style={{ padding: "12px 14px", borderRadius: 10, background: "#7C3AED0a", border: "1px solid #7C3AED33" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div><div style={{ fontSize: 10, color: "var(--text-secondary)" }}>ETH Price</div><div style={{ fontSize: 14, fontWeight: 800, color: "#7C3AED" }}>${swapQuote.price.toLocaleString()}</div></div>
+                <div><div style={{ fontSize: 10, color: "var(--text-secondary)" }}>You receive</div><div style={{ fontSize: 14, fontWeight: 800, color: "#7C3AED" }}>{swapSide === "BUY" ? `${swapQuote.amountOut.toFixed(5)} ETH` : `$${swapQuote.amountOut.toFixed(2)}`}</div></div>
+              </div>
+              <button className="btn btn-acc" style={{ width: "100%", background: swapSide === "BUY" ? "#10B981" : "#EF4444", borderColor: "transparent" }}
+                onClick={doSwap} disabled={swapping}>
+                {swapping ? <><Loader2 size={11} className="wallet-spin" /> Executing…</> : <><Send size={11} /> Execute Swap · $0.02 fee</>}
+              </button>
+            </div>
+          )}
+          {swapDone && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#10B9810d", border: "1px solid #10B98133", fontSize: 11 }}>
+              <CheckCircle size={12} style={{ color: "#10B981", display: "inline", marginRight: 6 }} />
+              <span style={{ color: "#10B981", fontWeight: 700 }}>Swap executed on Arc DEX</span>
+              <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>Receipt: {swapDone.slice(0, 14)}…</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Send tab */}
+      {tab === "Send" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Recipient address</div>
+            <input className="inp" placeholder="0x… on Arc L1" value={sendTo} onChange={e => { setSendTo(e.target.value); setSendDone(null); }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>USDC amount</div>
+            <input className="inp" type="number" value={sendAmt} onChange={e => setSendAmt(e.target.value)} />
+          </div>
+          <button className="btn btn-acc" onClick={doSend} disabled={sending || !sendTo.startsWith("0x")}>
+            {sending ? <><Loader2 size={13} className="wallet-spin" /> Sending…</> : <><Send size={13} /> Send {sendAmt} USDC via Circle Paymaster</>}
+          </button>
+          {sendDone && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#10B9810d", border: "1px solid #10B98133", fontSize: 11 }}>
+              <CheckCircle size={12} style={{ color: "#10B981", display: "inline", marginRight: 6 }} />
+              <span style={{ color: "#10B981", fontWeight: 700 }}>Sent via Arc L1</span>
+              <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>Receipt: {sendDone.slice(0, 14)}…</span>
+            </div>
+          )}
+          <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--card-bg)", border: "1px solid var(--border-subtle)", fontSize: 10, color: "var(--text-secondary)" }}>
+            Gas covered by Circle Paymaster — recipient pays nothing, fee deducted from USDC amount
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Arc DEX Swap Execution ──────────────────────────────────────────────────────
 
 interface SwapQuote { pair: string; side: string; amountIn: number; amountOut: number; price: number; slippagePct: number }
@@ -543,6 +852,7 @@ export function ArcMindSwapWidget({ workspace }: { workspace: Workspace }) {
   const [quoting, setQuoting] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [swaps, setSwaps] = useLocalStore<SwapReceipt[]>(`agora-swaps-${workspace.id}`, []);
+  const [swapError, setSwapError] = useState<string | null>(null);
 
   async function fetchQuote() {
     setQuoting(true);
@@ -557,18 +867,22 @@ export function ArcMindSwapWidget({ workspace }: { workspace: Workspace }) {
   async function executeSwap() {
     if (!quote) return;
     setExecuting(true);
+    setSwapError(null);
     try {
       const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_swap`, {
-        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-swap", "X-Swap-Side": side, "X-Swap-Amount": amountIn },
+        headers: paidGatewayHeaders("arcmind-swap", { "X-Swap-Side": side, "X-Swap-Amount": amountIn }),
         signal: AbortSignal.timeout(12_000),
       });
       const data = res.ok ? await res.json() as { receiptId?: string } : {};
-      const hash = (data.receiptId ?? hashId("swap", `${side}-${amountIn}-${Date.now()}`)).slice(0, 16);
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      const hash = data.receiptId.slice(0, 16);
       setSwaps(prev => [{
         svc: "Arc DEX", side, amountIn: quote.amountIn, amountOut: quote.amountOut,
         price: quote.price, hash, ts: new Date().toLocaleTimeString(),
       }, ...prev].slice(0, 20));
-    } catch { /* non-blocking */ }
+    } catch {
+      setSwapError("Swap gateway unavailable or payment required. No local swap receipt was created.");
+    }
     setExecuting(false);
   }
 
@@ -640,6 +954,12 @@ export function ArcMindSwapWidget({ workspace }: { workspace: Workspace }) {
         </div>
       )}
 
+      {swapError && (
+        <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef444433", background: "#ef44440d", color: "#ef4444", fontSize: 11, marginBottom: 12 }}>
+          {swapError}
+        </div>
+      )}
+
       {swaps.length > 0 && (
         <div className="svc-table__scroll">
           <table className="svc-table">
@@ -672,14 +992,18 @@ export function ArcMindYieldWidget({ workspace }: { workspace: Workspace }) {
   const [amount, setAmount] = useState("100");
   const [depositing, setDepositing] = useState(false);
   const [deposits, setDeposits] = useLocalStore<YieldReceipt[]>(`agora-usyc-${workspace.id}`, []);
+  const [yieldError, setYieldError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     fetch(`${SERVER_URL}/api/usyc-apy`, { signal: AbortSignal.timeout(8_000) })
       .then(r => r.json())
-      .then((d: { apy?: number }) => setApy(d.apy ?? 5.1))
-      .catch(() => setApy(5.1));
+      .then((d: { apy?: number }) => setApy(typeof d.apy === "number" ? d.apy : null))
+      .catch(() => {
+        setApy(null);
+        setYieldError("USYC APY feed unavailable. Deposits stay disabled until live data is available.");
+      });
   }, []);
 
   // Tick every 10s to update live yield display
@@ -690,18 +1014,26 @@ export function ArcMindYieldWidget({ workspace }: { workspace: Workspace }) {
 
   async function deposit() {
     const amt = parseFloat(amount) || 100;
+    if (apy === null) {
+      setYieldError("USYC APY feed unavailable. Deposit was not created.");
+      return;
+    }
     setDepositing(true);
+    setYieldError(null);
     try {
       const res = await fetch(`${SERVER_URL}/api/gateway/svc_arc_usyc`, {
-        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-yield", "X-USYC-Amount": String(amt) },
+        headers: paidGatewayHeaders("arcmind-yield", { "X-USYC-Amount": String(amt) }),
         signal: AbortSignal.timeout(12_000),
       });
       const data = res.ok ? await res.json() as { receiptId?: string } : {};
-      const hash = (data.receiptId ?? hashId("usyc", `${amt}-${Date.now()}`)).slice(0, 16);
-      const currentApy = apy ?? 5.1;
+      if (!res.ok || !data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      const hash = data.receiptId.slice(0, 16);
+      const currentApy = apy;
       const minted = parseFloat((amt * (1 - 0.005)).toFixed(4)); // 0.5% mint fee
       setDeposits(prev => [{ deposited: amt, minted, apy: currentApy, hash, ts: Date.now() }, ...prev].slice(0, 10));
-    } catch { /* non-blocking */ }
+    } catch {
+      setYieldError("USYC gateway unavailable or payment required. No local deposit receipt was created.");
+    }
     setDepositing(false);
   }
 
@@ -753,6 +1085,12 @@ export function ArcMindYieldWidget({ workspace }: { workspace: Workspace }) {
         <div style={{ padding: "10px 12px", borderRadius: 8, background: "#10B9810d", border: "1px solid #10B98122", fontSize: 11, color: "var(--text-secondary)", marginBottom: 12 }}>
           <span style={{ color: "#10B981", fontWeight: 700 }}>${(parseFloat(amount) * apy / 100 / 365).toFixed(4)} USDC/day</span>
           {" "}yield at {apy.toFixed(1)}% APY · 0.5% mint fee · Arc L1
+        </div>
+      )}
+
+      {yieldError && (
+        <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef444433", background: "#ef44440d", color: "#ef4444", fontSize: 11, marginBottom: 12 }}>
+          {yieldError}
         </div>
       )}
 

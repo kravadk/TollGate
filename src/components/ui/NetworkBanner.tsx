@@ -85,6 +85,7 @@ export function NetworkBanner() {
   if (dismissed) return null;
   if (!chainHex) return null;
   if (!expected || expected.isNonEvm) return null;
+  if (wsId === "agora") return null; // Arc has no mainnet — banner is irrelevant
 
   const onCorrectChain = eqHex(chainHex, expected.hex);
   if (onCorrectChain && !accountChanged) return null;

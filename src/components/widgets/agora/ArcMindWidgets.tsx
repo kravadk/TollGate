@@ -1,19 +1,66 @@
 import { useState, useEffect, useRef } from "react";
 import { safeAmt } from "../../../lib/validate";
+import { Skeleton } from "../../ui/Motion";
 import {
   Copy, Eye, Lock, Play, Pause, Shield, Zap, Brain,
   ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCheck, ExternalLink,
-  Activity,
+  Activity, Download,
 } from "lucide-react";
 import type { Workspace } from "../../../types";
 import { useLocalStore } from "../../../lib/storage";
 import { useAppState } from "../../../app-state";
-import { deterministicScore, hashId } from "../../../lib/util-hash";
+import { deterministicScore } from "../../../lib/util-hash";
 import {
   isAgoraEscrowConfigured, isAgoraRegistryConfigured,
   stakeToEscrow, registerArcAgent, recordArcDecision, resolveArcDecision,
-  arcExplorerTxUrl,
+  arcExplorerTxUrl, ARC_CHAIN_HEX, switchToArc,
 } from "../../../lib/agora";
+
+function paidGatewayHeaders(agentId: string, extra: Record<string, string> = {}): Record<string, string> {
+  return { "X-Agent-Id": agentId, ...extra };
+}
+
+/* ─── Network guard ────────────────────────────────────────────── */
+
+type Eth = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown>; on?: (e: string, h: (v: string) => void) => void; removeListener?: (e: string, h: (v: string) => void) => void };
+
+function useArcNetwork() {
+  const [onArc, setOnArc] = useState<boolean | null>(null);
+  useEffect(() => {
+    const eth = (window as unknown as { ethereum?: Eth }).ethereum;
+    if (!eth) { setOnArc(null); return; }
+    const check = async () => {
+      try {
+        const id = (await eth.request({ method: "eth_chainId" })) as string;
+        setOnArc(id.toLowerCase() === ARC_CHAIN_HEX);
+      } catch { setOnArc(null); }
+    };
+    check();
+    const handler = (id: string) => setOnArc(id.toLowerCase() === ARC_CHAIN_HEX);
+    eth.on?.("chainChanged", handler);
+    return () => eth.removeListener?.("chainChanged", handler);
+  }, []);
+  return onArc;
+}
+
+function WrongNetworkBanner() {
+  const [switching, setSwitching] = useState(false);
+  const onArc = useArcNetwork();
+  if (onArc === null || onArc === true) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "color-mix(in srgb, #f59e0b 12%, transparent)", border: "1px solid color-mix(in srgb, #f59e0b 30%, transparent)", marginBottom: 12 }}>
+      <AlertTriangle size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
+      <span style={{ fontSize: 12, color: "#f59e0b", flex: 1 }}>Wallet is on the wrong network. Arc L1 Testnet required for on-chain actions.</span>
+      <button
+        style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 7, background: "#f59e0b", color: "#000", border: "none", cursor: "pointer", flexShrink: 0 }}
+        disabled={switching}
+        onClick={async () => { setSwitching(true); try { await switchToArc(); } catch { /* user declined */ } finally { setSwitching(false); } }}
+      >
+        {switching ? "Switching…" : "Switch Network"}
+      </button>
+    </div>
+  );
+}
 
 /* ─── Copy Trading ─────────────────────────────────────────────── */
 
@@ -26,10 +73,6 @@ interface CopyPosition {
   ts: number;
 }
 
-const FALLBACK_POSITIONS: Omit<CopyPosition, "pnl" | "ts">[] = [
-  { asset: "ETH/USDC", side: "LONG", entry: 3_190, size: 0.8 },
-];
-
 interface ArcDecisionRaw { decision: "BUY" | "SELL" | "HOLD"; ethPrice: number; ts: string; txHash?: string }
 
 function useEthPrice(): number {
@@ -38,12 +81,9 @@ function useEthPrice(): number {
     let mounted = true;
     async function tick() {
       try {
-        const r = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
-          { signal: AbortSignal.timeout(8_000) }
-        );
-        const d = await r.json() as { ethereum?: { usd?: number } };
-        if (mounted) setPrice(d?.ethereum?.usd ?? 0);
+        const r = await fetch(`${SERVER}/api/signals`, { signal: AbortSignal.timeout(8_000) });
+        const d = await r.json() as { ethPrice?: number };
+        if (mounted && d.ethPrice) setPrice(d.ethPrice);
       } catch { /* keep previous */ }
     }
     tick();
@@ -103,6 +143,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
   const [staking, setStaking] = useState(false);
   const [stakeTxHash, setStakeTxHash] = useLocalStore<string | null>(`arcmind-stake-tx-${workspace.id}`, null);
   const [stakeGasless, setStakeGasless] = useLocalStore<boolean>(`arcmind-stake-gasless-${workspace.id}`, false);
+  const [autoFollow, setAutoFollow] = useLocalStore<boolean>(`arcmind-auto-follow-${workspace.id}`, false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { stats } = useArcDecisionStats(workspace.id);
   const liveEthPrice = useEthPrice();
@@ -135,28 +176,33 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
     const now = Date.now();
     setStakeErr(null);
 
-    if (isAgoraEscrowConfigured()) {
-      setStaking(true);
-      try {
-        const { txHash, gasless } = await stakeToEscrow(amt);
-        setStakeTxHash(txHash);
-        setStakeGasless(gasless);
-        emitReceipt({
-          workspaceId: workspace.id,
-          serviceName: `Stake to CopyTradeEscrow — $${amt} USDC`,
-          amount: amt,
-          currency: "USDC",
-          network: "arc-l1",
-          kind: "arcmind.copy.stake",
-          payload: { txHash },
-        });
-      } catch (e: unknown) {
-        setStakeErr((e as { message?: string }).message ?? "Stake failed or rejected.");
-        setStaking(false);
-        return;
-      }
-      setStaking(false);
+    if (!isAgoraEscrowConfigured()) {
+      setStakeErr("CopyTradeEscrow is not configured. Start is disabled instead of creating a local position.");
+      return;
     }
+
+    setStaking(true);
+    let stakeTx: string;
+    try {
+      const { txHash, gasless } = await stakeToEscrow(amt);
+      stakeTx = txHash;
+      setStakeTxHash(txHash);
+      setStakeGasless(gasless);
+      emitReceipt({
+        workspaceId: workspace.id,
+        serviceName: `Stake to CopyTradeEscrow - $${amt} USDC`,
+        amount: amt,
+        currency: "USDC",
+        network: "arc-l1",
+        kind: "arcmind.copy.stake",
+        payload: { txHash },
+      });
+    } catch (e: unknown) {
+      setStakeErr((e as { message?: string }).message ?? "Stake failed or rejected.");
+      setStaking(false);
+      return;
+    }
+    setStaking(false);
 
     // Build position from last on-chain ArcMind decision
     let pos: CopyPosition[];
@@ -171,10 +217,12 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
         const size = (amt * 0.8) / activeDecision.ethPrice;
         pos = [{ asset: "ETH/USDC", side, entry: activeDecision.ethPrice, size, pnl: 0, ts: now }];
       } else {
-        pos = FALLBACK_POSITIONS.map((p, i) => ({ ...p, pnl: 0, size: (amt * 0.8) / p.entry, ts: now + i }));
+        setStakeErr("No live ArcMind BUY/SELL decision found. Copy-trading was not started.");
+        return;
       }
     } catch {
-      pos = FALLBACK_POSITIONS.map((p, i) => ({ ...p, pnl: 0, size: (amt * 0.8) / p.entry, ts: now + i }));
+      setStakeErr("Could not load live ArcMind decisions. Copy-trading was not started.");
+      return;
     }
 
     setPositions(pos);
@@ -186,7 +234,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
       currency: "USDC",
       network: "arc-l1",
       kind: "arcmind.copy.start",
-      payload: { txHash: hashId("copy", `${workspace.id}-${now}`) },
+      payload: { txHash: stakeTx },
     });
   }
 
@@ -197,6 +245,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
 
   return (
     <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-5 space-y-4">
+      <WrongNetworkBanner />
       <div className="flex items-center gap-2">
         <Copy className="w-5 h-5 text-purple-400" />
         <h3 className="font-semibold text-white">Copy ArcMind</h3>
@@ -238,7 +287,7 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
             <input
               type="number" min="1" value={stake}
               onChange={e => setStake(e.target.value)}
-              className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
+              className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/40"
             />
           </div>
           <div className="text-xs text-gray-500 space-y-1">
@@ -247,12 +296,17 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
             <div className="flex justify-between"><span>Settlement</span><span>USDC · Arc L1 (ERC-8183)</span></div>
           </div>
           {stakeErr && <div className="text-xs text-red-400">{stakeErr}</div>}
+          {!isAgoraEscrowConfigured() && (
+            <p className="text-[10.5px]" style={{ textAlign: "center", color: "#8b5cf6", background: "rgba(139,92,246,0.08)", padding: "5px 10px", borderRadius: 6 }}>
+              Copy-trading starts only after CopyTradeEscrow staking and a live ArcMind decision.
+            </p>
+          )}
           <button
             onClick={startCopying}
             disabled={staking}
             className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors"
           >
-            {staking ? "Approving USDC + staking…" : isAgoraEscrowConfigured() ? "Stake & Start Copy Trading" : "Start Copy Trading"}
+            {staking ? "Approving USDC + staking…" : "Stake & Start Copy Trading"}
           </button>
           {isAgoraEscrowConfigured() && !staking && (
             <p className="text-[10.5px] text-gray-600 text-center">
@@ -301,6 +355,15 @@ export function ArcMindCopyTradingWidget({ workspace }: { workspace: Workspace }
               )}
             </div>
           )}
+          <div className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+            <span className="text-xs text-gray-400">Auto-follow new decisions</span>
+            <button
+              onClick={() => setAutoFollow((v: boolean) => !v)}
+              style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer", position: "relative", background: autoFollow ? "#8b5cf6" : "rgba(255,255,255,0.15)", transition: "background .2s" }}
+            >
+              <span style={{ position: "absolute", top: 3, left: autoFollow ? 20 : 3, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left .2s" }} />
+            </button>
+          </div>
           <button
             onClick={stopCopying}
             className="w-full rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-sm font-semibold py-2.5 transition-colors"
@@ -351,49 +414,10 @@ function useArcMindTraces(): { traces: Trace[]; loading: boolean } {
   return { traces, loading };
 }
 
-const FALLBACK_TRACES: Trace[] = [
-  {
-    id: "trace-001",
-    title: "BTC LONG — Kelly 18%",
-    signal: "RSI(14)=28 on 4h | OI spike +$420M | Fear&Greed=22",
-    decision: "LONG BTC/USDC @ $67,420 | size=18% of book",
-    rationale: "Extreme fear + OI flush = capitulation. Kelly: edge=0.62, b=2.1 → f*=18%. Risk/reward: 1:3.2 targeting $71k.",
-    outcome: "+14.3% in 38h. Stop never hit.",
-    price: 0.01,
-  },
-  {
-    id: "trace-002",
-    title: "Polymarket arb — YES misprint",
-    signal: "Polymarket YES@0.31 | Manifold YES@0.48 | resolved +72h",
-    decision: "BUY YES on Polymarket, HEDGE on Manifold",
-    rationale: "Cross-venue probability gap 17pp with resolution <72h. Expected value +$0.17 per share at max position.",
-    outcome: "+$1,840 net. Settled on-chain.",
-    price: 0.01,
-  },
-  {
-    id: "trace-003",
-    title: "Kill Switch trigger — ETH crash",
-    signal: "Drawdown -12.4% in 3h | Sharpe 30d → 0.3 | VIX equiv spike",
-    decision: "CLOSE ALL ETH positions | pause trading 6h",
-    rationale: "Kill Switch threshold breached. ERC-8183 job paused. 6h cooldown before re-entry evaluation.",
-    outcome: "Avoided additional -8% drop. Resumed at better entry.",
-    price: 0.005,
-  },
-  {
-    id: "trace-004",
-    title: "ARC/USDC liquidity capture",
-    signal: "ARC pool depth: $2.1M | 24h vol: $890k | funding rate: +0.04%/h",
-    decision: "LP into ARC/USDC concentrated range [1.95, 2.35]",
-    rationale: "High vol/TVL ratio → fee capture outweighs IL. ERC-8004 credit line used to leverage 2x LP position.",
-    outcome: "+22% APY realised over 72h period.",
-    price: 0.01,
-  },
-];
-
 export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) {
   const { emitReceipt } = useAppState();
   const { traces: liveTraces, loading: tracesLoading } = useArcMindTraces();
-  const displayTraces = liveTraces.length > 0 ? liveTraces : FALLBACK_TRACES;
+  const displayTraces = liveTraces;
   const [purchased, setPurchased] = useLocalStore<string[]>(`arcmind-traces-${workspace.id}`, []);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -456,12 +480,13 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
     setBuyErr(null);
     try {
       const res = await fetch(`${SERVER}/api/gateway/svc_arc_reasoning`, {
-        headers: { "X-PAYMENT": "dev-bypass", "X-Agent-Id": "arcmind-user" },
+        headers: paidGatewayHeaders("arcmind-user"),
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) throw new Error(`Gateway ${res.status}`);
       const data = await res.json() as { receiptId?: string };
-      const receiptId = data.receiptId ?? hashId("trace", `${trace.id}-${workspace.id}`);
+      if (!data.receiptId) throw new Error("Gateway did not return a verified receipt");
+      const receiptId = data.receiptId;
       setPurchased((prev: string[]) => [...prev, trace.id]);
       setRevenue((r: number) => r + trace.price);
       emitReceipt({
@@ -503,7 +528,7 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
 
       {tracesLoading && <div className="text-xs text-gray-500 text-center py-2">Loading on-chain traces…</div>}
       {!tracesLoading && liveTraces.length === 0 && (
-        <div className="text-[10px] text-gray-600 text-center">No live decisions yet — showing sample traces</div>
+        <div className="text-[10px] text-gray-600 text-center">No live decisions recorded yet. Start the Arc agent loop to publish traces.</div>
       )}
       {!tracesLoading && liveTraces.length > 0 && (
         <div className="text-[10px] text-green-600 text-center">{liveTraces.length} real on-chain ArcMind decisions</div>
@@ -513,31 +538,35 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
         {displayTraces.map(trace => {
           const owned = purchased.includes(trace.id);
           const isOpen = expanded === trace.id;
+          const sigColor = trace.title.startsWith("BUY") ? "#10b981" : trace.title.startsWith("SELL") ? "#ef4444" : trace.title.startsWith("Kill") ? "#f59e0b" : "#8b5cf6";
           return (
-            <div key={trace.id} className="rounded-lg bg-white/5 border border-white/10 overflow-hidden">
+            <div key={trace.id} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${sigColor}28`, background: `color-mix(in srgb, ${sigColor} 4%, rgba(255,255,255,0.03))`, borderLeft: `3px solid ${sigColor}` }}>
               <div
-                className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors"
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer" }}
                 onClick={() => setExpanded(isOpen ? null : trace.id)}
               >
                 {owned
-                  ? <Eye className="w-4 h-4 text-indigo-400 shrink-0" />
-                  : <Lock className="w-4 h-4 text-gray-500 shrink-0" />
+                  ? <Eye style={{ width: 14, height: 14, color: sigColor, flexShrink: 0 }} />
+                  : <Lock style={{ width: 14, height: 14, color: "#475569", flexShrink: 0 }} />
                 }
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-white truncate">{trace.title}</div>
-                  <div className="text-xs text-gray-500 truncate">{trace.signal}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: ".8rem", fontWeight: 700, color: "#f1f5f9", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{trace.title}</div>
+                  <div style={{ fontSize: ".65rem", color: "#64748b", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{trace.signal}</div>
                 </div>
-                <span className="text-xs text-indigo-400 font-mono shrink-0">${trace.price}</span>
+                <span style={{ fontSize: ".68rem", fontWeight: 700, color: sigColor, fontFamily: "monospace", flexShrink: 0 }}>${trace.price}</span>
               </div>
 
               {isOpen && (
-                <div className="border-t border-white/10 p-3 space-y-2">
+                <div style={{ borderTop: `1px solid ${sigColor}20`, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
                   {owned ? (
                     <>
-                      <div className="text-xs space-y-1.5">
-                        <div><span className="text-gray-500">Decision: </span><span className="text-white">{trace.decision}</span></div>
-                        <div><span className="text-gray-500">Rationale: </span><span className="text-gray-300">{trace.rationale}</span></div>
-                        <div><span className="text-gray-500">Outcome: </span><span className="text-green-400">{trace.outcome}</span></div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        <div style={{ fontSize: ".7rem" }}><span style={{ color: "#64748b" }}>Decision: </span><span style={{ color: "#f1f5f9", fontFamily: "monospace" }}>{trace.decision}</span></div>
+                        <div style={{ fontSize: ".7rem" }}><span style={{ color: "#64748b" }}>Rationale: </span><span style={{ color: "#cbd5e1" }}>{trace.rationale}</span></div>
+                        <div style={{ fontSize: ".7rem", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ color: "#64748b" }}>Outcome: </span>
+                          <span style={{ color: trace.outcome.startsWith("+") ? "#10b981" : "#ef4444", fontWeight: 700, background: trace.outcome.startsWith("+") ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", padding: "1px 6px", borderRadius: 4 }}>{trace.outcome}</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 flex-wrap">
                         <button
@@ -549,7 +578,7 @@ export function ArcMindReasoningWidget({ workspace }: { workspace: Workspace }) 
                         </button>
                         {isAgoraRegistryConfigured() && agentId && !resolveTxHashes[trace.id] && (
                           <button
-                            onClick={() => resolveTrace(trace, FALLBACK_TRACES.indexOf(trace))}
+                            onClick={() => resolveTrace(trace, displayTraces.indexOf(trace))}
                             disabled={resolving === trace.id}
                             className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 disabled:opacity-50"
                           >
@@ -658,22 +687,16 @@ interface SignalsPayload {
 }
 
 export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) {
-  const { emitReceipt } = useAppState();
   const [signals, setSignals] = useLocalStore<FetchedSignal[]>(`arcmind-signals-${workspace.id}`, []);
   const [loading, setLoading] = useState<string | null>(null);
   const [decision, setDecision] = useState<string | null>(null);
   const [signalsData, setSignalsData] = useState<SignalsPayload | null>(null);
-
-  function deterministicFallback(src: SignalSource): string {
-    const v = deterministicScore(workspace.id + src.id, src.range[0], src.range[1]);
-    if (src.unit === "score") return v.toFixed(2);
-    if (src.unit === "% YES") return v.toFixed(0) + "%";
-    return v.toFixed(1) + " " + src.unit;
-  }
+  const [queryText, setQueryText] = useState("");
+  const [queryAnswer, setQueryAnswer] = useState<string | null>(null);
 
   async function fetchSignal(src: SignalSource) {
     setLoading(src.id);
-    let value = deterministicFallback(src);
+    let value: string | null = null;
 
     if (src.id === "hyperliquid") {
       try {
@@ -692,7 +715,9 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
           const fr = parseFloat(ctx.funding);
           value = `${oiStr} OI · ${isNaN(fr) ? ctx.funding : (fr * 100).toFixed(4)}% funding`;
         }
-      } catch { /* keep deterministic fallback */ }
+      } catch {
+        value = null;
+      }
     } else if (src.id === "polymarket" || src.id === "onchain") {
       try {
         const sRes = await fetch(`${SERVER}/api/signals`, { signal: AbortSignal.timeout(10_000) });
@@ -705,10 +730,17 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
             value = `${sData.whale.netFlow.toFixed(1)}M net · ${sData.whale.direction}`;
           }
         }
-      } catch { /* keep deterministic fallback */ }
+      } catch {
+        value = null;
+      }
     } else {
-      // news: no free unauthenticated API — keep deterministic fallback
-      await new Promise(r => setTimeout(r, 300));
+      value = null;
+    }
+
+    if (!value) {
+      setLoading(null);
+      setQueryAnswer(`${src.name} is unavailable until a live provider or API key is configured. No local signal was created.`);
+      return;
     }
 
     setSignals((prev: FetchedSignal[]) => {
@@ -716,15 +748,6 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
       return [...filtered, { id: src.id, value, ts: Date.now() }];
     });
     setLoading(null);
-    emitReceipt({
-      workspaceId: workspace.id,
-      serviceName: `Signal: ${src.name}`,
-      amount: src.price,
-      currency: "USDC",
-      network: "arc-l1",
-      kind: "arcmind.signal.fetch",
-      payload: { signalId: src.id, value, txHash: hashId("sig", `${src.id}-${workspace.id}`) },
-    });
   }
 
   function composeDecision() {
@@ -743,7 +766,8 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
       else direction = "HOLD";
       if (signalsData.ethPrice) ethStr = ` · ETH $${signalsData.ethPrice.toLocaleString()}`;
     } else {
-      direction = deterministicScore(workspace.id + "bias", 0, 2) >= 1 ? "BULLISH" : "BEARISH";
+      setDecision("ArcMind needs at least one live `/api/signals` source before composing a trade decision.");
+      return;
     }
     const action = direction === "BULLISH"
       ? "Add to LONG, tighten stop"
@@ -776,7 +800,7 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
                   <div className="text-sm font-medium text-white">{src.name}</div>
                   {src.live
                     ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 font-bold">live</span>
-                    : <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 font-medium">sim</span>
+                    : <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500 font-medium">setup</span>
                   }
                 </div>
                 <div className="text-xs text-gray-500">{src.description}</div>
@@ -813,6 +837,43 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
           <span className="text-cyan-400 font-semibold">Decision: </span>{decision}
         </div>
       )}
+
+      {/* ChatGPT-style signal query */}
+      <div style={{ marginTop: 4 }}>
+        <div style={{ fontSize: ".62rem", color: "#475569", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em" }}>Ask ArcMind</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <textarea
+            value={queryText}
+            onChange={e => setQueryText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (!queryText.trim() || signals.length === 0) return;
+                const q = queryText.trim().toLowerCase();
+                const isBullish = q.includes("buy") || q.includes("bull") || q.includes("long") || q.includes("rise");
+                const isBearish = q.includes("sell") || q.includes("bear") || q.includes("short") || q.includes("fall");
+                const oi = signals.find(s => s.id === "hyperliquid")?.value ?? "unknown OI";
+                const wh = signals.find(s => s.id === "onchain")?.value ?? "neutral whale flow";
+                const poly = signals.find(s => s.id === "polymarket")?.value ?? "no sentiment";
+                if (isBullish) setQueryAnswer(`Based on current signals (${oi}, ${wh}), ArcMind leans BULLISH. Polymarket: ${poly}. Recommend: add 10-15% ETH on next dip. Confidence: 68%.`);
+                else if (isBearish) setQueryAnswer(`Based on current signals (${oi}), ArcMind sees BEARISH pressure. Whale flow: ${wh}. Recommend: reduce ETH, hold USDC. Confidence: 61%.`);
+                else setQueryAnswer(`Signals mixed: OI=${oi}, whale=${wh}, sentiment=${poly}. ArcMind recommends HOLD and waiting for next 30-min decision cycle. Kelly sizing: 0%.`);
+                setQueryText("");
+              }
+            }}
+            placeholder="Ask a question (Enter to send) — e.g. 'Should I buy ETH now?'"
+            rows={2}
+            style={{ flex: 1, fontSize: ".72rem", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#e2e8f0", padding: "9px 12px", resize: "none", outline: "none", fontFamily: "inherit", lineHeight: 1.5, transition: "border-color .15s" }}
+            onFocus={e => { e.currentTarget.style.borderColor = "rgba(6,182,212,0.4)"; }}
+            onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+          />
+        </div>
+        {queryAnswer && (
+          <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)", fontSize: ".72rem", color: "#94a3b8", lineHeight: 1.65 }}>
+            <span style={{ color: "#22d3ee", fontWeight: 700 }}>ArcMind: </span>{queryAnswer}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -843,9 +904,109 @@ function useCountdown(intervalSec: number): string {
   return `${m}:${s}`;
 }
 
+function decisionRationale(d: ArcDecision): string {
+  const oi = d.oiValue ?? "";
+  const fr = d.fundingRate ?? "";
+  const price = d.ethPrice > 0 ? `$${d.ethPrice.toLocaleString()}` : "unknown";
+  if (d.decision === "BUY") {
+    const oiNote = oi ? ` OI at ${oi} suggesting accumulation.` : "";
+    const frNote = fr && fr.startsWith("-") ? ` Negative funding (${fr}) favors longs.` : "";
+    return `ETH at ${price} with bullish momentum.${oiNote}${frNote} Kelly sizing: ~20% position.`;
+  }
+  if (d.decision === "SELL") {
+    const frNote = fr && !fr.startsWith("-") ? ` Positive funding (${fr}) favors shorts.` : "";
+    return `ETH at ${price} with bearish signal.${frNote ? frNote : " Elevated OI suggests overcrowded longs."} Kelly exit triggered.`;
+  }
+  return `ETH at ${price}. Signals inconclusive — staying flat. Sharpe < threshold or OI neutral.`;
+}
+
+function DecisionHeatmap({ decisions }: { decisions: ArcDecision[] }) {
+  const now = Date.now();
+  const dayMs = 86_400_000;
+  const slotMs = dayMs / 8;
+  const grid: ({ decision: string; ts: string } | null)[][] = Array.from({ length: 7 }, (_, day) =>
+    Array.from({ length: 8 }, (_, slot) => {
+      const slotStart = now - (6 - day) * dayMs - (7 - slot) * slotMs;
+      const slotEnd = slotStart + slotMs;
+      return decisions.find(d => {
+        const t = new Date(d.ts).getTime();
+        return t >= slotStart && t < slotEnd;
+      }) ?? null;
+    })
+  );
+  const dayLabels = ["7d", "6d", "5d", "4d", "3d", "2d", "1d"];
+  const decColor = (dec: string | undefined) =>
+    dec === "BUY" ? "#10b981" : dec === "SELL" ? "#ef4444" : dec === "HOLD" ? "#f59e0b" : "rgba(255,255,255,0.06)";
+
+  return (
+    <div style={{ marginTop: 2, marginBottom: 12 }}>
+      <div style={{ fontSize: ".6rem", color: "#475569", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Decision activity · last 7 days</div>
+      <div style={{ display: "flex", gap: 3 }}>
+        {grid.map((daySlots, d) => (
+          <div key={d} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            {daySlots.map((dec, s) => (
+              <div key={s}
+                title={dec ? `${dec.decision} — ${new Date(dec.ts).toLocaleString()}` : "No decision"}
+                style={{ height: 10, borderRadius: 3, background: decColor(dec?.decision), cursor: dec ? "pointer" : "default" }}
+              />
+            ))}
+            <div style={{ fontSize: 8, color: "#334155", textAlign: "center", marginTop: 2 }}>{dayLabels[d]}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 8, fontSize: ".6rem", color: "#475569" }}>
+        {(["BUY", "SELL", "HOLD"] as const).map((sig, i) => (
+          <span key={sig}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: [decColor("BUY"), decColor("SELL"), decColor("HOLD")][i], verticalAlign: "middle", marginRight: 3 }} />{sig}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DecisionLogList({ decisions, filter }: { decisions: ArcDecision[]; filter: "ALL" | "BUY" | "SELL" | "HOLD" }) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const visible = filter === "ALL" ? decisions : decisions.filter(d => d.decision === filter);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {visible.map((d, i) => (
+        <div key={i} className="dec-log-row" style={{ borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
+          <button
+            className="dec-log-expand-btn"
+            onClick={() => setExpanded(expanded === i ? null : i)}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 700, minWidth: 44, color: d.decision === "BUY" ? "#10b981" : d.decision === "SELL" ? "#ef4444" : "#f59e0b" }}>{d.decision}</span>
+            <div style={{ flex: 1, fontSize: 11, color: "#94a3b8" }}>
+              <span style={{ color: "#e2e8f0" }}>${d.ethPrice?.toLocaleString()}</span>
+              {d.oiValue ? <span style={{ marginLeft: 10 }}>OI {d.oiValue}</span> : null}
+            </div>
+            <span className="dec-log-ts" style={{ fontSize: 10, color: "#64748b" }}>{new Date(d.ts).toLocaleString()}</span>
+            {d.txHash ? (
+              <a href={`https://testnet.arcscan.app/tx/${d.txHash}`} target="_blank" rel="noreferrer"
+                onClick={e => e.stopPropagation()}
+                style={{ color: "#8b5cf6", flexShrink: 0, lineHeight: 0 }}>
+                <ExternalLink size={13} />
+              </a>
+            ) : null}
+            <span style={{ fontSize: 10, color: "#475569", flexShrink: 0, marginLeft: 2 }}>{expanded === i ? "▲" : "▼"}</span>
+          </button>
+          {expanded === i && (
+            <div style={{ padding: "8px 12px 12px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "#94a3b8", lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 600, color: "#c4b5fd", marginBottom: 4 }}>Why this decision?</div>
+              {decisionRationale(d)}
+              {d.fundingRate && <div style={{ marginTop: 4, color: "#64748b" }}>Funding rate: {d.fundingRate}</div>}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ArcDecisionLogWidget() {
   const [decisions, setDecisions] = useState<ArcDecision[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"ALL" | "BUY" | "SELL" | "HOLD">("ALL");
   const countdown = useCountdown(1800);
 
   async function load() {
@@ -872,44 +1033,51 @@ export function ArcDecisionLogWidget() {
         <Activity className="w-5 h-5 text-violet-400" />
         <h3 className="font-semibold text-white">Autonomous Decision Log</h3>
         <span className="ml-auto text-xs text-gray-500">next in <span className="font-mono text-violet-400">{countdown}</span></span>
+        {decisions.length > 0 && (
+          <button
+            title="Export decisions as JSON"
+            onClick={() => {
+              const blob = new Blob([JSON.stringify({ decisions, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url; a.download = `arcmind-decisions-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click(); URL.revokeObjectURL(url);
+            }}
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 7, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.08)", color: "#a78bfa", cursor: "pointer", fontSize: ".65rem", fontWeight: 600, marginLeft: 4 }}
+          >
+            <Download size={11} /> JSON
+          </button>
+        )}
       </div>
       <p className="text-xs text-gray-400">
         Real on-chain decisions recorded by ArcMind every 30 min via ArcMindRegistry.recordDecision().
       </p>
 
+      {!loading && decisions.length > 0 && (
+        <>
+          <DecisionHeatmap decisions={decisions} />
+          <div style={{ display: "flex", gap: 5, marginBottom: 4 }}>
+            {(["ALL", "BUY", "SELL", "HOLD"] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                style={{ flex: 1, padding: "5px 0", fontSize: ".65rem", fontWeight: 700, borderRadius: 7, border: `1.5px solid ${filter === f ? (f === "BUY" ? "#10b981" : f === "SELL" ? "#ef4444" : f === "HOLD" ? "#f59e0b" : "#8b5cf6") : "rgba(255,255,255,0.08)"}`, background: filter === f ? (f === "BUY" ? "#10b98115" : f === "SELL" ? "#ef444415" : f === "HOLD" ? "#f59e0b15" : "#8b5cf615") : "transparent", color: filter === f ? (f === "BUY" ? "#10b981" : f === "SELL" ? "#ef4444" : f === "HOLD" ? "#f59e0b" : "#8b5cf6") : "#64748b", cursor: "pointer", transition: "all .15s" }}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {loading ? (
-        <div className="text-xs text-gray-500 text-center py-4">Loading…</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Skeleton height={44} radius={10} />
+          <Skeleton height={44} radius={10} />
+          <Skeleton height={44} radius={10} />
+        </div>
       ) : decisions.length === 0 ? (
         <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-center text-xs text-gray-500">
           No decisions recorded yet — server starts on next deploy tick.
         </div>
       ) : (
-        <div className="space-y-2">
-          {decisions.map((d, i) => (
-            <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3 flex items-center gap-3">
-              <span className={`text-sm font-bold w-10 shrink-0 ${decisionColor(d.decision)}`}>{d.decision}</span>
-              <div className="flex-1 min-w-0 text-xs text-gray-400 space-y-0.5">
-                <div className="flex gap-3">
-                  <span>ETH <span className="text-gray-200">${d.ethPrice?.toLocaleString()}</span></span>
-                  <span>OI <span className="text-gray-200">{d.oiValue}</span></span>
-                </div>
-                <div className="text-gray-600">{new Date(d.ts).toLocaleString()}</div>
-              </div>
-              {d.txHash ? (
-                <a
-                  href={`https://testnet.arcscan.app/tx/${d.txHash}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 text-violet-400 hover:text-violet-300"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              ) : (
-                <span className="shrink-0 w-3.5 h-3.5" />
-              )}
-            </div>
-          ))}
-        </div>
+        <DecisionLogList decisions={decisions} filter={filter} />
       )}
     </div>
   );
@@ -1007,7 +1175,7 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
       currency: "USDC",
       network: "arc-l1",
       kind: "arcmind.killswitch.trigger",
-      payload: { drawdown: dd, sig: sig ?? "demo", txHash: hashId("ks", `${workspace.id}-${Date.now()}`) },
+      payload: { drawdown: dd, sig: sig ?? null, signed: Boolean(sig), localEventId: `killswitch-${workspace.id}-${Date.now()}` },
     });
   }
 
@@ -1028,6 +1196,7 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
 
   return (
     <div className="rounded-xl border border-red-500/20 bg-red-950/20 p-5 space-y-4">
+      <WrongNetworkBanner />
       <div className="flex items-center gap-2">
         <Shield className="w-5 h-5 text-red-400" />
         <h3 className="font-semibold text-white">Kill Switch</h3>
@@ -1143,6 +1312,234 @@ export function ArcMindKillSwitchWidget({ workspace }: { workspace: Workspace })
           >
             Simulate Crash
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Agent P&L Chart ──────────────────────────────────────────── */
+
+interface PnLPoint { ts: string; pnl: number; decision: string }
+
+export function ArcMindPnLWidget() {
+  const [points, setPoints] = useState<PnLPoint[]>([]);
+  const [liveEth, setLiveEth] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      let ethNow = liveEth;
+      try {
+        const cg = await fetch(`${SERVER_URL_MA}/api/signals`, { signal: AbortSignal.timeout(6_000) });
+        const d = await cg.json() as { ethPrice?: number };
+        ethNow = d.ethPrice ?? null;
+        if (ethNow) setLiveEth(ethNow);
+      } catch { /* ignore */ }
+
+      try {
+        const res = await fetch(`${SERVER_URL_MA}/api/arc-decisions`, { signal: AbortSignal.timeout(8_000) });
+        if (!res.ok) return;
+        const data = await res.json() as { decisions: { ts: string; decision: string; ethPrice: number }[] };
+        const decs = [...data.decisions].reverse(); // oldest first
+        if (!decs.length) return;
+
+        let capital = 1000; // virtual $1000
+        let ethHeld = 0;
+        const pts: PnLPoint[] = [{ ts: decs[0].ts, pnl: 0, decision: "START" }];
+
+        for (const dec of decs) {
+          const price = dec.ethPrice || ethNow || 3400;
+          if (dec.decision === "BUY" && capital > 0) {
+            ethHeld = capital / price;
+            capital = 0;
+          } else if (dec.decision === "SELL" && ethHeld > 0) {
+            capital = ethHeld * price;
+            ethHeld = 0;
+          }
+          const totalValue = capital + ethHeld * (ethNow ?? price);
+          pts.push({ ts: dec.ts, pnl: +(totalValue - 1000).toFixed(2), decision: dec.decision });
+        }
+        setPoints(pts);
+      } catch { /* ignore */ }
+      setLoading(false);
+    }
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const maxPnl = Math.max(...points.map(p => Math.abs(p.pnl)), 1);
+  const lastPnl = points[points.length - 1]?.pnl ?? 0;
+  const pnlColor = lastPnl >= 0 ? "#10B981" : "#EF4444";
+  const H = 80;
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: pnlColor }}>
+          {lastPnl >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
+        </span>
+        <div>
+          <h3>Agent P&L — $1000 Hypothetical</h3>
+          <div className="sub">If you'd copied every BUY/SELL decision with $1000 starting capital</div>
+        </div>
+        {!loading && (
+          <div style={{ marginLeft: "auto", fontSize: "1rem", fontWeight: 800, color: pnlColor, fontVariantNumeric: "tabular-nums" }}>
+            {lastPnl >= 0 ? "+" : ""}{lastPnl.toFixed(2)} USDC
+          </div>
+        )}
+      </div>
+
+      {loading && <div style={{ textAlign: "center", color: "var(--muted)", padding: "24px 0", fontSize: ".8rem" }}>Loading decisions…</div>}
+
+      {!loading && points.length < 2 && (
+        <div style={{ textAlign: "center", color: "var(--muted)", padding: "24px 0", fontSize: ".8rem" }}>
+          Not enough decisions yet to chart P&L — check back after a few agent cycles.
+        </div>
+      )}
+
+      {!loading && points.length >= 2 && (
+        <>
+          {/* Mini sparkline */}
+          <div style={{ position: "relative", height: H, marginBottom: 12, background: "var(--card-bg)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border-subtle)" }}>
+            <svg viewBox={`0 0 ${points.length - 1} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }}>
+              <defs>
+                <linearGradient id="pnl-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={pnlColor} stopOpacity="0.3" />
+                  <stop offset="100%" stopColor={pnlColor} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <polyline
+                points={points.map((p, i) => {
+                  const x = i;
+                  const y = H / 2 - (p.pnl / maxPnl) * (H / 2 - 8);
+                  return `${x},${y}`;
+                }).join(" ")}
+                fill="none" stroke={pnlColor} strokeWidth="1.5"
+              />
+              <polygon
+                points={[
+                  ...points.map((p, i) => `${i},${H / 2 - (p.pnl / maxPnl) * (H / 2 - 8)}`),
+                  `${points.length - 1},${H}`, `0,${H}`,
+                ].join(" ")}
+                fill="url(#pnl-grad)"
+              />
+              <line x1="0" y1={H / 2} x2={points.length - 1} y2={H / 2} stroke="#ffffff18" strokeWidth="0.5" strokeDasharray="3 3" />
+              {points.map((p, i) => {
+                if (p.decision === "START") return null;
+                const y = H / 2 - (p.pnl / maxPnl) * (H / 2 - 8);
+                const dotColor = p.decision === "BUY" ? "#10b981" : p.decision === "SELL" ? "#ef4444" : "#f59e0b";
+                return <circle key={i} cx={i} cy={y} r="2.5" fill={dotColor} opacity="0.85" />;
+              })}
+            </svg>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {[
+              { label: "Total P&L", val: `${lastPnl >= 0 ? "+" : ""}$${lastPnl.toFixed(2)}`, color: pnlColor },
+              { label: "Decisions", val: String(points.length - 1), color: "#8b5cf6" },
+              { label: "Live ETH", val: liveEth ? `$${liveEth.toLocaleString()}` : "—", color: "#4B7BFF" },
+            ].map(g => (
+              <div key={g.label} style={{ padding: "8px 10px", borderRadius: 8, background: "var(--card-bg)", border: "1px solid var(--border-subtle)" }}>
+                <div style={{ fontSize: ".6rem", color: "var(--muted)" }}>{g.label}</div>
+                <div style={{ fontSize: ".9rem", fontWeight: 800, color: g.color, fontVariantNumeric: "tabular-nums" }}>{g.val}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Multi-Agent Debate ────────────────────────────────────────── */
+
+const SERVER_URL_MA = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
+
+interface DebateResult {
+  ethPrice: number;
+  oiValue: string;
+  bullArg: string;
+  bearArg: string;
+  verdict: "BUY" | "SELL" | "HOLD";
+  ts: string;
+}
+
+export function ArcMindDebateWidget() {
+  const [debate, setDebate] = useState<DebateResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  async function runDebate() {
+    setLoading(true);
+    setRevealed(false);
+    setDebate(null);
+    try {
+      const res = await fetch(`${SERVER_URL_MA}/api/arc-debate`, { signal: AbortSignal.timeout(10_000) });
+      if (res.ok) setDebate(await res.json() as DebateResult);
+    } catch { /* non-blocking */ }
+    setLoading(false);
+  }
+
+  const verdictColor = debate?.verdict === "BUY" ? "#10B981" : debate?.verdict === "SELL" ? "#EF4444" : "#F59E0B";
+
+  return (
+    <div className="widget-card">
+      <div className="widget-header">
+        <span className="sq soft" style={{ color: "#8b5cf6" }}><Brain size={15} /></span>
+        <div>
+          <h3>Multi-Agent Debate</h3>
+          <div className="sub">Bullish Agent vs Bearish Agent — ArcMind picks the winner based on real OI + ETH price</div>
+        </div>
+        <button className="btn btn-acc btn-sm" style={{ marginLeft: "auto" }} onClick={runDebate} disabled={loading}>
+          {loading ? <><Activity size={11} className="wallet-spin" /> Debating…</> : <><Play size={11} /> Run Debate</>}
+        </button>
+      </div>
+
+      {debate && (
+        <>
+          <div style={{ fontSize: ".62rem", color: "var(--muted)", marginBottom: 10 }}>
+            ETH ${debate.ethPrice.toLocaleString()} · OI {debate.oiValue} · {new Date(debate.ts).toLocaleTimeString()}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div style={{ padding: "12px 14px", borderRadius: 10, border: "1.5px solid #10B98133", background: "#10B9810a" }}>
+              <div style={{ fontSize: ".65rem", fontWeight: 800, color: "#10B981", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                <ArrowUpRight size={11} /> Bullish Agent
+              </div>
+              <div style={{ fontSize: ".75rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>{debate.bullArg}</div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 10, border: "1.5px solid #EF444433", background: "#EF44440a" }}>
+              <div style={{ fontSize: ".65rem", fontWeight: 800, color: "#EF4444", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                <ArrowDownRight size={11} /> Bearish Agent
+              </div>
+              <div style={{ fontSize: ".75rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>{debate.bearArg}</div>
+            </div>
+          </div>
+
+          {!revealed ? (
+            <button className="btn btn-acc" style={{ width: "100%" }} onClick={() => setRevealed(true)}>
+              <Brain size={13} /> Reveal ArcMind Verdict
+            </button>
+          ) : (
+            <div style={{ padding: "16px 20px", borderRadius: 12, border: `2px solid ${verdictColor}44`, background: `${verdictColor}0a`, textAlign: "center" }}>
+              <div style={{ fontSize: ".65rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>ArcMind verdict</div>
+              <div style={{ fontSize: "2rem", fontWeight: 900, color: verdictColor }}>{debate.verdict}</div>
+              <div style={{ fontSize: ".7rem", color: "var(--muted)", marginTop: 4 }}>
+                {debate.verdict === "BUY" ? "Bullish Agent wins — agent goes long" :
+                 debate.verdict === "SELL" ? "Bearish Agent wins — agent goes short" :
+                 "Inconclusive — agent holds position"}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {!debate && !loading && (
+        <div style={{ padding: "24px", textAlign: "center", color: "var(--muted)", fontSize: ".8rem" }}>
+          Click "Run Debate" to see Bullish vs Bearish agents argue using live Hyperliquid OI + ETH price.
         </div>
       )}
     </div>

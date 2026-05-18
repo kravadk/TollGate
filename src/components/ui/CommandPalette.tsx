@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Zap, Database, Globe2, ChevronRight } from "lucide-react";
+import { Search, Zap, Database, Globe2, ChevronRight, TrendingUp, Brain, Users, ShieldOff } from "lucide-react";
 import { workspaces } from "../../data";
 import { slugifyTab } from "./AppSidebar";
 
@@ -55,6 +55,23 @@ function buildCommands(navigate: ReturnType<typeof useNavigate>): Cmd[] {
     icon: <Zap size={14} />,
     action: () => navigate("/"),
   });
+
+  const arcQuickActions: { tab: string; icon: React.ReactNode; sub: string }[] = [
+    { tab: "Signal Hub", icon: <TrendingUp size={14} />, sub: "Live ETH/OI signals · Ask ArcMind" },
+    { tab: "Reasoning Traces", icon: <Brain size={14} />, sub: "Buy step-by-step decision traces · $0.01" },
+    { tab: "Copy Trading", icon: <Users size={14} />, sub: "Stake USDC alongside ArcMind agent" },
+    { tab: "Kill Switch", icon: <ShieldOff size={14} />, sub: "Set drawdown threshold · auto-slash" },
+  ];
+  for (const { tab, icon, sub } of arcQuickActions) {
+    cmds.push({
+      id: `arcmind-${tab.toLowerCase().replace(/ /g, "-")}`,
+      label: tab,
+      sub,
+      group: "ArcMind Quick Actions",
+      icon,
+      action: () => navigate(`/app/agora/${slugifyTab(tab)}`),
+    });
+  }
 
   return cmds;
 }

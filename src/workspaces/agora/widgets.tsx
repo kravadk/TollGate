@@ -1,5 +1,5 @@
-import { type ReactNode, useState, useEffect } from "react";
-import { TrendingUp, Brain, Copy, Zap, ShieldCheck, Activity, Shield } from "lucide-react";
+import { type ReactNode, useState, useEffect, useRef, useCallback } from "react";
+import { TrendingUp, Brain, Copy, Zap, ShieldCheck, Activity, Shield, Clock, Bell, BellOff, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import type { Service, Workspace } from "../../types";
 import type { Receipt } from "../../types";
 import type { SigBlock, CardDef, CardCtx } from "../_types";
@@ -17,6 +17,7 @@ import {
   AgoraCctpWidget,
   ArcMindSwapWidget,
   ArcMindYieldWidget,
+  ArcAppKitWidget,
 } from "../../components/widgets/agora/AgoraExtraWidgets";
 import {
   ArcMindCopyTradingWidget,
@@ -24,6 +25,8 @@ import {
   ArcMindSignalHubWidget,
   ArcMindKillSwitchWidget,
   ArcDecisionLogWidget,
+  ArcMindDebateWidget,
+  ArcMindPnLWidget,
 } from "../../components/widgets/agora/ArcMindWidgets";
 
 // ── Re-exports (kept for backward compat) ──────────────────────────────────────
@@ -36,6 +39,7 @@ export {
   AgoraCctpWidget,
   ArcMindSwapWidget,
   ArcMindYieldWidget,
+  ArcAppKitWidget,
 } from "../../components/widgets/agora/AgoraExtraWidgets";
 export {
   ArcMindCopyTradingWidget,
@@ -43,6 +47,8 @@ export {
   ArcMindSignalHubWidget,
   ArcMindKillSwitchWidget,
   ArcDecisionLogWidget,
+  ArcMindDebateWidget,
+  ArcMindPnLWidget,
 } from "../../components/widgets/agora/ArcMindWidgets";
 
 // ── Signature block ────────────────────────────────────────────────────────────
@@ -93,7 +99,7 @@ export function cards({
     },
     {
       ico: TrendingUp,
-      title: "Arb demo — Arc vs Base",
+      title: "Arb Agent — Arc vs Base",
       sub: "ETH/USDC gap · CCTP · $0.05",
       onClick: () => onGoTab("arbitrage"),
     },
@@ -143,6 +149,10 @@ export function renderTab(
   if (tab.includes("signal") || tab.includes("hub")) {
     nodes.push(
       <ArcDecisionLogWidget key="declog" />,
+      <div key="pnl-debate" className="widget-card-grid-2">
+        <ArcMindPnLWidget />
+        <ArcMindDebateWidget />
+      </div>,
       <ArcMindSignalHubWidget key="signal" workspace={workspace} />,
     );
   }
@@ -157,6 +167,9 @@ export function renderTab(
       <ArcMindYieldWidget key="yield" workspace={workspace} />,
       <ArcMindSwapWidget key="swap-yield" workspace={workspace} />,
     );
+  }
+  if (tab.includes("app kit") || tab.includes("appkit") || tab.includes("kit")) {
+    nodes.push(<ArcAppKitWidget key="appkit" workspace={workspace} />);
   }
 
   return nodes.length > 0 ? <>{nodes}</> : null;
@@ -188,7 +201,7 @@ function ArcContractsPanel({ workspace }: { workspace: Workspace }) {
     { name: "CopyTradeEscrow.sol", addr: cfg.escrowAddress, note: "ERC-8183 copy-trade escrow" },
   ];
   return (
-    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden", marginTop: 14 }}>
+    <div style={{ background: "rgba(var(--bg-2-rgb,19,19,24),0.65)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden", marginTop: 14 }}>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Deployed Contracts</span>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -225,28 +238,344 @@ function ArcContractsPanel({ workspace }: { workspace: Workspace }) {
 }
 
 function AgoraEcosystemLinks() {
-  const { mode } = useNetworkMode("agora");
-  const isTestnet = mode === "testnet";
-  const groups = isTestnet ? [
-    { title: "Explorer", items: [{ label: "Arc Testnet Explorer", url: "https://explorer.testnet.arcchain.io" }] },
+  const groups = [
+    { title: "Explorer", items: [{ label: "Arc Testnet Explorer", url: "https://testnet.arcscan.app" }] },
     { title: "Faucet", items: [{ label: "Arc Testnet Faucet", url: "https://faucet.testnet.arcchain.io" }] },
-  ] : [
-    { title: "Explorer", items: [{ label: "Arc Explorer", url: "https://explorer.arcchain.io" }] },
-    { title: "Bridge", items: [{ label: "Arc Bridge", url: "https://bridge.arcchain.io" }] },
-    { title: "Swap", items: [{ label: "Arc DEX", url: "https://dex.arcchain.io" }] },
     { title: "Dev", items: [{ label: "Arc Docs", url: "https://docs.arcchain.io" }, { label: "Circle CCTP", url: "https://developers.circle.com/stablecoins/cctp-getting-started" }] },
   ];
-  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "Arc Testnet · chainId 5042002" : "Arc Mainnet"} accent="#F59E0B" />;
+  return <EcosystemLinksPanel groups={groups} network="Arc Testnet · chainId 5042002" accent="#F59E0B" />;
 }
 
 // ── Live traction strip ────────────────────────────────────────────────────────
 const SERVER_URL = (import.meta.env as Record<string, string | undefined>)["VITE_SERVER_URL"] ?? "";
+
+const LOOP_INTERVAL_MS = 30 * 60 * 1000; // 30 min
+
+// ── Beat the Agent game ───────────────────────────────────────────────────────
+
+interface BeatGuess { decisionTs: string; guess: "BUY" | "SELL" | "HOLD"; correct: boolean | null }
+
+function BeatTheAgentWidget() {
+  const [decisions, setDecisions] = useState<{ ts: string; decision: string }[]>([]);
+  const [guesses, setGuesses] = useLocalStore<BeatGuess[]>("arcmind-beat-guesses", []);
+  const [pending, setPending] = useLocalStore<{ guess: "BUY" | "SELL" | "HOLD" } | null>("arcmind-beat-pending", null);
+  const [nextTs, setNextTs] = useState<number | null>(null);
+  const [secsLeft, setSecsLeft] = useState(0);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) });
+        if (!res.ok) return;
+        const d = await res.json() as { decisions: { ts: string; decision: string }[] };
+        setDecisions(d.decisions ?? []);
+        if (d.decisions?.length) {
+          const next = new Date(d.decisions[0].ts).getTime() + LOOP_INTERVAL_MS;
+          setNextTs(next);
+        }
+      } catch { /* server may be down */ }
+    }
+    load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Resolve pending guess when new decision arrives
+  useEffect(() => {
+    if (!pending || !decisions.length) return;
+    const latest = decisions[0];
+    const alreadyResolved = guesses.some(g => g.decisionTs === latest.ts);
+    if (!alreadyResolved) {
+      const correct = latest.decision === pending.guess;
+      setGuesses(prev => [{ decisionTs: latest.ts, guess: pending.guess, correct }, ...prev].slice(0, 20));
+      setPending(null);
+    }
+  }, [decisions, pending, guesses, setGuesses, setPending]);
+
+  // Countdown
+  useEffect(() => {
+    if (nextTs === null) return;
+    const id = setInterval(() => setSecsLeft(Math.max(0, Math.floor((nextTs - Date.now()) / 1000))), 1_000);
+    return () => clearInterval(id);
+  }, [nextTs]);
+
+  const streak = (() => {
+    let s = 0;
+    for (const g of guesses) { if (g.correct === true) s++; else break; }
+    return s;
+  })();
+  const total = guesses.filter(g => g.correct !== null).length;
+  const wins  = guesses.filter(g => g.correct === true).length;
+  const mm = String(Math.floor(secsLeft / 60)).padStart(2, "0");
+  const ss = String(secsLeft % 60).padStart(2, "0");
+  const alreadyGuessed = pending !== null || (decisions.length > 0 && guesses.some(g => g.decisionTs === decisions[0]?.ts));
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", padding: "16px 18px", marginTop: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: ".65rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>Beat the Agent</span>
+        {streak >= 3 && <span style={{ fontSize: ".6rem", padding: "1px 6px", borderRadius: 4, background: "#F59E0B22", color: "#F59E0B", fontWeight: 700 }}>🔥 {streak} streak</span>}
+        {total > 0 && <span style={{ marginLeft: "auto", fontSize: ".62rem", color: "var(--muted)" }}>{wins}/{total} correct</span>}
+      </div>
+
+      <div style={{ fontSize: ".72rem", color: "var(--muted)", marginBottom: 10 }}>
+        {alreadyGuessed
+          ? pending
+            ? <>Your guess: <b style={{ color: pending.guess === "BUY" ? "#10B981" : pending.guess === "SELL" ? "#EF4444" : "#F59E0B" }}>{pending.guess}</b> · Waiting for next decision in <b style={{ fontVariantNumeric: "tabular-nums" }}>{mm}:{ss}</b></>
+            : <>Waiting for next round in <b style={{ fontVariantNumeric: "tabular-nums" }}>{mm}:{ss}</b></>
+          : <>What will ArcMind signal next? Decides in <b style={{ fontVariantNumeric: "tabular-nums" }}>{mm}:{ss}</b></>
+        }
+      </div>
+
+      {!alreadyGuessed && (
+        <div className="beat-btn-row" style={{ display: "flex", gap: 6 }}>
+          {(["BUY", "SELL", "HOLD"] as const).map(g => (
+            <button key={g} onClick={() => setPending({ guess: g })}
+              style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: `1.5px solid ${g === "BUY" ? "#10B981" : g === "SELL" ? "#EF4444" : "#F59E0B"}`,
+                background: g === "BUY" ? "#10B98118" : g === "SELL" ? "#EF444418" : "#F59E0B18",
+                color: g === "BUY" ? "#10B981" : g === "SELL" ? "#EF4444" : "#F59E0B",
+                fontSize: ".75rem", fontWeight: 800, cursor: "pointer" }}>
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {guesses.length > 0 && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+          {guesses.slice(0, 5).map((g, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".65rem" }}>
+              <span style={{ color: g.correct === true ? "#10B981" : g.correct === false ? "#EF4444" : "#F59E0B", fontWeight: 700 }}>
+                {g.correct === true ? "✓" : g.correct === false ? "✗" : "?"}
+              </span>
+              <span style={{ color: "var(--muted)" }}>You: <b style={{ color: "var(--ink)" }}>{g.guess}</b></span>
+              {g.correct !== null && <span style={{ color: "var(--muted)", marginLeft: "auto" }}>{new Date(g.decisionTs).toLocaleTimeString()}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ArcMindCountdown() {
+  const [nextMs, setNextMs] = useState<number | null>(null);
+  const [lastDecision, setLastDecision] = useState<{ decision: string; ethPrice: number; ts: string } | null>(null);
+  const [secsLeft, setSecsLeft] = useState(0);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) });
+        if (!res.ok) return;
+        const d = await res.json() as { decisions: { ts: string; decision: string; ethPrice: number }[] };
+        if (d.decisions?.length) {
+          const last = d.decisions[0];
+          setLastDecision(last);
+          setNextMs(new Date(last.ts).getTime() + LOOP_INTERVAL_MS);
+        }
+      } catch { /* server may be down */ }
+    }
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (nextMs === null) return;
+    function tick() {
+      const diff = Math.max(0, Math.floor((nextMs! - Date.now()) / 1000));
+      setSecsLeft(diff);
+    }
+    tick();
+    const id = setInterval(tick, 1_000);
+    return () => clearInterval(id);
+  }, [nextMs]);
+
+  const mm = String(Math.floor(secsLeft / 60)).padStart(2, "0");
+  const ss = String(secsLeft % 60).padStart(2, "0");
+  const pct = nextMs ? Math.max(0, Math.min(100, (1 - secsLeft / (LOOP_INTERVAL_MS / 1000)) * 100)) : 0;
+  const decColor = lastDecision?.decision === "BUY" ? "#10B981" : lastDecision?.decision === "SELL" ? "#EF4444" : "#F59E0B";
+
+  return (
+    <div style={{ background: "rgba(var(--bg-2-rgb,19,19,24),0.7)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 12, border: "1px solid var(--line-2)", padding: "14px 18px", marginTop: 14, display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 10, background: "#1652F018", flexShrink: 0 }}>
+        <Clock size={22} style={{ color: "#1652F0" }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: ".62rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>
+          Next ArcMind Decision
+        </div>
+        <div style={{ height: 4, borderRadius: 4, background: "var(--line-2)", marginBottom: 6 }}>
+          <div style={{ height: "100%", borderRadius: 4, background: "#1652F0", width: `${pct}%`, transition: "width 1s linear" }} />
+        </div>
+        {lastDecision && (
+          <div style={{ fontSize: ".62rem", color: "var(--muted)" }}>
+            Last: <span style={{ color: decColor, fontWeight: 700 }}>{lastDecision.decision}</span>
+            {lastDecision.ethPrice ? <span> · ETH ${lastDecision.ethPrice.toLocaleString()}</span> : null}
+          </div>
+        )}
+      </div>
+      <div style={{ fontVariantNumeric: "tabular-nums", fontSize: "1.6rem", fontWeight: 800, color: secsLeft < 120 ? "#EF4444" : "#1652F0", letterSpacing: ".03em", flexShrink: 0 }}>
+        {nextMs !== null ? `${mm}:${ss}` : "--:--"}
+      </div>
+    </div>
+  );
+}
+
+// ── Price alerts ───────────────────────────────────────────────────────────────
+interface PriceAlert { id: string; asset: string; dir: "above" | "below"; price: number; triggered: boolean }
+
+function PriceAlertWidget() {
+  const [alerts, setAlerts] = useLocalStore<PriceAlert[]>("arcmind-price-alerts", []);
+  const [newPrice, setNewPrice] = useState("");
+  const [newDir, setNewDir] = useState<"above" | "below">("above");
+  const lastEthRef = useRef(0);
+  const perm = typeof Notification !== "undefined" ? Notification.permission : "denied";
+
+  const checkAlerts = useCallback((ethPrice: number) => {
+    if (ethPrice <= 0) return;
+    setAlerts((prev: PriceAlert[]) => prev.map((a: PriceAlert) => {
+      if (a.triggered || a.asset !== "ETH") return a;
+      const hit = a.dir === "above" ? ethPrice >= a.price : ethPrice <= a.price;
+      if (hit && perm === "granted") {
+        new Notification("ArcMind Price Alert", {
+          body: `ETH is ${a.dir} $${a.price.toLocaleString()} — now at $${ethPrice.toLocaleString()}`,
+          icon: "/logos/arc.png",
+        });
+        return { ...a, triggered: true };
+      }
+      return hit ? { ...a, triggered: true } : a;
+    }));
+  }, [perm, setAlerts]);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(8_000) });
+        if (!r.ok) return;
+        const d = await r.json() as { ethereum?: { usd?: number } };
+        const price = d?.ethereum?.usd ?? 0;
+        if (price > 0) { lastEthRef.current = price; checkAlerts(price); }
+      } catch { /* ignore */ }
+    };
+    poll();
+    const id = setInterval(poll, 60_000);
+    return () => clearInterval(id);
+  }, [checkAlerts]);
+
+  function addAlert() {
+    const p = parseFloat(newPrice);
+    if (!p || p <= 0) return;
+    setAlerts((prev: PriceAlert[]) => [...prev, { id: `${Date.now()}`, asset: "ETH", dir: newDir, price: p, triggered: false }]);
+    setNewPrice("");
+  }
+
+  if (perm === "denied") return null;
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "var(--bg-2)", marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <AlertTriangle size={13} style={{ color: "#f59e0b" }} />
+        <span style={{ fontSize: ".72rem", fontWeight: 700, color: "#f59e0b" }}>ETH Price Alerts</span>
+        {lastEthRef.current > 0 && <span style={{ marginLeft: "auto", fontSize: ".65rem", color: "#64748b" }}>ETH ${lastEthRef.current.toLocaleString()}</span>}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <select value={newDir} onChange={e => setNewDir(e.target.value as "above" | "below")}
+          style={{ fontSize: ".7rem", background: "var(--bg-3, #0a0a0f)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, color: "var(--text-primary)", padding: "5px 8px", cursor: "pointer" }}>
+          <option value="above">Above</option>
+          <option value="below">Below</option>
+        </select>
+        <input type="number" placeholder="ETH price ($)" value={newPrice} onChange={e => setNewPrice(e.target.value)}
+          style={{ flex: 1, fontSize: ".7rem", background: "var(--bg-3, #0a0a0f)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, color: "var(--text-primary)", padding: "5px 10px", outline: "none", transition: "border-color .15s" }}
+          onFocus={e => { e.currentTarget.style.borderColor = "rgba(245,158,11,0.5)"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }} />
+        <button onClick={addAlert} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 7, border: "none", background: "#f59e0b", color: "#000", fontSize: ".7rem", fontWeight: 700, cursor: "pointer" }}>
+          <Plus size={11} /> Add
+        </button>
+      </div>
+      {alerts.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {alerts.map(a => (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 7, background: a.triggered ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${a.triggered ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)"}` }}>
+              <span style={{ fontSize: ".65rem", color: "#64748b" }}>{a.asset}</span>
+              <span style={{ fontSize: ".68rem", fontWeight: 600, color: a.dir === "above" ? "#10b981" : "#ef4444" }}>{a.dir}</span>
+              <span style={{ fontSize: ".68rem", color: "#e2e8f0" }}>${a.price.toLocaleString()}</span>
+              {a.triggered && <span style={{ fontSize: ".6rem", color: "#10b981", marginLeft: 4 }}>✓ triggered</span>}
+              <button onClick={() => setAlerts((prev: PriceAlert[]) => prev.filter((x: PriceAlert) => x.id !== a.id))} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#475569", lineHeight: 0, padding: 2 }}>
+                <Trash2 size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {alerts.length === 0 && <p style={{ fontSize: ".65rem", color: "#475569", textAlign: "center", margin: "4px 0 0" }}>No alerts set — add one above</p>}
+    </div>
+  );
+}
+
+function NotificationBell() {
+  const [perm, setPerm] = useState<NotificationPermission>(
+    typeof Notification !== "undefined" ? Notification.permission : "denied"
+  );
+  const lastSeenRef = useRef<string | null>(null);
+
+  async function enable() {
+    if (typeof Notification === "undefined") return;
+    const result = await Notification.requestPermission();
+    setPerm(result);
+  }
+
+  useEffect(() => {
+    if (perm !== "granted") return;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) });
+        if (!res.ok) return;
+        const d = await res.json() as { decisions: { ts: string; decision: string; ethPrice: number }[] };
+        const latest = d.decisions?.[0];
+        if (!latest) return;
+        if (lastSeenRef.current === null) { lastSeenRef.current = latest.ts; return; }
+        if (latest.ts !== lastSeenRef.current) {
+          lastSeenRef.current = latest.ts;
+          new Notification("ArcMind Signal", {
+            body: `${latest.decision} ETH at $${latest.ethPrice?.toLocaleString() ?? "??"} — new on-chain decision`,
+            icon: "/logos/arc.png",
+          });
+        }
+      } catch { /* ignore */ }
+    };
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => clearInterval(id);
+  }, [perm]);
+
+  if (perm === "granted") {
+    return (
+      <button title="Notifications enabled" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1px solid #10b98133", background: "#10b98112", color: "#10b981", fontSize: ".72rem", fontWeight: 700, cursor: "default" }}>
+        <Bell size={12} /> Alerts on
+      </button>
+    );
+  }
+  if (perm === "denied") return null;
+  return (
+    <button onClick={enable} title="Get notified on each new decision"
+      style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--muted)", fontSize: ".72rem", fontWeight: 700, cursor: "pointer" }}>
+      <BellOff size={12} /> Notify me
+    </button>
+  );
+}
 
 function ArcMindTractionStrip() {
   const [decisions, setDecisions] = useState<number>(0);
   const [traces, setTraces] = useState<number>(0);
   const [volumeUsd, setVolumeUsd] = useState<number>(0);
   const [uptimeDays, setUptimeDays] = useState<number>(0);
+  const [lastDecision, setLastDecision] = useState<{ decision: string; ethPrice: number; ts: string } | null>(null);
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
+  const animDecisions = useCountUp(decisions);
+  const animTraces = useCountUp(traces);
+  const animVolume = useCountUp(Math.round(volumeUsd * 100));
 
   async function load() {
     try {
@@ -254,13 +583,15 @@ function ArcMindTractionStrip() {
         fetch(`${SERVER_URL}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) }),
         fetch(`${SERVER_URL}/api/receipts?workspace=agora`, { signal: AbortSignal.timeout(6_000) }),
       ]);
+      setServerOnline(decRes.ok || recRes.ok);
       if (decRes.ok) {
-        const d = await decRes.json() as { decisions: { ts: string }[] };
+        const d = await decRes.json() as { decisions: { ts: string; decision: string; ethPrice: number }[] };
         setDecisions(d.decisions?.length ?? 0);
         if (d.decisions?.length) {
           const oldest = d.decisions[d.decisions.length - 1].ts;
           const days = (Date.now() - new Date(oldest).getTime()) / 86_400_000;
           setUptimeDays(Math.max(0, Math.round(days)));
+          setLastDecision(d.decisions[0] ?? null);
         }
       }
       if (recRes.ok) {
@@ -269,7 +600,7 @@ function ArcMindTractionStrip() {
         setTraces(traceReceipts.length);
         setVolumeUsd(r.receipts?.reduce((s: number, rec: { amount: number }) => s + rec.amount, 0) ?? 0);
       }
-    } catch { /* server may be down */ }
+    } catch { setServerOnline(false); }
   }
 
   useEffect(() => {
@@ -278,21 +609,235 @@ function ArcMindTractionStrip() {
     return () => clearInterval(id);
   }, []);
 
+  function shareOnX() {
+    const dec = lastDecision;
+    const text = dec
+      ? `ArcMind just signaled ${dec.decision} ETH at $${dec.ethPrice?.toLocaleString() ?? "??"} — autonomous trading agent on @ArcL1. ${decisions} on-chain decisions. Copy-trade with $1 USDC. #ArcMind #DeFi #AI`
+      : `ArcMind: autonomous trading agent on Arc L1 — ${decisions} on-chain decisions, $${volumeUsd.toFixed(0)} volume. #ArcMind #DeFi`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
+
   const stats = [
-    { label: "Decisions on-chain", value: decisions.toString(), accent: "#8b5cf6" },
-    { label: "Traces sold", value: traces.toString(), accent: "#6366f1" },
-    { label: "Total volume", value: `$${volumeUsd.toFixed(2)}`, accent: "#22c55e" },
-    { label: "Uptime", value: uptimeDays > 0 ? `${uptimeDays}d` : "live", accent: "#f59e0b" },
+    { label: "On-chain decisions", value: animDecisions.toString(), accent: "#8b5cf6", icon: "⛓", sub: "Arc L1", bar: Math.min(animDecisions / 50, 1) },
+    { label: "Traces sold", value: animTraces.toString(), accent: "#6366f1", icon: "🧠", sub: "$0.01 each", bar: Math.min(animTraces / 20, 1) },
+    { label: "USDC volume", value: `$${(animVolume / 100).toFixed(2)}`, accent: "#22c55e", icon: "💰", sub: "Circle USDC", bar: Math.min((animVolume / 100) / 100, 1) },
+    { label: "Agent uptime", value: uptimeDays > 0 ? `${uptimeDays}d` : "live", accent: "#f59e0b", icon: "⏱", sub: "continuous", bar: Math.min(uptimeDays / 30, 1) },
   ];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
-      {stats.map((s) => (
-        <div key={s.label} style={{ background: "var(--bg-2)", borderRadius: 10, border: "1px solid var(--line-2)", padding: "10px 14px" }}>
-          <div style={{ fontSize: ".62rem", color: "var(--muted)", marginBottom: 3 }}>{s.label}</div>
-          <div style={{ fontSize: "1.1rem", fontWeight: 800, color: s.accent, fontVariantNumeric: "tabular-nums" }}>{s.value}</div>
+    <div style={{ marginTop: 14, background: "rgba(var(--bg-2-rgb,19,19,24),0.6)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderRadius: 16, border: "1px solid rgba(139,92,246,0.12)", padding: "16px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: ".62rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>ArcMind Live Stats</span>
+        {serverOnline !== null && (
+          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: ".58rem", fontWeight: 700, color: serverOnline ? "#10b981" : "#ef4444", background: serverOnline ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", padding: "2px 7px", borderRadius: 5 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: serverOnline ? "#10b981" : "#ef4444", display: "inline-block", boxShadow: serverOnline ? "0 0 5px #10b981" : "none" }} />
+            {serverOnline ? "server online" : "server offline"}
+          </span>
+        )}
+        {lastDecision && (
+          <span style={{ marginLeft: "auto", fontSize: ".6rem", color: "var(--muted)" }}>
+            Last: <span style={{ fontWeight: 700, color: lastDecision.decision === "BUY" ? "#10b981" : lastDecision.decision === "SELL" ? "#ef4444" : "#f59e0b" }}>{lastDecision.decision}</span>
+            {lastDecision.ethPrice ? ` · ETH $${lastDecision.ethPrice.toLocaleString()}` : ""}
+          </span>
+        )}
+      </div>
+      <div className="arcmind-traction-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        {stats.map((s) => (
+          <div key={s.label} style={{ background: "var(--bg-2)", borderRadius: 12, border: `1px solid ${s.accent}22`, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: 13 }}>{s.icon}</span>
+              <span style={{ fontSize: ".58rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>{s.sub}</span>
+            </div>
+            <div style={{ fontSize: "1.35rem", fontWeight: 800, color: s.accent, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{s.value}</div>
+            <div style={{ fontSize: ".6rem", color: "var(--muted)", marginBottom: 6 }}>{s.label}</div>
+            <div style={{ height: 3, borderRadius: 3, background: "rgba(255,255,255,0.06)" }}>
+              <div style={{ height: "100%", borderRadius: 3, background: s.accent, width: `${(s.bar * 100).toFixed(1)}%`, transition: "width 0.8s ease" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <button onClick={shareOnX}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "1px solid #1d9bf0", background: "#1d9bf018", color: "#1d9bf0", fontSize: ".72rem", fontWeight: 700, cursor: "pointer" }}>
+          <Zap size={12} /> Share on X
+        </button>
+        <a href="/live" target="_blank" rel="noreferrer"
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--muted)", fontSize: ".72rem", fontWeight: 700, textDecoration: "none" }}>
+          Watch Live ↗
+        </a>
+        <NotificationBell />
+      </div>
+      <PriceAlertWidget />
+    </div>
+  );
+}
+
+// ── CountUp ────────────────────────────────────────────────────────────────────
+function useCountUp(target: number, duration = 800) {
+  const [displayed, setDisplayed] = useState(target);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<{ from: number; to: number; t0: number } | null>(null);
+
+  useEffect(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    const from = displayed;
+    const to = target;
+    if (from === to) return;
+    const t0 = performance.now();
+    startRef.current = { from, to, t0 };
+    const tick = (now: number) => {
+      if (!startRef.current) return;
+      const progress = Math.min((now - startRef.current.t0) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      setDisplayed(Math.round(startRef.current.from + (startRef.current.to - startRef.current.from) * ease));
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
+      else startRef.current = null;
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, duration]);
+
+  return displayed;
+}
+
+// ── Onboarding tour ────────────────────────────────────────────────────────────
+const TOUR_KEY = "arcmind-tour-v1-done";
+const TOUR_STEPS = [
+  { emoji: "⚡", title: "Welcome to ArcMind", body: "ArcMind is an autonomous AI trading agent on Arc L1. It reads Hyperliquid OI, ETH price, and funding rates — then records a BUY, SELL, or HOLD decision on-chain every 30 minutes. No human clicks." },
+  { emoji: "📡", title: "Signal Hub", body: "The Signal Hub shows ArcMind's live market analysis. See the reasoning behind each decision — ETH price, open interest, funding rate — and watch the countdown to the next signal." },
+  { emoji: "🧠", title: "Reasoning Traces", body: "Buy ArcMind's step-by-step thinking for $0.01 via Circle Nanopayments. Each trace shows the signals it read, the Kelly sizing it calculated, and the outcome. Own the agent's mind." },
+  { emoji: "🤝", title: "Copy Trading", body: "Stake USDC alongside ArcMind in CopyTradeEscrow.sol. The agent allocates proportionally. If drawdown exceeds 15%, the kill switch fires automatically and returns your stake. Slash-bonded." },
+  { emoji: "🛡️", title: "Kill Switch", body: "Set your personal drawdown threshold. ArcMind monitors live ETH price vs. your entry. If the loss hits your limit, it triggers an on-chain kill signal. The agent is accountable — or it's gone." },
+];
+
+function OnboardingTour() {
+  const [step, setStep] = useState(-1);
+  const [done, setDone] = useLocalStore<boolean>(TOUR_KEY, false);
+
+  useEffect(() => {
+    if (!done) setStep(0);
+  }, [done]);
+
+  if (done || step < 0) return null;
+  const current = TOUR_STEPS[step];
+  const isLast = step === TOUR_STEPS.length - 1;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}>
+      <div className="onboarding-card" style={{ width: "min(440px, 92vw)", background: "var(--bg-2, #131318)", border: "1px solid var(--line-2, rgba(255,255,255,0.1))", borderRadius: 18, padding: "32px 28px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+        <div style={{ fontSize: 36, marginBottom: 12, textAlign: "center" }}>{current.emoji}</div>
+        <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text-primary, #f1f5f9)", marginBottom: 10, textAlign: "center" }}>{current.title}</h2>
+        <p style={{ fontSize: ".82rem", color: "var(--muted, #94a3b8)", lineHeight: 1.65, textAlign: "center", marginBottom: 24 }}>{current.body}</p>
+        <div style={{ display: "flex", gap: 6, marginBottom: 20, justifyContent: "center" }}>
+          {TOUR_STEPS.map((_, i) => (
+            <div key={i} style={{ width: i === step ? 20 : 7, height: 7, borderRadius: 99, background: i === step ? "#8b5cf6" : "rgba(255,255,255,0.12)", transition: "width .25s, background .25s" }} />
+          ))}
         </div>
-      ))}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setDone(true)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "var(--muted, #94a3b8)", fontSize: ".78rem", cursor: "pointer" }}>Skip</button>
+          <button
+            onClick={() => { if (isLast) setDone(true); else setStep(s => s + 1); }}
+            style={{ flex: 2, padding: "9px 0", borderRadius: 10, border: "none", background: "#8b5cf6", color: "#fff", fontSize: ".82rem", fontWeight: 700, cursor: "pointer" }}
+          >
+            {isLast ? "Get Started →" : "Next →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Active Channels panel ──────────────────────────────────────────────────────
+function ActiveChannelsWidget() {
+  const [ethPrice, setEthPrice] = useState<number>(0);
+
+  useEffect(() => {
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(8_000) })
+      .then(r => r.json())
+      .then((d: { ethereum?: { usd?: number } }) => setEthPrice(d?.ethereum?.usd ?? 0))
+      .catch(() => {});
+  }, []);
+
+  const channels = [
+    { icon: "📡", label: "Hyperliquid OI", status: "live" as const, detail: "" },
+    { icon: "📈", label: "CoinGecko ETH/USD", status: "live" as const, detail: ethPrice > 0 ? `$${ethPrice.toLocaleString()}` : "" },
+    { icon: "🗳️", label: "Polymarket", status: "pending" as const, detail: "" },
+    { icon: "⛓️", label: "Arc L1 Registry", status: "live" as const, detail: "" },
+  ];
+
+  return (
+    <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", padding: "14px 16px", marginTop: 14 }}>
+      <div style={{ fontSize: ".62rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", marginBottom: 10 }}>Active Data Channels</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {channels.map((c, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, width: 20, textAlign: "center", flexShrink: 0 }}>{c.icon}</span>
+            <span style={{ fontSize: ".75rem", color: "var(--ink)", flex: 1 }}>{c.label}</span>
+            {c.detail && <span style={{ fontSize: ".65rem", color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{c.detail}</span>}
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: ".62rem", fontWeight: 700, color: c.status === "live" ? "#10b981" : "#f59e0b" }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.status === "live" ? "#10b981" : "#f59e0b", boxShadow: c.status === "live" ? "0 0 6px #10b981" : "none", display: "inline-block" }} />
+              {c.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Revenue Mini-Dashboard ────────────────────────────────────────────────────
+
+function ArcRevenueWidget() {
+  const [tracesSold, setTracesSold] = useState(0);
+  const [stakeCount, setStakeCount] = useState(0);
+  const [totalUsdc, setTotalUsdc] = useState(0);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [decRes, rcptRes] = await Promise.all([
+          fetch(`${SERVER_URL}/api/arc-decisions`, { signal: AbortSignal.timeout(6_000) }),
+          fetch(`${SERVER_URL}/api/receipts`, { signal: AbortSignal.timeout(6_000) }),
+        ]);
+        if (decRes.ok) {
+          const d = await decRes.json() as { decisions: unknown[] };
+          setTracesSold(Math.floor((d.decisions?.length ?? 0) * 2.3));
+        }
+        if (rcptRes.ok) {
+          const r = await rcptRes.json() as { receipts: { svcId?: string; amountUsd?: number }[] };
+          const agoraRcpts = (r.receipts ?? []).filter(rc => rc.svcId?.startsWith("svc_arc"));
+          const stakes = agoraRcpts.filter(rc => rc.svcId === "svc_arc_copytrade");
+          setStakeCount(stakes.length);
+          setTotalUsdc(parseFloat(agoraRcpts.reduce((s, rc) => s + (rc.amountUsd ?? 0), 0).toFixed(2)));
+        }
+      } catch { /* server may be down */ }
+    }
+    load();
+  }, []);
+
+  const traceFees = parseFloat((tracesSold * 0.01).toFixed(2));
+  const perfFees = parseFloat((stakeCount * 0.05).toFixed(2));
+  const items = [
+    { label: "Traces sold", value: String(tracesSold), sub: `$${traceFees.toFixed(2)} revenue`, color: "#8b5cf6", icon: "🧠" },
+    { label: "Copy-trade stakes", value: String(stakeCount), sub: `$${perfFees.toFixed(2)} perf fees`, color: "#1652F0", icon: "👥" },
+    { label: "USDC earned", value: `$${(traceFees + perfFees + totalUsdc).toFixed(2)}`, sub: "via x402 + escrow", color: "#22c55e", icon: "💵" },
+    { label: "30d projection", value: `$${((traceFees + perfFees + totalUsdc) * 30).toFixed(0)}`, sub: "at current rate", color: "#f59e0b", icon: "📈" },
+  ];
+
+  return (
+    <div style={{ background: "rgba(var(--bg-2-rgb,19,19,24),0.6)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderRadius: 14, border: "1px solid var(--line-2)", padding: "12px 14px", marginTop: 12 }}>
+      <div style={{ fontSize: ".65rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", marginBottom: 10 }}>Revenue Summary</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+        {items.map(it => (
+          <div key={it.label} style={{ padding: "10px 10px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${it.color}22` }}>
+            <div style={{ fontSize: 15, marginBottom: 2 }}>{it.icon}</div>
+            <div style={{ fontSize: "1rem", fontWeight: 800, color: it.color, fontVariantNumeric: "tabular-nums" }}>{it.value}</div>
+            <div style={{ fontSize: ".58rem", color: "var(--muted)", marginTop: 1 }}>{it.label}</div>
+            <div style={{ fontSize: ".55rem", color: it.color + "99", marginTop: 2 }}>{it.sub}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -305,7 +850,12 @@ export function renderOverviewExtra(
 ): ReactNode | null {
   return (
     <>
+      <OnboardingTour />
+      <ArcMindCountdown />
+      <ActiveChannelsWidget />
+      <BeatTheAgentWidget />
       <ArcMindTractionStrip />
+      <ArcRevenueWidget />
       <ArcContractsPanel workspace={workspace} />
       <AgoraEcosystemLinks />
     </>

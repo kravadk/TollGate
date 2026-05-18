@@ -16,6 +16,7 @@ import {
 } from "../components/WorkspaceDashboard";
 import { slugifyTab } from "../components/ui/AppSidebar";
 import type { WorkspaceOutletContext } from "../layouts/AppLayout";
+import { TabFade } from "../components/ui/Motion";
 
 export function WorkspacePage() {
   const params = useParams<{ wsId: string; tabSlug: string }>();
@@ -90,6 +91,7 @@ export function WorkspacePage() {
 
   return (
     <div className="ap402">
+      <TabFade tabKey={`${workspace.id}:${tabLabel}`}>
       {kind === "overview" ? (
         <OverviewPage
           agent={effectiveAgent}
@@ -131,6 +133,7 @@ export function WorkspacePage() {
           onCreateOpen={() => setCreateOpen(true)}
         />
       )}
+      </TabFade>
 
       {createOpen ? (
         <CreateServiceModal

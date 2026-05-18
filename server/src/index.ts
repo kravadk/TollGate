@@ -3,13 +3,13 @@
 
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { env } from "./env.js";
 import { apiRouter, statusRouter } from "./routes.js";
 import { mcpRouter } from "./mcp.js";
 import { feedsRouter } from "./feeds.js";
 import { log, newRequestId } from "./logger.js";
-import { arcAgentLoop } from "./arc-agent-loop.js";
+import { startArcAgentScheduler } from "./arc-agent-loop.js";
 
 const app = express();
 app.set("trust proxy", 1); // honour X-Forwarded-For on Render / fly.io
@@ -48,7 +48,7 @@ const mcpLimiter = rateLimit({
 const gatewayLimiter = rateLimit({
   windowMs: 60_000, max: 30,
   standardHeaders: true, legacyHeaders: false,
-  keyGenerator: (req) => `${req.ip}::${req.params["serviceId"] ?? "default"}`,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "")}::${req.params["serviceId"] ?? "default"}`,
   message: { error: "rate_limit_exceeded", retryAfterSec: 60, scope: "/api/gateway" },
 });
 
@@ -117,6 +117,5 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 
 app.listen(env.port, () => {
   log.info("server_listening", { port: env.port, env: env.nodeEnv, version: VERSION.version });
-  arcAgentLoop().catch((e) => console.error("[arc-loop] startup error:", (e as Error).message));
-  setInterval(() => arcAgentLoop().catch((e) => console.error("[arc-loop] error:", (e as Error).message)), 30 * 60 * 1000);
+  startArcAgentScheduler();
 });

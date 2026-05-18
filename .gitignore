@@ -22,5 +22,10 @@ screenshots/
 # All markdown files are local only — only root README is committed
 *.md
 !README.md
+!docs/AGORA-ACTIVE-EXECUTION-PLAN.md
+!docs/AGORA-LIVE-DEMO-RUNBOOK.md
+!docs/AGORA-SUBMISSION-PACK.md
+!docs/AGORA-PRODUCTION-DEPLOYMENT.md
+!docs/AGORA-API-SIGNAL-RADAR.md
 
 .vercel

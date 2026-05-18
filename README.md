@@ -1,5 +1,57 @@
 # TollGate
 
+## Agora Agents Hackathon: ArcMind CopyGuard
+
+ArcMind CopyGuard is the Agora/Arc submission inside this repo. It is an AI risk layer for copy-traders: it detects leader strategy decay, decides whether to COPY, REDUCE, STOP, HOLD_USDC, or MOVE_TO_USYC, and exposes paid reasoning traces plus protected USDC portfolio receipts on Arc.
+
+**Primary demo route:** `/live`  
+**Full Agora console:** `/app/agora`  
+**Readiness endpoint:** `/api/arc-readiness`  
+**Main RFB fit:** RFB 06 Social Trading Intelligence  
+**Secondary fit:** RFB 04 Adaptive Portfolio Manager, RFB 02 Trader Intelligence
+
+For judges:
+
+1. Open `/live`.
+2. Keep `Read-only walkthrough` active for first inspection.
+3. Open `Judge Walkthrough`.
+4. Check `Submission Readiness`.
+5. Inspect latest CopyGuard decision, leader decay factors, paid trace preview, Decision Replay, What-If Simulator, and Live Traction.
+6. Check Signal Source Radar to see which market/social/news providers are configured, need keys, or are intentionally blocked.
+7. Switch to `Live execution` only when ready to connect an Arc wallet and create verified payment receipts.
+
+Agora-specific docs:
+
+- [Submission pack](docs/AGORA-SUBMISSION-PACK.md)
+- [Live demo runbook](docs/AGORA-LIVE-DEMO-RUNBOOK.md)
+- [Production deployment checklist](docs/AGORA-PRODUCTION-DEPLOYMENT.md)
+- [API signal radar](docs/AGORA-API-SIGNAL-RADAR.md)
+- [Active execution plan](docs/AGORA-ACTIVE-EXECUTION-PLAN.md)
+
+Agora local run:
+
+```bash
+npm install
+cd server && npm install && npm run dev
+cd .. && npm run dev
+```
+
+Agora smoke check:
+
+```bash
+AGORA_FRONTEND_URL=http://127.0.0.1:5173 AGORA_BACKEND_URL=http://127.0.0.1:8787 npm run test:agora-live
+```
+
+Production smoke check:
+
+```bash
+AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-domain> npm run test:agora-live
+```
+
+Honest demo boundary: read-only walkthrough never creates local fake receipts. Paid trace unlocks and protected portfolio starts require wallet payment plus backend Arc verification.
+
+---
+
 > **The payment rails the agent economy runs on.** HTTP 402 for autonomous payments + AgentScore credit reputation, bound to ERC-8004 identity. 18 contracts across 5 chains.
 
 **[Live demo](https://toll-gatee.vercel.app/)** · **[API server](https://tollgate-1.onrender.com)** · **[0G mainnet contract](https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f)** · **[GitHub](https://github.com/kravadk/TollGate)**

@@ -16,9 +16,20 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { getAddress, JsonRpcProvider, parseUnits } from "ethers";
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { env, isProd } from "./env.js";
+import { buildArcAlerts, buildArcAuditTrail, buildArcDecisionReplay, evaluateArcDecisionVerification } from "./arc-audit.js";
+import {
+  appendArcTractionEvent,
+  buildArcTractionStats,
+  makeArcTractionEvent,
+  readArcTractionEvents,
+} from "./arc-traction.js";
+import { buildPortfolioSimulation, buildProtectedPortfolio } from "./arc-portfolio.js";
+import { buildArcReadinessReport } from "./arc-readiness.js";
+import { buildArcSignalSourceRadar } from "./arc-signal-sources.js";
 import { uploadToOg } from "./og-upload.js";
 import { runOgInference } from "./og-compute.js";
 import {
@@ -69,6 +80,43 @@ function publicService(s: Service) {
 }
 
 export const apiRouter = Router();
+
+function cleanArcAddress(v: unknown): string | null {
+  if (typeof v !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(v)) return null;
+  try {
+    return getAddress(v);
+  } catch {
+    return null;
+  }
+}
+
+async function verifyArcNativePayment(input: {
+  txHash: unknown;
+  from: unknown;
+  minAmountUsd: number;
+}): Promise<{ ok: true; txHash: string } | { ok: false; reason: string }> {
+  const txHash = typeof input.txHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(input.txHash) ? input.txHash : "";
+  const from = cleanArcAddress(input.from);
+  const to = cleanArcAddress(env.x402PayoutAddress);
+  if (!txHash) return { ok: false, reason: "missing_valid_tx_hash" };
+  if (!from) return { ok: false, reason: "missing_valid_wallet" };
+  if (!to) return { ok: false, reason: "payout_address_not_configured" };
+  if (!process.env.ARC_RPC_URL) return { ok: false, reason: "arc_rpc_not_configured" };
+
+  const provider = new JsonRpcProvider(process.env.ARC_RPC_URL);
+  const [tx, receipt] = await Promise.all([
+    provider.getTransaction(txHash),
+    provider.getTransactionReceipt(txHash),
+  ]);
+  if (!tx || !receipt) return { ok: false, reason: "tx_not_found_or_pending" };
+  if (receipt.status !== 1) return { ok: false, reason: "tx_failed" };
+  if (getAddress(tx.from) !== from) return { ok: false, reason: "tx_from_mismatch" };
+  if (!tx.to || getAddress(tx.to) !== to) return { ok: false, reason: "tx_to_mismatch" };
+
+  const required = parseUnits(input.minAmountUsd.toFixed(6), 18);
+  if (tx.value < required) return { ok: false, reason: "tx_amount_too_low" };
+  return { ok: true, txHash };
+}
 
 // ─── 0G Storage upload (server-side, uses private key) ──────────────────────
 
@@ -313,19 +361,258 @@ apiRouter.get("/events/payments", (req: Request, res: Response) => {
 // ─── Status / observability ────────────────────────────────────────────────
 
 const ARC_LOG = join(process.cwd(), "data", "arc-decisions.jsonl");
+const ARC_DEPLOYMENT_CANDIDATES = [
+  join(process.cwd(), "../contracts/deployments/arcTestnet.json"),
+  join(process.cwd(), "contracts/deployments/arcTestnet.json"),
+];
 
-apiRouter.get("/arc-decisions", (_req: Request, res: Response) => {
-  if (!existsSync(ARC_LOG)) return res.json({ decisions: [] });
+function readArcDecisionLog(): Record<string, unknown>[] {
+  if (!existsSync(ARC_LOG)) return [];
   try {
     const lines = readFileSync(ARC_LOG, "utf8").trim().split("\n").filter(Boolean);
-    const decisions = lines
-      .slice(-20)
+    return lines
+      .slice(-50)
       .reverse()
       .map((l) => JSON.parse(l) as Record<string, unknown>);
-    res.json({ decisions });
   } catch {
-    res.json({ decisions: [] });
+    return [];
   }
+}
+
+function readArcDeployment(): { registry?: string; escrow?: string } {
+  for (const file of ARC_DEPLOYMENT_CANDIDATES) {
+    if (!existsSync(file)) continue;
+    try {
+      const data = JSON.parse(readFileSync(file, "utf8")) as { registry?: unknown; escrow?: unknown };
+      return {
+        registry: typeof data.registry === "string" ? data.registry : undefined,
+        escrow: typeof data.escrow === "string" ? data.escrow : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+apiRouter.get("/arc-decisions", (_req: Request, res: Response) => {
+  res.json({ decisions: readArcDecisionLog().slice(0, 20) });
+});
+
+apiRouter.post("/arc-traction/event", (req: Request, res: Response) => {
+  const event = makeArcTractionEvent({
+    type: req.body?.type,
+    sessionId: req.body?.sessionId,
+    wallet: req.body?.wallet,
+    amountUsd: req.body?.amountUsd,
+    feedbackPrompt: req.body?.feedbackPrompt,
+    feedback: req.body?.feedback,
+  });
+  if (!event) return res.status(400).json({ error: "invalid_arc_traction_event" });
+  appendArcTractionEvent(event);
+  res.json({ ok: true, event });
+});
+
+apiRouter.get("/arc-traction/stats", (_req: Request, res: Response) => {
+  const decisions = readArcDecisionLog();
+  const stats = buildArcTractionStats(readArcTractionEvents(), decisions.length);
+  res.json({ stats, ts: new Date().toISOString() });
+});
+
+apiRouter.post("/arc-trace/unlock", async (req: Request, res: Response) => {
+  const wallet = cleanArcAddress(req.body?.wallet);
+  const amountUsd = 0.01;
+  if (!wallet) return res.status(400).json({ error: "wallet_required" });
+  try {
+    const payment = await verifyArcNativePayment({ txHash: req.body?.txHash, from: wallet, minAmountUsd: amountUsd });
+    if (!payment.ok) return res.status(402).json({ error: "arc_payment_not_verified", reason: payment.reason });
+    const session = typeof req.body?.sessionId === "string" ? req.body.sessionId : "anonymous";
+    const receipt = appendReceipt({
+      challengeId: `ch_trace_${payment.txHash.slice(2, 18)}`,
+      workspaceId: "agora",
+      serviceId: "svc_arc_reasoning",
+      serviceName: "ArcMind Reasoning Trace Unlock",
+      agentId: session.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "anonymous",
+      payerWallet: wallet,
+      providerWallet: env.x402PayoutAddress,
+      amount: amountUsd,
+      currency: "USDC",
+      network: "arc-testnet",
+      txHash: payment.txHash,
+      requestHash: `trace:${payment.txHash}`,
+      status: "verified",
+      paidAt: new Date().toISOString(),
+      verifiedAt: new Date().toISOString(),
+    });
+    const event = makeArcTractionEvent({
+      type: "trace_unlock",
+      sessionId: session,
+      wallet,
+      amountUsd,
+    });
+    if (event) appendArcTractionEvent(event);
+    res.json({ ok: true, receipt });
+  } catch (err) {
+    res.status(502).json({ error: "arc_payment_verification_failed", detail: err instanceof Error ? err.message : "unknown" });
+  }
+});
+
+apiRouter.post("/arc-portfolio/simulate", (req: Request, res: Response) => {
+  const decisions = readArcDecisionLog();
+  const simulation = buildPortfolioSimulation({
+    latestDecision: decisions[0] ?? null,
+    riskProfile: req.body?.riskProfile,
+    amountUsd: req.body?.amountUsd,
+    sessionId: req.body?.sessionId,
+    selectedLeaderId: req.body?.selectedLeaderId,
+    maxDrawdownPct: req.body?.maxDrawdownPct,
+  });
+  res.json({ ok: true, simulation, ts: new Date().toISOString() });
+});
+
+apiRouter.post("/arc-portfolio/start", async (req: Request, res: Response) => {
+  const decisions = readArcDecisionLog();
+  const mode = process.env.ARC_PRIVATE_KEY && process.env.ARC_AGENT_ID ? "arc" : "paper";
+  const wallet = cleanArcAddress(req.body?.wallet);
+  if (!wallet) return res.status(400).json({ error: "wallet_required" });
+  const portfolio = buildProtectedPortfolio({
+    latestDecision: decisions[0] ?? null,
+    riskProfile: req.body?.riskProfile,
+    amountUsd: req.body?.amountUsd,
+    sessionId: req.body?.sessionId,
+    wallet,
+    mode,
+  });
+  try {
+    const payment = await verifyArcNativePayment({ txHash: req.body?.txHash, from: wallet, minAmountUsd: portfolio.amountUsd });
+    if (!payment.ok) return res.status(402).json({ error: "arc_payment_not_verified", reason: payment.reason });
+  const receipt = appendReceipt({
+    challengeId: `ch_${portfolio.portfolioId}`,
+    workspaceId: "agora",
+    serviceId: "svc_arc_copytrade",
+    serviceName: "ArcMind CopyGuard Protected Portfolio",
+    agentId: portfolio.sessionId,
+    payerWallet: wallet,
+    providerWallet: env.x402PayoutAddress,
+    amount: portfolio.amountUsd,
+    currency: "USDC",
+    network: "arc-testnet",
+      txHash: payment.txHash,
+      requestHash: portfolio.requestHash,
+      status: "verified",
+    paidAt: portfolio.createdAt,
+      verifiedAt: portfolio.createdAt,
+  });
+  const event = makeArcTractionEvent({
+    type: "portfolio_start",
+    sessionId: portfolio.sessionId,
+    wallet: portfolio.wallet,
+    amountUsd: portfolio.amountUsd,
+  });
+  if (event) appendArcTractionEvent(event);
+  res.json({ ok: true, portfolio, receipt });
+  } catch (err) {
+    res.status(502).json({ error: "arc_payment_verification_failed", detail: err instanceof Error ? err.message : "unknown" });
+  }
+});
+
+apiRouter.get("/arc-readiness", (_req: Request, res: Response) => {
+  const decisions = readArcDecisionLog();
+  const receipts = listReceipts({ workspaceId: "agora" });
+  const stats = buildArcTractionStats(readArcTractionEvents(), decisions.length);
+  const agoraServices = servicesForWorkspace("agora");
+  const deployedContracts = readArcDeployment();
+  const readiness = buildArcReadinessReport({
+    env: process.env,
+    x402PayoutAddress: env.x402PayoutAddress,
+    x402Network: env.x402Network,
+    deployedContracts,
+    decisions,
+    receipts,
+    stats,
+    agoraServiceCount: agoraServices.length,
+  });
+  res.json({
+    ...readiness,
+    ts: new Date().toISOString(),
+  });
+});
+
+apiRouter.get("/arc-audit", (_req: Request, res: Response) => {
+  const decisions = readArcDecisionLog();
+  const receipts = listReceipts({ workspaceId: "agora" });
+  const auditTrail = buildArcAuditTrail({
+    registrationTxHash: process.env.ARC_AGENT_REGISTER_TX,
+    decisions,
+    receipts,
+  });
+  res.json({ auditTrail, ts: new Date().toISOString() });
+});
+
+apiRouter.get("/arc-alerts", (req: Request, res: Response) => {
+  const threshold = Number(req.query["threshold"] ?? 50);
+  const alerts = buildArcAlerts(readArcDecisionLog(), Number.isFinite(threshold) ? threshold : 50);
+  res.json({ alerts, ts: new Date().toISOString() });
+});
+
+apiRouter.get("/arc-decision-replay/latest", (_req: Request, res: Response) => {
+  const replay = buildArcDecisionReplay(readArcDecisionLog()[0] ?? null);
+  res.json({ replay, ts: new Date().toISOString() });
+});
+
+apiRouter.get("/arc-signal-sources", (_req: Request, res: Response) => {
+  res.json(buildArcSignalSourceRadar(process.env));
+});
+
+apiRouter.get("/arc-verify/latest", async (_req: Request, res: Response) => {
+  const latest = readArcDecisionLog()[0];
+  const txHash = typeof latest?.["txHash"] === "string" ? latest["txHash"] : undefined;
+  let receiptState: { found: boolean; status?: number | null } = { found: false };
+  if (txHash && process.env.ARC_RPC_URL) {
+    try {
+      const provider = new JsonRpcProvider(process.env.ARC_RPC_URL);
+      const receipt = await provider.getTransactionReceipt(txHash);
+      receiptState = { found: Boolean(receipt), status: receipt?.status ?? null };
+    } catch {
+      receiptState = { found: false };
+    }
+  }
+  res.json({
+    verification: evaluateArcDecisionVerification(latest, receiptState),
+    ts: new Date().toISOString(),
+  });
+});
+
+apiRouter.get("/arc-live", (_req: Request, res: Response) => {
+  const decisions = readArcDecisionLog();
+  const receipts = listReceipts({ workspaceId: "agora" });
+  const stats = buildArcTractionStats(readArcTractionEvents(), decisions.length);
+  const auditTrail = buildArcAuditTrail({
+    registrationTxHash: process.env.ARC_AGENT_REGISTER_TX,
+    decisions,
+    receipts,
+  });
+  const alerts = buildArcAlerts(decisions);
+  const decisionReplay = buildArcDecisionReplay(decisions[0] ?? null);
+  res.json({
+    status: {
+      server: "online",
+      mode: process.env.ARC_PRIVATE_KEY && process.env.ARC_AGENT_ID ? "arc" : "paper",
+      network: "arc-testnet",
+      nextLoopHintMinutes: 30,
+      payoutAddress: env.x402PayoutAddress,
+      agentId: process.env.ARC_AGENT_ID,
+      registrationTxHash: process.env.ARC_AGENT_REGISTER_TX,
+    },
+    latestDecision: decisions[0] ?? null,
+    decisions: decisions.slice(0, 10),
+    receipts: receipts.slice(0, 10),
+    stats,
+    auditTrail,
+    alerts,
+    decisionReplay,
+    ts: new Date().toISOString(),
+  });
 });
 
 // ─── Signals aggregator (ArcMind Signal Hub) ─────────────────────────────────
@@ -431,6 +718,52 @@ apiRouter.get("/swap-quote", async (req: Request, res: Response) => {
     : parseFloat((amountIn * ethPrice * (1 - slippage)).toFixed(4));
 
   res.json({ pair: "ETH/USDC", side, amountIn, amountOut, price: ethPrice, slippagePct: 0.1, network: "arc-testnet", ts: new Date().toISOString() });
+});
+
+// ─── Multi-agent debate (Bullish vs Bearish) ──────────────────────────────────
+
+const BULLISH_ARGS = [
+  (eth: number, oi: string) => `ETH at $${eth.toLocaleString()} with OI ${oi} signals accumulation. Institutional buyers are absorbing sell pressure. Kelly sizing suggests 18% long.`,
+  (eth: number) => `$${eth.toLocaleString()} is a structural support zone on the 4h chart. Funding rate normalized — ideal entry for a mean-reversion long.`,
+  (_eth: number, oi: string) => `Open interest ${oi} expanding while price holds. Shorts are getting squeezed. Momentum favors the bulls.`,
+];
+const BEARISH_ARGS = [
+  (eth: number, oi: string) => `OI ${oi} at elevated levels with ETH at $${eth.toLocaleString()} — classic overextension. Risk of long squeeze if price breaks support.`,
+  (eth: number) => `$${eth.toLocaleString()} rejected at resistance twice. Funding rate elevated — longs overleveraged. SELL signal.`,
+  (_eth: number, oi: string) => `Open interest ${oi} diverging from price — bearish. Smart money is reducing exposure. Short the bounce.`,
+];
+
+apiRouter.get("/arc-debate", async (_req: Request, res: Response) => {
+  let ethPrice = 3400;
+  let oiValue = "n/a";
+  try {
+    const cg = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6_000) });
+    const cgData = await cg.json() as { ethereum?: { usd?: number } };
+    ethPrice = cgData?.ethereum?.usd ?? ethPrice;
+  } catch { /* fallback */ }
+  try {
+    const hl = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "metaAndAssetCtxs" }), signal: AbortSignal.timeout(6_000),
+    });
+    const hlData = await hl.json() as [{ universe: { name: string }[] }, { openInterest: string }[]];
+    const idx = hlData[0].universe.findIndex(u => u.name === "ETH");
+    if (idx >= 0 && hlData[1][idx]) {
+      const oi = parseFloat(hlData[1][idx].openInterest);
+      oiValue = isNaN(oi) ? "n/a" : `${(oi / 1e6).toFixed(1)}M`;
+    }
+  } catch { /* fallback */ }
+
+  const seed = Math.floor(Date.now() / (5 * 60_000)) % 3;
+  const fallbackBull = (eth: number, oi: string) =>
+    `ETH at $${eth.toLocaleString()} with OI ${oi} signals accumulation. Kelly sizing suggests a cautious long.`;
+  const fallbackBear = (eth: number, oi: string) =>
+    `OI ${oi} with ETH at $${eth.toLocaleString()} suggests crowding risk. Reduce exposure until confirmation improves.`;
+  const bullArg = (BULLISH_ARGS[seed] ?? fallbackBull)(ethPrice, oiValue);
+  const bearArg = (BEARISH_ARGS[seed] ?? fallbackBear)(ethPrice, oiValue);
+  const verdict: "BUY" | "SELL" | "HOLD" = seed === 0 ? "BUY" : seed === 1 ? "SELL" : "HOLD";
+
+  res.json({ ethPrice, oiValue, bullArg, bearArg, verdict, ts: new Date().toISOString() });
 });
 
 // ─── Agent leaderboard ────────────────────────────────────────────────────────

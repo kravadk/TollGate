@@ -10,6 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:flow": "node scripts/test-flow.js",
+    "test:agora-live": "node scripts/agora-live-smoke.mjs",
+    "agora:submission": "node scripts/agora-submission-summary.mjs",
     "analyze": "cross-env ANALYZE=true vite build"
   },
   "dependencies": {

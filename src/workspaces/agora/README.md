@@ -2,6 +2,8 @@
 
 **App route:** `/app/agora`
 
+**Active execution plan:** [`docs/AGORA-ACTIVE-EXECUTION-PLAN.md`](../../../docs/AGORA-ACTIVE-EXECUTION-PLAN.md). Read this first before changing Agora; it is the ordered source of truth for current product work.
+
 ## What it does
 
 ArcMind is an autonomous trading agent that publishes its reasoning step by step, lets anyone copy-trade with $1 minimum, and hard-kills all positions when drawdown exceeds the threshold — all settled in USDC on Arc L1 via CCTP cross-chain transfers. Market data feeds (Hyperliquid OI, Polymarket sentiment, news sentiment, whale flows) are sold as sub-cent x402 Nanopayments.

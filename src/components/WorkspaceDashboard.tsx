@@ -37,7 +37,7 @@ import { useAppState } from "../app-state";
 import { useLocalStore } from "../lib/storage";
 import { deterministicScore, hashId, sha256Hex, fnv1aHex } from "../lib/util-hash";
 import type { Agent, Receipt, ReceiptStatus, Service, Theme, Workspace, WorkspaceId } from "../types";
-import { serviceById, workspaceMetrics, makeServiceId, services as allCatalogServices, agents as allAgents, makeTxHash } from "../data";
+import { serviceById, workspaceMetrics, makeServiceId, agents as allAgents, makeTxHash } from "../data";
 import { BarSpark, WeekBars } from "../charts402";
 import {
   ArrowRight,
@@ -99,9 +99,9 @@ import { DiscoveryWidget } from "./widgets/DiscoveryWidget";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { AgentScoreCard } from "./widgets/AgentScoreBadge";
 import { AgoraTradingWidget } from "./widgets/agora/AgoraTradingWidget";
-import { AgoraPortfolioWidget, AgoraCircleToolsWidget, AgoraX402Widget, AgoraLeaderboardWidget, AgoraCctpWidget } from "./widgets/agora/AgoraExtraWidgets";
+import { AgoraPortfolioWidget, AgoraCircleToolsWidget, AgoraX402Widget, AgoraLeaderboardWidget, AgoraCctpWidget, ArcAppKitWidget, ArcMindSwapWidget, ArcMindYieldWidget } from "./widgets/agora/AgoraExtraWidgets";
 import { PolygonTradeFinanceWidget, PolygonUsdcPaymentsWidget, PolygonAgentMarketplaceWidget, PolygonStatsWidget, PolygonMerchantOnboardingWidget } from "./widgets/polygon/PolygonWidgets";
-import { ArcMindCopyTradingWidget, ArcMindReasoningWidget, ArcMindSignalHubWidget, ArcMindKillSwitchWidget } from "./widgets/agora/ArcMindWidgets";
+import { ArcMindCopyTradingWidget, ArcMindReasoningWidget, ArcMindSignalHubWidget, ArcMindKillSwitchWidget, ArcMindPnLWidget, ArcMindDebateWidget, ArcDecisionLogWidget } from "./widgets/agora/ArcMindWidgets";
 import * as api from "../lib/api";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage } from "../lib/og";
@@ -156,8 +156,6 @@ export function railIconFor(tab: string, index: number) {
   if (t.includes("file") || t.includes("report") || t.includes("log")) return FileText;
   return FALLBACK_RAIL_ICONS[index % FALLBACK_RAIL_ICONS.length];
 }
-const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const WEEK_SHAPE = [0.5, 0.78, 0.6, 1.0, 0.82, 0.46, 0.3];
 const fmtUsd = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function hashPct(seed: string, lo = 1.2, hi = 8.4) {
@@ -180,7 +178,7 @@ function ago(iso: string) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-const SERVICE_TAB_KW = ["data", "trading", "analysis", "tax", "compute", "storage", "signal", "analytic", "intel", "model", "oracle", "inference", "report", "endpoint", "query", "feed", "checkout"];
+const SERVICE_TAB_KW = ["data", "trading", "arbitrage", "arb", "analysis", "tax", "compute", "storage", "signal", "analytic", "intel", "model", "oracle", "inference", "report", "endpoint", "query", "feed", "checkout"];
 
 export function pageKind(tab: string, index: number): "overview" | "agents" | "receipts" | "gateway" | "catalogue" | "service" | "verify" {
   const t = tab.toLowerCase();
@@ -404,10 +402,28 @@ export function OverviewPage({
   const wsReceipts = receipts.filter((r) => r.workspaceId === workspace.id);
   const recent = wsReceipts.slice(0, 6);
   const def = services.find((s) => s.status === "active") ?? services[0];
-  const totalVol = useMemo(() => services.reduce((s, x) => s + x.calls * x.priceUsd, 0), [services]);
-  const week = WEEK.map((d, i) => ({ label: d, value: Math.round((totalVol / 7) * WEEK_SHAPE[i] * 60) }));
-  const weekAvg = Math.round(week.reduce((s, x) => s + x.value, 0) / week.length);
-  const topServices = [...services].sort((a, b) => b.calls - a.calls).slice(0, 4);
+
+  // Real 7-day revenue bucketed by calendar day
+  const _7dAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const wsReceipts7d = wsReceipts.filter((r) => new Date(r.createdAt).getTime() >= _7dAgo);
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const daysAgo = 6 - i;
+    const ds = new Date(); ds.setHours(0, 0, 0, 0); ds.setDate(ds.getDate() - daysAgo);
+    const de = new Date(ds); de.setDate(de.getDate() + 1);
+    const value = wsReceipts7d
+      .filter((r) => { const t = new Date(r.createdAt).getTime(); return t >= ds.getTime() && t < de.getTime(); })
+      .reduce((s, r) => s + r.amount, 0);
+    return { label: ds.toLocaleDateString("en-US", { weekday: "short" }), value };
+  });
+  const weekAvg = week.reduce((s, x) => s + x.value, 0) / 7;
+
+  // Top services ranked by actual receipt revenue
+  const svcRevMap = useMemo(() => {
+    const map = new Map<string, number>();
+    wsReceipts.forEach((r) => map.set(r.serviceId, (map.get(r.serviceId) ?? 0) + r.amount));
+    return map;
+  }, [wsReceipts]);
+  const topServices = useMemo(() => [...services].sort((a, b) => (svcRevMap.get(b.id) ?? 0) - (svcRevMap.get(a.id) ?? 0)).slice(0, 4), [services, svcRevMap]);
 
   type CardDef = { ico: React.ElementType<{ width?: number; height?: number }>; title: string; sub?: string; light?: boolean; link?: string; onLink?: () => void; onClick: () => void };
   const WS_CARDS: Partial<Record<WorkspaceId, CardDef[]>> = {
@@ -535,10 +551,10 @@ export function OverviewPage({
       <div className="grid-bento mb">
         <div className="panel block">
           <div className="block-head">
-            <div className="ttl"><div><h3>This week · gateway volume</h3><div className="sub">paid calls × price, by day</div></div></div>
+            <div className="ttl"><div><h3>This week · confirmed volume</h3><div className="sub">receipt revenue by day · USDC</div></div></div>
             <div className="num" style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-.03em" }}>{fmtUsd(week.reduce((s, x) => s + x.value, 0))}</div>
           </div>
-          <WeekBars data={week} avgLabel={weekAvg.toLocaleString()} />
+          <WeekBars data={week} avgLabel={`${fmtUsd(weekAvg)}/day avg`} />
         </div>
         <div className="balcard">
           <div className="bc-top"><span className="orb" style={{ width: 22, height: 22, margin: 0 }} /><span style={{ fontWeight: 700, fontSize: 12.5 }}>Provider revenue</span></div>
@@ -558,8 +574,8 @@ export function OverviewPage({
                 <span className="sq" style={{ background: catColor(s.category) }}><Ico width={16} height={16} /></span>
                 <div><div className="nm">{s.name}</div><div className="tk">{s.category}</div></div>
               </div>
-              <div className="kv">{fmtUsd(s.calls * s.priceUsd)}</div>
-              <div className="ks"><span className="ch up">+{hashPct(s.id).toFixed(2)}%</span><span className="lbl">vs last month</span></div>
+              <div className="kv">{fmtUsd(svcRevMap.get(s.id) ?? 0)}</div>
+              <div className="ks"><span className="ch">{wsReceipts.filter((r) => r.serviceId === s.id).length}</span><span className="lbl">confirmed calls</span></div>
               <BarSpark seed={s.id} color={catColor(s.category)} filled={13} />
             </div>
           );
@@ -648,7 +664,7 @@ export function CataloguePage({
   const [cat, setCat] = useState("all");
   const [query, setQuery] = useState("");
   const isProviderView = tabLabel.toLowerCase().includes("my");
-  const catalogServices = isProviderView ? services : allCatalogServices;
+  const catalogServices = services;
   const cats = ["all", ...Array.from(new Set(catalogServices.map((s) => s.category)))];
   const list = (cat === "all" ? catalogServices : catalogServices.filter((s) => s.category === cat)).filter((service) =>
     `${service.name} ${service.provider} ${service.category} ${service.network}`.toLowerCase().includes(query.toLowerCase()),
@@ -1523,7 +1539,7 @@ const WS_SIGNATURE: Record<WorkspaceId, SigBlock> = {
     ], accentCol: 3,
   },
   agora: {
-    title: "Arc L1 agent commerce", sub: "Circle tools powering autonomous cross-chain arbitrage on Arc mainnet",
+    title: "Arc L1 agent commerce", sub: "Circle tools powering autonomous cross-chain arbitrage on Arc testnet",
     headers: ["Tool", "Role", "Latency", "Status"],
     rows: [
       ["USDC", "settlement currency", "<1s", "active"],
@@ -1885,21 +1901,26 @@ export function ServiceTabPage({
   const topCallers = wsAgents
     .map((a) => {
       const rs = tabReceipts.filter((r) => r.agentName === a.name);
-      const calls = rs.length || Math.max(2, Math.round(hashPct(`${workspace.id}|${tabLabel}|${a.id}`, 0.15, 0.85) * 32));
-      const spend = rs.reduce((s, r) => s + r.amount, 0) || calls * 0.04;
+      const calls = rs.length;
+      const spend = rs.reduce((s, r) => s + r.amount, 0);
       return { name: a.name, calls, spend };
     })
     .sort((a, b) => b.calls - a.calls)
     .slice(0, 4);
 
-  const scopedCalls = scoped.reduce((a, s) => a + s.calls, 0);
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const wsReceipts7d = receipts.filter((r) => r.workspaceId === workspace.id && new Date(r.createdAt).getTime() >= sevenDaysAgo);
   const scopedAvg = scoped.length ? scoped.reduce((a, s) => a + s.priceUsd, 0) / scoped.length : 0;
   const scopedRevenue = tabReceipts.reduce((a, r) => a + r.amount, 0);
   const avgPrice = base.length ? base.reduce((a, s) => a + s.priceUsd, 0) / base.length : 0;
-  const weekData = SVC_WEEK.map((label, i) => ({
-    label,
-    value: Math.max(1, Math.round((hashPct(`${workspace.id}|${tabLabel}|${i}`, 0.35, 1) * scopedCalls) / 7)),
-  }));
+  const weekData = Array.from({ length: 7 }, (_, i) => {
+    const daysAgo = 6 - i;
+    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0); dayStart.setDate(dayStart.getDate() - daysAgo);
+    const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+    const label = dayStart.toLocaleDateString("en-US", { weekday: "short" });
+    const value = wsReceipts7d.filter((r) => { const t = new Date(r.createdAt).getTime(); return t >= dayStart.getTime() && t < dayEnd.getTime(); }).length;
+    return { label, value };
+  });
 
   const [ttl, sub] = TAB_COPY[t] ?? [tabLabel, `Paid ${tabLabel.toLowerCase()} endpoints in the ${workspace.shortName} workspace — every call is wrapped by the x402 gateway.`];
 
@@ -1910,13 +1931,20 @@ export function ServiceTabPage({
     t.includes("escrow") || t.includes("alert") || t.includes("strateg") || t.includes("sandbox") ||
     isVerifyFlavor || t.includes("compute") || t.includes("inference") || t.includes("storage") ||
     t.includes("checkout") || t.includes("orbit") || t.includes("monitor") || t.includes("qiedex") || t.includes("dex") ||
-    (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("stylus") || t.includes("rust"))) ||
-    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("compare") || t.includes("rwa") || t.includes("devtool") || t.includes("dev tool") || t.includes("economy") || t.includes("credit") || t.includes("budget") || t.includes("a2a") || t.includes("loop"))) ||
-    (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("widget") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
-    (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet") || t.includes("oracle") || t.includes("credit"))) ||
+    // Arbitrum: "Stylus Contracts" is the API reference tab — excluded so grid shows there
+    (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("rust"))) ||
+    // Mantle: "AI DevTools" is the API reference tab — excluded so grid shows there
+    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("compare") || t.includes("rwa") || t.includes("economy") || t.includes("credit") || t.includes("budget") || t.includes("a2a") || t.includes("loop"))) ||
+    // Sui: "Pay Widget" is the API reference tab — excluded so grid shows there
+    (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
+    // QIE: "Oracle Feed" is the API reference tab — excluded so grid shows there
+    (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet") || t.includes("credit"))) ||
+    // 0G: "Receipts" is the API reference tab — excluded so grid shows there
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
-    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt") || t.includes("copy") || t.includes("reasoning") || t.includes("trace") || t.includes("signal") || t.includes("hub") || t.includes("kill") || t.includes("risk"))) ||
-    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("marketplace") || t.includes("agent") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview") || t.includes("receipt")));
+    // Agora: "App Kit" is the API reference tab — excluded (no "kit"/"app kit") so grid shows there
+    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt") || t.includes("copy") || t.includes("reasoning") || t.includes("trace") || t.includes("signal") || t.includes("hub") || t.includes("kill") || t.includes("risk") || t.includes("usyc") || t.includes("yield") || t.includes("swap"))) ||
+    // Polygon: "Agent Marketplace" is the API reference tab — excluded ("marketplace"+"agent" removed) so grid shows there
+    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview") || t.includes("receipt")));
 
   return (
     <section className="svc-tab">
@@ -1932,7 +1960,7 @@ export function ServiceTabPage({
 
       <div className="svc-kpis">
         <div className="svc-kpi"><span className="svc-kpi__k">Endpoints</span><span className="svc-kpi__v">{scoped.length}</span><span className="svc-kpi__d">{tabCat ? `${tabCat} category` : `across ${workspace.shortName}`}</span></div>
-        <div className="svc-kpi"><span className="svc-kpi__k">Calls · 7d</span><span className="svc-kpi__v">{scopedCalls.toLocaleString()}</span><span className="svc-kpi__d">on this tab</span></div>
+        <div className="svc-kpi"><span className="svc-kpi__k">Calls · 7d</span><span className="svc-kpi__v">{wsReceipts7d.length.toLocaleString()}</span><span className="svc-kpi__d">confirmed · {workspace.shortName}</span></div>
         <div className="svc-kpi"><span className="svc-kpi__k">Avg price</span><span className="svc-kpi__v">${scopedAvg.toFixed(3)}</span><span className="svc-kpi__d">per request here</span></div>
         <div className="svc-kpi"><span className="svc-kpi__k">Settled here</span><span className="svc-kpi__v">{tabReceipts.length}</span><span className="svc-kpi__d">{scopedRevenue > 0 ? fmtUsd(scopedRevenue) + " total" : "no receipts yet"}</span></div>
       </div>
@@ -2078,6 +2106,16 @@ export function ServiceTabPage({
       {workspace.id === "agora" && (t.includes("reasoning") || t.includes("trace")) && <ArcMindReasoningWidget workspace={workspace} />}
       {workspace.id === "agora" && (t.includes("signal") || t.includes("hub")) && <ArcMindSignalHubWidget workspace={workspace} />}
       {workspace.id === "agora" && (t.includes("kill") || t.includes("risk")) && <ArcMindKillSwitchWidget workspace={workspace} />}
+      {workspace.id === "agora" && (t.includes("signal") || t.includes("hub")) && (
+        <div className="widget-card-grid-2">
+          <ArcMindPnLWidget />
+          <ArcMindDebateWidget />
+        </div>
+      )}
+      {workspace.id === "agora" && (t.includes("signal") || t.includes("hub")) && <ArcDecisionLogWidget />}
+      {workspace.id === "agora" && (t.includes("app kit") || t.includes("kit")) && <ArcAppKitWidget workspace={workspace} />}
+      {workspace.id === "agora" && (t.includes("usyc") || t.includes("yield") || t.includes("swap")) && <ArcMindYieldWidget workspace={workspace} />}
+      {workspace.id === "agora" && (t.includes("usyc") || t.includes("yield") || t.includes("swap")) && <ArcMindSwapWidget workspace={workspace} />}
 
       {workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode")) && <PolygonMerchantOnboardingWidget workspace={workspace} />}
       {workspace.id === "polygon" && (t.includes("trade") || t.includes("finance")) && <PolygonTradeFinanceWidget workspace={workspace} />}
@@ -2103,46 +2141,48 @@ export function ServiceTabPage({
 
       {!hasFlavor && <QuickCallPanel workspace={workspace} services={base} primary={base.find((s) => s.status === "active") ?? primary} onOpenPayment={onOpenPayment} receipts={receipts} />}
 
-      {/* Endpoints — responsive cards; the Try button is always visible (no horizontal scroll) */}
-      <div className="panel block" style={{ marginBottom: 18 }}>
-        <div className="block-head">
-          <div className="ttl"><span className="sq soft"><Bolt width={15} height={15} /></span><div><h3>{tabLabel} endpoints</h3><div className="sub">{tabCat ? `${tabCat} endpoints first` : "all endpoints"} · click Try to run the 402 → pay → unlock flow</div></div></div>
-          <div className="row sm" style={{ gap: 6 }}>
-            {["all", "GET", "POST"].map((mth) => (
-              <button key={mth} className={"pill click" + (methodFilter === mth ? " on" : "")} type="button" onClick={() => setMethodFilter(mth)}>{mth === "all" ? "All" : mth}</button>
-            ))}
+      {/* Endpoints grid — only on the designated API reference tab per workspace */}
+      {!hasFlavor && (
+        <div className="panel block" style={{ marginBottom: 18 }}>
+          <div className="block-head">
+            <div className="ttl"><span className="sq soft"><Bolt width={15} height={15} /></span><div><h3>{tabLabel} endpoints</h3><div className="sub">{tabCat ? `${tabCat} endpoints first` : "all endpoints"} · click Try to run the 402 → pay → unlock flow</div></div></div>
+            <div className="row sm" style={{ gap: 6 }}>
+              {["all", "GET", "POST"].map((mth) => (
+                <button key={mth} className={"pill click" + (methodFilter === mth ? " on" : "")} type="button" onClick={() => setMethodFilter(mth)}>{mth === "all" ? "All" : mth}</button>
+              ))}
+            </div>
+          </div>
+          <div className="svc-ep-grid">
+            {rows.map(({ s, method }) => {
+              const Ico = CAT_ICON[s.category] ?? CAT_ICON.data;
+              return (
+                <div key={s.id} className="svc-ep-card">
+                  <div className="svc-ep-card__top">
+                    <span className="sq sm" style={{ background: catColor(s.category) }}><Ico width={13} height={13} /></span>
+                    <div className="svc-ep-card__id"><b>{s.name}</b><code>{endpointPath(s)}</code></div>
+                    <span className={`mth mth--${method.toLowerCase()}`}>{method}</span>
+                  </div>
+                  <div className="svc-ep-card__meta">
+                    <span><b>${s.priceUsd.toFixed(3)}</b> {s.currency}</span>
+                    <span>p95 {s.latency}</span>
+                    <span>{s.calls.toLocaleString()} / 7d</span>
+                    {badgeFor(s.status)}
+                  </div>
+                  <button
+                    className={`btn btn-sm ${s.status === "active" ? "btn-acc" : ""}`}
+                    type="button"
+                    disabled={s.status !== "active"}
+                    onClick={() => { if (s.status === "active") onOpenPayment(s); }}
+                  >
+                    {s.status === "active" ? <><Bolt width={12} height={12} /> Try · pay &amp; call</> : "Paused"}
+                  </button>
+                </div>
+              );
+            })}
+            {rows.length === 0 && <div className="muted sm" style={{ padding: "10px 4px" }}>No endpoints match this filter.</div>}
           </div>
         </div>
-        <div className="svc-ep-grid">
-          {rows.map(({ s, method }) => {
-            const Ico = CAT_ICON[s.category] ?? CAT_ICON.data;
-            return (
-              <div key={s.id} className="svc-ep-card">
-                <div className="svc-ep-card__top">
-                  <span className="sq sm" style={{ background: catColor(s.category) }}><Ico width={13} height={13} /></span>
-                  <div className="svc-ep-card__id"><b>{s.name}</b><code>{endpointPath(s)}</code></div>
-                  <span className={`mth mth--${method.toLowerCase()}`}>{method}</span>
-                </div>
-                <div className="svc-ep-card__meta">
-                  <span><b>${s.priceUsd.toFixed(3)}</b> {s.currency}</span>
-                  <span>p95 {s.latency}</span>
-                  <span>{s.calls.toLocaleString()} / 7d</span>
-                  {badgeFor(s.status)}
-                </div>
-                <button
-                  className={`btn btn-sm ${s.status === "active" ? "btn-acc" : ""}`}
-                  type="button"
-                  disabled={s.status !== "active"}
-                  onClick={() => { if (s.status === "active") onOpenPayment(s); }}
-                >
-                  {s.status === "active" ? <><Bolt width={12} height={12} /> Try · pay &amp; call</> : "Paused"}
-                </button>
-              </div>
-            );
-          })}
-          {rows.length === 0 && <div className="muted sm" style={{ padding: "10px 4px" }}>No endpoints match this filter.</div>}
-        </div>
-      </div>
+      )}
 
       {/* ── REFERENCE ── integrate / pricing / networks ── */}
       <div className="svc-tab__foot">
@@ -2199,7 +2239,7 @@ export function ServiceTabPage({
           <div className="svc-tab__foot">
             <div className="panel block">
               <div className="block-head"><div className="ttl"><span className="sq soft"><Bolt width={15} height={15} /></span><div><h3>Call volume — {tabLabel}</h3><div className="sub">last 7 days{tabCat ? ` · ${tabCat} endpoints` : ""}</div></div></div></div>
-              <WeekBars data={weekData} avgLabel={`${Math.max(1, Math.round(scopedCalls / 7)).toLocaleString()}/day avg`} />
+              <WeekBars data={weekData} avgLabel={`${(wsReceipts7d.length / 7).toFixed(1)}/day avg`} />
             </div>
             {variant === "verify" ? (
               <div className="panel block">
@@ -2489,8 +2529,8 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
               <div className="kv"><span className="k">Service</span><span className="v">{sel.serviceName}</span></div>
               <div className="kv"><span className="k">Workspace</span><span className="v">{sel.workspaceId}</span></div>
               <div className="kv"><span className="k">Agent</span><span className="v">{sel.agentName}</span></div>
-              <div className="kv"><span className="k">Payer</span><span className="v" title={sel.payerWallet}>{sel.payerWallet.length > 20 ? sel.payerWallet.slice(0, 10) + "…" + sel.payerWallet.slice(-6) : sel.payerWallet}</span></div>
-              <div className="kv"><span className="k">Provider</span><span className="v" title={sel.providerWallet}>{sel.providerWallet.length > 20 ? sel.providerWallet.slice(0, 10) + "…" + sel.providerWallet.slice(-6) : sel.providerWallet}</span></div>
+              <div className="kv"><span className="k">Payer</span><span className="v" title={sel.payerWallet} style={{ display: "flex", alignItems: "center", gap: 5 }}>{sel.payerWallet.length > 20 ? sel.payerWallet.slice(0, 10) + "…" + sel.payerWallet.slice(-6) : sel.payerWallet}<button type="button" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 0, color: "inherit", opacity: .5 }} title="Copy address" onClick={() => navigator.clipboard?.writeText(sel.payerWallet).catch(() => {})}><Copy width={11} height={11} /></button></span></div>
+              <div className="kv"><span className="k">Provider</span><span className="v" title={sel.providerWallet} style={{ display: "flex", alignItems: "center", gap: 5 }}>{sel.providerWallet.length > 20 ? sel.providerWallet.slice(0, 10) + "…" + sel.providerWallet.slice(-6) : sel.providerWallet}<button type="button" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 0, color: "inherit", opacity: .5 }} title="Copy address" onClick={() => navigator.clipboard?.writeText(sel.providerWallet).catch(() => {})}><Copy width={11} height={11} /></button></span></div>
               <div className="kv"><span className="k">Network</span><span className="v">{sel.network}</span></div>
               {(() => {
                 const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
