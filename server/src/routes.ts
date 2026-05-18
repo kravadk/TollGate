@@ -30,6 +30,7 @@ import {
 } from "./arc-traction.js";
 import { buildPortfolioSimulation, buildProtectedPortfolio } from "./arc-portfolio.js";
 import { arcAgentLoop, getArcAgentLoopStatus } from "./arc-agent-loop.js";
+import { fetchEthMarketPrice } from "./market-data.js";
 import { buildArcReadinessReport } from "./arc-readiness.js";
 import { buildArcSignalSourceRadar } from "./arc-signal-sources.js";
 import { uploadToOg } from "./og-upload.js";
@@ -716,17 +717,8 @@ apiRouter.get("/signals", async (_req: Request, res: Response) => {
     }
   } catch { /* source stays unavailable */ }
 
-  let ethPrice: number | null = null;
-  try {
-    const cgRes = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
-      { signal: AbortSignal.timeout(6_000) }
-    );
-    if (cgRes.ok) {
-      const cgData = await cgRes.json() as { ethereum?: { usd?: number } };
-      ethPrice = typeof cgData?.ethereum?.usd === "number" ? cgData.ethereum.usd : null;
-    }
-  } catch { /* source stays unavailable */ }
+  const marketPrice = await fetchEthMarketPrice();
+  const ethPrice = marketPrice.price;
 
   res.json({
     polymarket,
@@ -735,7 +727,8 @@ apiRouter.get("/signals", async (_req: Request, res: Response) => {
     sources: {
       hyperliquid: whale.available ? "live" : "unavailable",
       polymarket: polymarket.available ? "live" : "unavailable",
-      coingecko: ethPrice !== null ? "live" : "unavailable",
+      price: marketPrice.provider ?? "unavailable",
+      priceSources: marketPrice.sources,
     },
     ts: new Date().toISOString(),
   });
@@ -760,22 +753,16 @@ apiRouter.get("/usyc-apy", async (_req: Request, res: Response) => {
   res.status(503).json({ ok: false, reason: "usyc_apy_unavailable", asset: "USYC", provider: "DeFiLlama", network: "arc-testnet", ts: new Date().toISOString() });
 });
 
-// ─── Swap quote (real ETH price via CoinGecko) ────────────────────────────────
+// ─── Swap quote (real ETH price via public market sources) ────────────────────
 
 apiRouter.get("/swap-quote", async (req: Request, res: Response) => {
   const side = String(req.query["side"] ?? "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
   const amountIn = Math.min(Math.max(parseFloat(String(req.query["amountIn"] ?? "100")) || 100, 0.001), 1_000_000);
 
-  let ethPrice: number | null = null;
-  try {
-    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6_000) });
-    if (r.ok) {
-      const d = await r.json() as { ethereum?: { usd?: number } };
-      ethPrice = typeof d?.ethereum?.usd === "number" ? d.ethereum.usd : null;
-    }
-  } catch { /* handled below */ }
+  const marketPrice = await fetchEthMarketPrice();
+  const ethPrice = marketPrice.price;
   if (ethPrice === null) {
-    return res.status(503).json({ error: "eth_price_unavailable", source: "coingecko", ts: new Date().toISOString() });
+    return res.status(503).json({ error: "eth_price_unavailable", sources: marketPrice.sources, ts: new Date().toISOString() });
   }
 
   const slippage = 0.001; // 0.1%
@@ -783,7 +770,7 @@ apiRouter.get("/swap-quote", async (req: Request, res: Response) => {
     ? parseFloat(((amountIn / ethPrice) * (1 - slippage)).toFixed(8))
     : parseFloat((amountIn * ethPrice * (1 - slippage)).toFixed(4));
 
-  res.json({ pair: "ETH/USDC", side, amountIn, amountOut, price: ethPrice, slippagePct: 0.1, network: "arc-testnet", ts: new Date().toISOString() });
+  res.json({ pair: "ETH/USDC", side, amountIn, amountOut, price: ethPrice, priceProvider: marketPrice.provider, priceSources: marketPrice.sources, slippagePct: 0.1, network: "arc-testnet", ts: new Date().toISOString() });
 });
 
 // ─── Multi-agent debate (Bullish vs Bearish) ──────────────────────────────────
@@ -800,14 +787,10 @@ const BEARISH_ARGS = [
 ];
 
 apiRouter.get("/arc-debate", async (_req: Request, res: Response) => {
-  let ethPrice: number | null = null;
+  const marketPrice = await fetchEthMarketPrice();
+  let ethPrice: number | null = marketPrice.price;
   let oiValue: string | null = null;
   let fundingRate: number | null = null;
-  try {
-    const cg = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6_000) });
-    const cgData = await cg.json() as { ethereum?: { usd?: number } };
-    ethPrice = typeof cgData?.ethereum?.usd === "number" ? cgData.ethereum.usd : null;
-  } catch { /* handled below */ }
   try {
     const hl = await fetch("https://api.hyperliquid.xyz/info", {
       method: "POST", headers: { "Content-Type": "application/json" },

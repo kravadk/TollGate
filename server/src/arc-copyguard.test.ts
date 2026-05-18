@@ -132,4 +132,28 @@ describe("Arc CopyGuard scoring", () => {
     assert.ok(decision.leaderScores.length >= 2);
     assert.ok(decision.reasoningTrace.includes("Verified Leader Alpha"));
   });
+
+  it("runs SignalGuard instead of inventing leaders when no verified feed exists", () => {
+    const decision = buildCopyGuardDecision({
+      signals: {
+        ...baseSignals,
+        ethPriceChangePct: -3.4,
+        fundingRate: 0.00022,
+        volatilityPct: 7.8,
+        polymarketYesPct: 39,
+      },
+      leaders: [],
+      riskProfile: "balanced",
+      sourceCoverage: 3,
+      nowIso: "2026-05-19T09:00:00.000Z",
+    });
+
+    assert.equal(decision.leaderScores.length, 0);
+    assert.equal(decision.allocation.length, 0);
+    assert.ok(decision.signalGuard);
+    assert.ok(["REDUCE", "MOVE_TO_USYC"].includes(decision.signalGuard.action));
+    assert.ok(decision.signalGuard.riskScore >= 55);
+    assert.match(decision.reasoningTrace, /does not display synthetic copy leaders/i);
+    assert.match(decision.reasoningTrace, /SignalGuard action/i);
+  });
 });

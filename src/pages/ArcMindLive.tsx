@@ -36,6 +36,7 @@ const ARC_EXPLORER_TX = "https://testnet.arcscan.app/tx/";
 const ARC_FAUCET = "https://faucet.circle.com";
 
 type CopyGuardAction = "COPY" | "REDUCE" | "STOP" | "HOLD_USDC" | "MOVE_TO_USYC";
+type SignalGuardAction = "ALLOW_COPY" | "HOLD_USDC" | "REDUCE" | "MOVE_TO_USYC";
 type RiskProfile = "conservative" | "balanced" | "aggressive";
 type ExecutionMode = "live" | "walkthrough";
 type FeedbackPrompt = "clarity" | "trust" | "willingness" | "confusion";
@@ -94,6 +95,23 @@ type Decision = {
   leaderScores?: LeaderScore[];
   allocation?: Array<{ leaderId: string; name: string; weightPct: number; action: CopyGuardAction }>;
   leaderSource?: LeaderSource;
+  signalGuard?: {
+    mode: "no_nansen_signal_guard";
+    action: SignalGuardAction;
+    riskScore: number;
+    confidenceScore: number;
+    sourceCoverage: number;
+    reasons: string[];
+    inputs: {
+      ethPrice: number;
+      ethPriceChangePct: number;
+      openInterestUsd: number;
+      fundingRate: number;
+      volatilityPct: number;
+      polymarketYesPct?: number | null;
+    };
+  };
+  traceStorage?: { provider: string; status: "pinned" | "unavailable"; cid?: string; url?: string; detail?: string };
   reasoningTrace?: string;
 };
 
@@ -425,6 +443,18 @@ function actionColor(action: string) {
 
 function actionLabel(action?: string) {
   return (action ?? "HOLD").replace(/_/g, " ");
+}
+
+function signalActionColor(action?: SignalGuardAction | null) {
+  if (action === "ALLOW_COPY") return "#10B981";
+  if (action === "REDUCE") return "#F59E0B";
+  if (action === "MOVE_TO_USYC") return "#60A5FA";
+  return "#94A3B8";
+}
+
+function signalActionLabel(action?: SignalGuardAction | null) {
+  if (action === "ALLOW_COPY") return "ALLOW COPY";
+  return (action ?? "HOLD_USDC").replace(/_/g, " ");
 }
 
 function secondsUntilNextDecision(ts?: string) {
@@ -888,6 +918,8 @@ export function ArcMindLive() {
     detail: "This decision was created before leader source metadata existed. Legacy leader rows are hidden instead of treated as real.",
     requiredEnv: ["ARC_LEADER_FEED_URL"],
   };
+  const signalGuard = latest?.signalGuard ?? null;
+  const hasSignalGuard = Boolean(signalGuard);
   const leadersAreVerified = leaderSource.status === "configured";
   const hiddenLegacyLeaderCount = leadersAreVerified ? 0 : (latest?.leaderScores?.length ?? 0);
   const leaders = leadersAreVerified ? (latest?.leaderScores ?? []) : [];
@@ -914,6 +946,22 @@ export function ArcMindLive() {
   const selectedStrategy = STRATEGY_GALLERY.find((strategy) => strategy.id === selectedStrategyId) ?? STRATEGY_GALLERY[0]!;
   const mode = payload?.status.mode ?? "paper";
   const sourceProofRows = [
+    ...(latest?.traceStorage?.status === "pinned" ? [{
+      id: "trace-storage",
+      label: "Pinned reasoning trace",
+      detail: `Trace JSON pinned to ${latest.traceStorage.provider} with CID ${short(latest.traceStorage.cid, 8, 6)}.`,
+      status: "pinned",
+      rfb: "Trace proof",
+      url: latest.traceStorage.url,
+    }] : []),
+    ...(signalGuard ? [{
+      id: "signalguard",
+      label: "SignalGuard decision",
+      detail: `No-Nansen mode action ${signalActionLabel(signalGuard.action)} from public market signals, source coverage ${signalGuard.sourceCoverage}.`,
+      status: "live",
+      rfb: "RFB 02 + RFB 04",
+      url: undefined,
+    }] : []),
     ...configuredSources.slice(0, 5).map((source) => ({
       id: source.id,
       label: source.name,
@@ -970,9 +1018,9 @@ export function ArcMindLive() {
     protected: acc.protected + row.protectedPct,
   }), { blind: 0, protected: 0 });
   const rfbCoverage = [
-    { id: "RFB 06", label: "Social copy intelligence", value: leadersAreVerified ? `${leaders.length} leaders` : "feed needed", detail: leadersAreVerified ? "Select, weight, monitor, stop." : "Add ARC_LEADER_FEED_URL for real leader scoring." },
-    { id: "RFB 04", label: "Adaptive portfolio", value: simulation ? `${simulation.portfolio.riskOff.weightPct}% risk-off` : "simulating", detail: "USDC/USYC allocation and rebalance logic." },
-    { id: "RFB 02", label: "Trader intelligence", value: `${configuredSources.length} sources`, detail: "Source credibility and reasoning trace proof." },
+    { id: "RFB 06", label: "Social copy intelligence", value: leadersAreVerified ? `${leaders.length} leaders` : "SignalGuard", detail: leadersAreVerified ? "Select, weight, monitor, stop." : "No synthetic leaders; copy layer activates only when a real feed exists." },
+    { id: "RFB 04", label: "Adaptive portfolio", value: signalGuard ? signalActionLabel(signalGuard.action) : simulation ? `${simulation.portfolio.riskOff.weightPct}% risk-off` : "simulating", detail: "USDC/USYC allocation and rebalance logic." },
+    { id: "RFB 02", label: "Trader intelligence", value: signalGuard ? `${signalGuard.confidenceScore}% confidence` : `${configuredSources.length} sources`, detail: "Source credibility and reasoning trace proof." },
     { id: "RFB 01", label: "Perp guardrails", value: `${maxDrawdownPct}% stop`, detail: "Funding, crowding, and liquidation-risk proxy." },
     { id: "RFB 05", label: "Arb awareness", value: "route math next", detail: "Spread/slippage controls via App Kit/CCTP surfaces." },
   ];
@@ -982,6 +1030,7 @@ export function ArcMindLive() {
     const replay = decisionReplay?.events.at(-1);
     const baseEvidence = [
       leader ? { label: leader.name, detail: `${actionLabel(leader.action)} at ${leader.weightPct}% weight; decay ${leader.degradationScore.toFixed(1)}. ${leader.reason}`, tag: "leader" } : null,
+      signalGuard ? { label: "SignalGuard", detail: `${signalActionLabel(signalGuard.action)} with risk ${signalGuard.riskScore}/100 and confidence ${signalGuard.confidenceScore}/100. ${signalGuard.reasons[0] ?? "Public market signals are being used because no verified leader feed is configured."}`, tag: "no-nansen" } : null,
       source ? { label: source.label, detail: source.detail, tag: source.rfb } : null,
       replay ? { label: replay.title, detail: replay.detail, tag: replay.status } : null,
       { label: "User guardrails", detail: `${riskProfile} profile, ${maxAllocationPct}% max allocation, ${maxDrawdownPct}% drawdown stop, policy ${portfolioPolicy}.`, tag: "settings" },
@@ -991,7 +1040,9 @@ export function ArcMindLive() {
       return {
         title: "What changed in the latest decision?",
         answer: latest
-          ? `ArcMind's latest action is ${actionLabel(latest.primaryAction ?? latest.decision)} from the newest leader scores, market state, and replay checks. The decision happened ${timeAgo(latest.ts)} and is treated as ${latest.mode ?? mode} mode.`
+          ? signalGuard
+            ? `ArcMind's latest action is ${signalActionLabel(signalGuard.action)} from SignalGuard because no verified leader feed is configured. It used public market inputs, source coverage, and replay checks ${timeAgo(latest.ts)} in ${latest.mode ?? mode} mode.`
+            : `ArcMind's latest action is ${actionLabel(latest.primaryAction ?? latest.decision)} from the newest leader scores, market state, and replay checks. The decision happened ${timeAgo(latest.ts)} and is treated as ${latest.mode ?? mode} mode.`
           : "ArcMind is waiting for a live decision before it can explain a change.",
         evidence: baseEvidence,
       };
@@ -1017,6 +1068,8 @@ export function ArcMindLive() {
         title: "When is COPY safe?",
         answer: topCopy
           ? `${topCopy.name} is currently the strongest COPY candidate at ${topCopy.weightPct}% because degradation is ${topCopy.degradationScore.toFixed(1)}. COPY stays safer when losses, drawdown, volatility, and signal divergence remain below the configured stop boundary.`
+          : signalGuard
+            ? `COPY is not presented as a leader allocation without a verified leader feed. SignalGuard can only say ${signalActionLabel(signalGuard.action)} for the market state; it will not invent trader profiles or leaderboard performance.`
           : "COPY is not currently preferred. ArcMind needs a leader with low degradation, acceptable liquidity, and source-backed confidence before increasing allocation.",
         evidence: baseEvidence,
       };
@@ -1029,6 +1082,8 @@ export function ArcMindLive() {
           ? `Current risk controls are ${riskProfile}, ${maxAllocationPct}% max allocation, ${maxDrawdownPct}% stop, and ${portfolioPolicy} policy.`
           : clean.includes("leader") && leader
             ? `${leader.name}: ${actionLabel(leader.action)} at ${leader.weightPct}% because ${leader.reason}`
+            : clean.includes("leader") && signalGuard
+              ? "No verified leader feed is configured. ArcMind is intentionally running SignalGuard instead of showing synthetic leader rows."
             : "Ask ArcMind answers only from the current payload: leaders, source proof, decision replay, alerts, and settings. Try asking about a leader, source, risk, or proof.";
       return { title: customQuestion.trim() || "Custom evidence question", answer, evidence: baseEvidence };
     }
@@ -1038,6 +1093,8 @@ export function ArcMindLive() {
         ? `${stoppedLeader.name} is blocked because its decay score reached ${stoppedLeader.degradationScore.toFixed(1)} and crossed the current guardrails. ArcMind would keep exposure away until recent losses, drawdown, liquidity, and signal divergence improve.`
         : topCopy
           ? `No leader is currently stopped. ${topCopy.name} remains copy-eligible, but CopyGuard still caps allocation at ${maxAllocationPct}% and keeps risk-off capital available.`
+          : signalGuard
+            ? `No leader is currently stopped because the product is in No-Nansen SignalGuard mode. It is using sourced market risk and will only revive copy-leader scoring after a real feed is configured.`
           : "No COPY or STOP leader is available yet. ArcMind is waiting for backend leader scores.",
       evidence: baseEvidence,
     };
@@ -1052,19 +1109,20 @@ export function ArcMindLive() {
     mode,
     portfolioPolicy,
     riskProfile,
+    signalGuard,
     sourceProofRows,
     stoppedLeader,
     topCopy,
   ]);
   const sourceTotal = Math.max(1, (sourceRadar?.summary.total ?? configuredSources.length) || 1);
   const signalCredibilityPct = Math.min(100, Math.round((configuredSources.length / sourceTotal) * 100));
-  const leaderEdgePct = topCopy ? Math.max(0, Math.round(100 - topCopy.degradationScore)) : 0;
+  const leaderEdgePct = topCopy ? Math.max(0, Math.round(100 - topCopy.degradationScore)) : signalGuard ? signalGuard.confidenceScore : 0;
   const kellyCapPct = Math.max(1, Math.min(maxAllocationPct, Math.round((leaderEdgePct / 100) * maxAllocationPct * 0.5)));
   const predictionSignals = [
     {
-      label: "Confidence gap",
-      value: topCopy ? `${leaderEdgePct}%` : "waiting",
-      detail: topCopy ? `${topCopy.name} remains copy-eligible, but sizing is capped by decay and risk settings.` : "No copy-eligible leader yet.",
+      label: topCopy ? "Confidence gap" : "Signal confidence",
+      value: topCopy || signalGuard ? `${leaderEdgePct}%` : "waiting",
+      detail: topCopy ? `${topCopy.name} remains copy-eligible, but sizing is capped by decay and risk settings.` : signalGuard ? "No-Nansen mode uses public market/source signals and lowers confidence when sources are missing." : "No copy-eligible leader yet.",
       tag: "RFB 02",
     },
     {
@@ -1082,10 +1140,10 @@ export function ArcMindLive() {
   ];
   const marketTemplates = [
     {
-      label: "Crypto leader decay",
-      question: "Will this leader underperform their cohort over the next 7 days?",
-      source: stoppedLeader?.name ?? topCopy?.name ?? "leader scores",
-      status: leaders.length ? "ready to draft" : "needs leader scores",
+      label: leaders.length ? "Crypto leader decay" : "SignalGuard risk regime",
+      question: leaders.length ? "Will this leader underperform their cohort over the next 7 days?" : "Will public crypto risk signals keep ArcMind in HOLD_USDC or MOVE_TO_USYC next cycle?",
+      source: stoppedLeader?.name ?? topCopy?.name ?? (signalGuard ? `SignalGuard ${signalActionLabel(signalGuard.action)}` : "leader scores"),
+      status: leaders.length || signalGuard ? "ready to draft" : "needs live decision",
     },
     {
       label: "Macro risk-off",
@@ -1108,7 +1166,7 @@ export function ArcMindLive() {
   ];
   const parsedFundingRate = Number.parseFloat(String(latest?.fundingRate ?? "0"));
   const fundingBps = Number.isFinite(parsedFundingRate) ? parsedFundingRate * (Math.abs(parsedFundingRate) < 1 ? 10_000 : 1) : 0;
-  const perpsRiskScore = Math.max(0, Math.min(100, Math.round((stoppedLeader?.degradationScore ?? topCopy?.degradationScore ?? 45) + Math.abs(fundingBps) * 1.5)));
+  const perpsRiskScore = Math.max(0, Math.min(100, Math.round((stoppedLeader?.degradationScore ?? topCopy?.degradationScore ?? signalGuard?.riskScore ?? 45) + Math.abs(fundingBps) * 1.5)));
   const leverageCap = perpsRiskScore >= 70
     ? "0.0x"
     : riskProfile === "conservative"
@@ -1699,6 +1757,47 @@ export function ArcMindLive() {
         </section>
 
         <section className="am-two-col">
+          <Section accent={signalActionColor(signalGuard?.action)}>
+            <div className="am-panel-title"><Shield size={18} /> Free API SignalGuard <strong>{hasSignalGuard ? "live" : "waiting"}</strong></div>
+            <p className="am-muted">
+              No-Nansen mode turns ArcMind into a sourced market-risk guard: public ETH venues, Polymarket/Apify source radar where configured, and Arc receipts without fake trader rows.
+            </p>
+            <div className="am-signalguard-grid">
+              <MiniStat label="Action" value={signalActionLabel(signalGuard?.action)} accent={signalActionColor(signalGuard?.action)} />
+              <MiniStat label="Risk" value={signalGuard ? `${signalGuard.riskScore}/100` : "pending"} accent={signalGuard && signalGuard.riskScore >= 65 ? "#EF4444" : "#F59E0B"} />
+              <MiniStat label="Confidence" value={signalGuard ? `${signalGuard.confidenceScore}%` : "pending"} accent="#60A5FA" />
+              <MiniStat label="Sources" value={signalGuard ? String(signalGuard.sourceCoverage) : String(configuredSources.length)} accent="#8B5CF6" />
+            </div>
+            <div className="am-reason-list">
+              {(signalGuard?.reasons ?? [
+                "Waiting for the next backend decision. If ARC_LEADER_FEED_URL is unset, SignalGuard will run instead of displaying synthetic leaders.",
+              ]).slice(0, 4).map((reason) => <p key={reason}><CheckCircle2 size={13} /> {reason}</p>)}
+            </div>
+            <p className="am-readonly-hint">
+              This keeps the demo honest: RFB 06 copy-leader scoring is disabled until real leaderboard data exists, while RFB 02/RFB 04/RFB 01 still work from live public signals.
+            </p>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><CircleDollarSign size={18} /> Free Source Stack <strong>no paid keys</strong></div>
+            <div className="am-free-stack">
+              {[
+                ["ETH price", "Hyperliquid -> Binance -> Coinbase fallback"],
+                ["Funding/OI", "Hyperliquid public API"],
+                ["Prediction context", "Polymarket/Gamma public endpoints"],
+                ["Social/news", "Apify where configured"],
+                ["Trace proof", "Pinata optional; hash still recorded on Arc"],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <b>{value}</b>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
           <Section>
             <div className="am-panel-title"><Brain size={18} /> Ask ArcMind <strong>evidence-only</strong></div>
             <p className="am-muted">
@@ -1831,10 +1930,11 @@ export function ArcMindLive() {
               {latest?.txHash && <a href={`${ARC_EXPLORER_TX}${latest.txHash}`} target="_blank" rel="noreferrer">Arc tx <ExternalLink size={13} /></a>}
             </div>
 
-            <div className="am-stat-grid">
+            <div className={hasSignalGuard ? "am-stat-grid am-stat-grid--four" : "am-stat-grid"}>
               <MiniStat label="Primary action" value={actionLabel(latest?.primaryAction ?? latest?.decision)} accent={actionColor(latest?.primaryAction ?? latest?.decision ?? "HOLD")} />
               <MiniStat label="Top copy target" value={topCopy ? `${topCopy.weightPct}%` : "0%"} accent="#10B981" />
-              <MiniStat label="Leader feed" value={leadersAreVerified ? "verified" : "needed"} accent={leadersAreVerified ? "#10B981" : "#F59E0B"} />
+              <MiniStat label="Leader feed" value={leadersAreVerified ? "verified" : "disabled"} accent={leadersAreVerified ? "#10B981" : "#94A3B8"} />
+              {hasSignalGuard && <MiniStat label="SignalGuard" value={signalActionLabel(signalGuard?.action)} accent={signalActionColor(signalGuard?.action)} />}
             </div>
 
             {latest?.decisionHash && (
@@ -1865,10 +1965,17 @@ export function ArcMindLive() {
                 </button>
               )) : (
                 <div className="am-empty-state">
-                  <b>{leaderSource.provider}</b>
-                  <p>{leaderSource.detail}</p>
+                  <b>{hasSignalGuard ? "SignalGuard is active instead of synthetic leaders" : leaderSource.provider}</b>
+                  <p>{hasSignalGuard ? "No verified leaderboard feed is configured, so ArcMind is using public market/source signals and refusing to show fake copy targets." : leaderSource.detail}</p>
+                  {signalGuard && (
+                    <div className="am-empty-state__metrics">
+                      <span style={{ borderColor: `${signalActionColor(signalGuard.action)}66`, color: signalActionColor(signalGuard.action) }}>{signalActionLabel(signalGuard.action)}</span>
+                      <span>risk {signalGuard.riskScore}/100</span>
+                      <span>confidence {signalGuard.confidenceScore}%</span>
+                    </div>
+                  )}
                   {hiddenLegacyLeaderCount > 0 && <p>{hiddenLegacyLeaderCount} legacy leader rows are hidden because they do not include source metadata.</p>}
-                  <code>{leaderSource.requiredEnv?.join(", ") ?? "ARC_LEADER_FEED_URL"}</code>
+                  <code>{hasSignalGuard ? "ARC_LEADER_FEED_URL optional; leave empty without real data" : leaderSource.requiredEnv?.join(", ") ?? "ARC_LEADER_FEED_URL"}</code>
                 </div>
               )}
             </div>
@@ -1877,7 +1984,7 @@ export function ArcMindLive() {
           <aside className="am-side">
             <Section accent="#EF4444">
               <div className="am-panel-title"><AlertTriangle size={17} /> Strategy Decay Alert</div>
-              <p className="am-danger">{stoppedLeader ? `${stoppedLeader.name} is blocked from allocation. ${stoppedLeader.reason}` : "No leader is currently blocked."}</p>
+              <p className="am-danger">{stoppedLeader ? `${stoppedLeader.name} is blocked from allocation. ${stoppedLeader.reason}` : signalGuard ? `No verified leader is being copied. SignalGuard says ${signalActionLabel(signalGuard.action)} with risk ${signalGuard.riskScore}/100.` : "No leader is currently blocked."}</p>
               <button onClick={showKillSwitch} className="am-danger-btn">View Kill Switch Logic</button>
             </Section>
 
@@ -2542,6 +2649,14 @@ export function ArcMindLive() {
         .am-selected-strategy { border: 1px solid #10B98144; background: #10B98110; border-radius: 12px; padding: 11px 12px; margin-top: 12px; }
         .am-selected-strategy p { color: #a7f3d0; margin: 5px 0 0; font-size: .76rem; line-height: 1.45; }
         .am-backtest-score { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+        .am-signalguard-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+        .am-reason-list { display: grid; gap: 8px; margin-top: 12px; }
+        .am-reason-list p { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: #cbd5e1; border: 1px solid #1b2a40; background: #08111e; border-radius: 10px; padding: 9px 10px; font-size: .76rem; line-height: 1.45; }
+        .am-reason-list svg { flex: 0 0 auto; color: #10B981; margin-top: 2px; }
+        .am-free-stack { display: grid; gap: 9px; margin-top: 12px; }
+        .am-free-stack div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 11px 12px; min-width: 0; }
+        .am-free-stack span { display: block; color: #7890ad; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 900; margin-bottom: 5px; }
+        .am-free-stack b { display: block; color: #dbeafe; line-height: 1.35; overflow-wrap: anywhere; }
         .am-backtest-list, .am-proof-mini, .am-proof-drawer-list { display: grid; gap: 9px; }
         .am-backtest-list > div, .am-proof-mini a, .am-proof-drawer-list a { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 11px 12px; min-width: 0; color: inherit; text-decoration: none; }
         .am-backtest-list b, .am-proof-mini b, .am-proof-drawer-list b { display: block; color: #dbeafe; line-height: 1.3; overflow-wrap: anywhere; }
@@ -2592,6 +2707,7 @@ export function ArcMindLive() {
         .am-block-head p { color: #7890ad; font-size: .75rem; margin: 4px 0 0; }
         .am-stat-grid, .am-traction-grid, .am-metric-grid { display: grid; gap: 10px; }
         .am-stat-grid { grid-template-columns: repeat(3, 1fr); }
+        .am-stat-grid--four { grid-template-columns: repeat(4, 1fr); }
         .am-traction-grid { grid-template-columns: repeat(4, 1fr); }
         .am-metric-grid { grid-template-columns: repeat(2, 1fr); }
         .am-stat { border: 1px solid; background: #0e1522; border-radius: 12px; padding: 13px 14px; min-width: 0; }
@@ -2615,6 +2731,8 @@ export function ArcMindLive() {
         .am-empty-state b { color: #dbeafe; }
         .am-empty-state p { color: #9fb2cc; margin: 0; line-height: 1.45; font-size: .78rem; }
         .am-empty-state code { display: inline-block; width: fit-content; border: 1px solid #F59E0B44; background: #F59E0B12; color: #fcd34d; border-radius: 8px; padding: 6px 8px; margin: 0; }
+        .am-empty-state__metrics { display: flex; flex-wrap: wrap; gap: 8px; }
+        .am-empty-state__metrics span { border: 1px solid #26364d; background: #101827; color: #d8e4f6; border-radius: 999px; padding: 5px 8px; font-size: .68rem; font-weight: 900; }
         .am-side { display: flex; flex-direction: column; gap: 18px; }
         .am-danger { color: #fca5a5; line-height: 1.55; }
         .am-ok { color: #86efac; }
@@ -2754,7 +2872,7 @@ export function ArcMindLive() {
           .am-topbar { flex-wrap: wrap; }
           .am-mode-switch { min-width: 100%; order: 5; }
           .am-judgebtn, .am-walletbtn { flex: 1 1 auto; justify-content: center; }
-          .am-controls, .am-hash-grid, .am-stat-grid, .am-traction-grid, .am-profile-grid, .am-setting-grid, .am-feedback-prompts, .am-sim-leaders, .am-sim-result, .am-readiness-checks, .am-source-grid, .am-rfb-grid, .am-policy-controls, .am-backtest-score, .am-profile-metrics, .am-ask-input, .am-prediction-grid, .am-risk-grid, .am-goal-grid, .am-fee-grid, .am-delivery-grid { grid-template-columns: 1fr; }
+          .am-controls, .am-hash-grid, .am-stat-grid, .am-stat-grid--four, .am-traction-grid, .am-profile-grid, .am-setting-grid, .am-feedback-prompts, .am-sim-leaders, .am-sim-result, .am-readiness-checks, .am-source-grid, .am-rfb-grid, .am-policy-controls, .am-backtest-score, .am-profile-metrics, .am-ask-input, .am-prediction-grid, .am-risk-grid, .am-goal-grid, .am-fee-grid, .am-delivery-grid, .am-signalguard-grid { grid-template-columns: 1fr; }
           .am-share-card { grid-template-columns: 1fr; }
           .am-share-card button { justify-content: center; }
           .am-segment { grid-template-columns: 1fr; }

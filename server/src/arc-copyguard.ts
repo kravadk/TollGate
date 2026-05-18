@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export type CopyGuardRiskProfile = "conservative" | "balanced" | "aggressive";
 export type CopyGuardAction = "COPY" | "REDUCE" | "STOP" | "HOLD_USDC" | "MOVE_TO_USYC";
+export type SignalGuardAction = "ALLOW_COPY" | "HOLD_USDC" | "REDUCE" | "MOVE_TO_USYC";
 
 export type CopyGuardSignals = {
   ethPrice: number;
@@ -51,10 +52,28 @@ export type CopyGuardDecision = {
   riskProfile: CopyGuardRiskProfile;
   primaryAction: CopyGuardAction;
   signals: CopyGuardSignals;
+  signalGuard?: SignalGuardDecision;
   leaderScores: ScoredCopyGuardLeader[];
   allocation: { leaderId: string; name: string; weightPct: number; action: CopyGuardAction }[];
   reasoningTrace: string;
   decisionHash: string;
+};
+
+export type SignalGuardDecision = {
+  mode: "no_nansen_signal_guard";
+  action: SignalGuardAction;
+  riskScore: number;
+  confidenceScore: number;
+  sourceCoverage: number;
+  reasons: string[];
+  inputs: {
+    ethPrice: number;
+    ethPriceChangePct: number;
+    openInterestUsd: number;
+    fundingRate: number;
+    volatilityPct: number;
+    polymarketYesPct?: number | null;
+  };
 };
 
 function clamp(n: number, min: number, max: number): number {
@@ -200,11 +219,64 @@ function decisionHash(payload: unknown): string {
   return "0x" + createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
+export function buildSignalGuardDecision(signals: CopyGuardSignals, sourceCoverage = 0): SignalGuardDecision {
+  const fundingCrowding = clamp(Math.abs(signals.fundingRate) * 320_000, 0, 100);
+  const volatilityStress = clamp(signals.volatilityPct * 10, 0, 100);
+  const priceDownStress = clamp(Math.max(0, -signals.ethPriceChangePct) * 18, 0, 100);
+  const openInterestStress = clamp((Math.log10(Math.max(signals.openInterestUsd, 1)) - 6) * 18, 0, 100);
+  const polymarketYesPct = typeof signals.polymarketYesPct === "number" ? signals.polymarketYesPct : null;
+  const sentimentStress = polymarketYesPct === null ? 18 : clamp(55 - polymarketYesPct, 0, 100);
+  const riskScore = round(clamp(
+    fundingCrowding * 0.25
+      + volatilityStress * 0.25
+      + priceDownStress * 0.18
+      + openInterestStress * 0.17
+      + sentimentStress * 0.15,
+    0,
+    100,
+  ), 2);
+  const confidenceScore = round(clamp(35 + sourceCoverage * 8 + (polymarketYesPct === null ? 0 : 12), 0, 92), 2);
+
+  let action: SignalGuardAction = "ALLOW_COPY";
+  if (riskScore >= 72) action = "MOVE_TO_USYC";
+  else if (riskScore >= 54) action = "REDUCE";
+  else if (riskScore >= 34) action = "HOLD_USDC";
+
+  const reasons = [
+    `Funding crowding ${round(fundingCrowding, 1)} and volatility stress ${round(volatilityStress, 1)} from live market feeds.`,
+    `Open interest stress ${round(openInterestStress, 1)} with ETH move ${round(signals.ethPriceChangePct, 2)}%.`,
+    polymarketYesPct === null
+      ? "Prediction sentiment unavailable; confidence is intentionally capped instead of filled with a default."
+      : `Prediction sentiment is ${polymarketYesPct}% YES, adding ${round(sentimentStress, 1)} risk stress.`,
+    sourceCoverage > 0
+      ? `${sourceCoverage} configured source layers are available for sourced explanation and replay.`
+      : "No extra source layers configured; SignalGuard stays conservative.",
+  ];
+
+  return {
+    mode: "no_nansen_signal_guard",
+    action,
+    riskScore,
+    confidenceScore,
+    sourceCoverage,
+    reasons,
+    inputs: {
+      ethPrice: signals.ethPrice,
+      ethPriceChangePct: signals.ethPriceChangePct,
+      openInterestUsd: signals.openInterestUsd,
+      fundingRate: signals.fundingRate,
+      volatilityPct: signals.volatilityPct,
+      polymarketYesPct,
+    },
+  };
+}
+
 export function buildCopyGuardDecision(input: {
   signals: CopyGuardSignals;
   leaders: CopyGuardLeader[];
   riskProfile: CopyGuardRiskProfile;
   nowIso?: string;
+  sourceCoverage?: number;
 }): CopyGuardDecision {
   const ts = input.nowIso ?? new Date().toISOString();
   const leaderScores = input.leaders
@@ -218,17 +290,28 @@ export function buildCopyGuardDecision(input: {
     action: leader.action,
   }));
   const firstActive = leaderScores.find((leader) => leader.weightPct > 0);
-  const primaryAction = firstActive?.action ?? (leaderScores.some((leader) => leader.action === "STOP") ? "STOP" : "HOLD_USDC");
+  const signalGuard = leaderScores.length ? undefined : buildSignalGuardDecision(input.signals, input.sourceCoverage ?? 0);
+  const signalGuardPrimary: CopyGuardAction = signalGuard?.action === "MOVE_TO_USYC"
+    ? "MOVE_TO_USYC"
+    : signalGuard?.action === "REDUCE"
+      ? "REDUCE"
+      : "HOLD_USDC";
+  const primaryAction = firstActive?.action ?? (leaderScores.some((leader) => leader.action === "STOP") ? "STOP" : signalGuardPrimary);
   const reasoningTrace = leaderScores.length
     ? leaderScores
       .map((leader) => `${leader.name}: ${leader.action} ${leader.weightPct}% - ${leader.reason}`)
       .join("\n")
-    : "No verified copy-leader feed is configured. ArcMind holds USDC/USYC and does not display synthetic copy leaders.";
+    : [
+      "No verified copy-leader feed is configured. ArcMind does not display synthetic copy leaders.",
+      `SignalGuard action: ${signalGuard?.action ?? "HOLD_USDC"} with risk ${signalGuard?.riskScore ?? 0}/100 and confidence ${signalGuard?.confidenceScore ?? 0}/100.`,
+      ...(signalGuard?.reasons ?? []),
+    ].join("\n");
 
   const hashBasis = {
     ts,
     riskProfile: input.riskProfile,
     signals: input.signals,
+    signalGuard,
     allocation,
     reasoningTrace,
   };
@@ -239,6 +322,7 @@ export function buildCopyGuardDecision(input: {
     riskProfile: input.riskProfile,
     primaryAction,
     signals: input.signals,
+    signalGuard,
     leaderScores,
     allocation,
     reasoningTrace,

@@ -982,3 +982,30 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 - [x] `npm test`
 - [x] `cd server; npm test`
 - [x] `cd server; npm run build`
+
+---
+
+## Task 30: Free API SignalGuard / No-Nansen Mode
+
+**Status:** Done locally 2026-05-19; production deploy/smoke pending after push.
+
+**Why this matters:** without Nansen or a real leader feed, the product should still feel strong and honest. The judge should see live public data, risk decisions, source proof, Telegram/trace plumbing, and no fake copy-trader rows.
+
+**Implementation checklist:**
+- [x] Replace CoinGecko-only ETH pricing with public Hyperliquid, Binance, Coinbase fallback and optional CoinGecko.
+- [x] Add SignalGuard decisions when `ARC_LEADER_FEED_URL` is unset or unavailable.
+- [x] Keep leader scoring disabled unless a real sourced feed exists.
+- [x] Add SignalGuard UI, free source stack, source-proof row, and no-fake-leader empty state.
+- [x] Add best-effort Pinata trace JSON pinning and Telegram alerts for risk actions.
+- [x] Update environment example so `ARC_LEADER_FEED_URL` is optional, not required.
+- [x] Run frontend/server tests and builds.
+- [x] Run local smoke on isolated ports.
+- [ ] Run production smoke after deployment.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] `cd server; npm test`
+- [x] `cd server; npm run build`
+- [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5181 AGORA_BACKEND_URL=http://127.0.0.1:8790 npm run test:agora-live`
+- [x] Playwright DOM check: SignalGuard and Free Source Stack visible; no horizontal overflow.

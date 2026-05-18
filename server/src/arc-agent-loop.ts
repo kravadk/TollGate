@@ -10,6 +10,8 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { ethers } from "ethers";
 import { buildCopyGuardDecision, type CopyGuardLeader, type CopyGuardSignals } from "./arc-copyguard.js";
+import { buildArcSignalSourceRadar } from "./arc-signal-sources.js";
+import { fetchEthMarketPrice } from "./market-data.js";
 import { appendReceipt } from "./store.js";
 
 const ARC_RPC = process.env.ARC_RPC_URL ?? "https://rpc.testnet.arc-node.thecanteenapp.com/v1/public";
@@ -29,6 +31,7 @@ export const ARC_AGENT_INTERVAL_MS = Number(process.env.ARC_AGENT_INTERVAL_MS ??
 let prevEthPrice: number | null = null;
 let arcWallet: ethers.Wallet | null = null;
 let schedulerStop: (() => void) | null = null;
+let lastTelegramKey: string | null = null;
 
 export type ArcAgentLoopStatus = {
   state: "idle" | "running" | "skipped" | "recorded" | "failed";
@@ -63,33 +66,8 @@ function toBytes32(hex: string): string {
 }
 
 async function fetchEthPrice(): Promise<number | null> {
-  try {
-    const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
-      { signal: AbortSignal.timeout(8_000) },
-    );
-    if (!res.ok) return null;
-    const data = await res.json() as { ethereum?: { usd?: number } };
-    return data?.ethereum?.usd ?? null;
-  } catch {
-    // Render can hit CoinGecko limits during deploy restarts. Hyperliquid allMids
-    // is a real market source and keeps the agent loop from going decisionless.
-  }
-
-  try {
-    const res = await fetch("https://api.hyperliquid.xyz/info", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "allMids" }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as Record<string, string>;
-    const eth = parseFloat(data["ETH"] ?? "");
-    return Number.isFinite(eth) ? eth : null;
-  } catch {
-    return null;
-  }
+  const market = await fetchEthMarketPrice();
+  return market.price;
 }
 
 async function fetchHyperliquidOI(): Promise<{ oiValue: string; oiUsd: number; fundingRate: string } | null> {
@@ -248,6 +226,63 @@ async function fetchCopyLeaders(): Promise<{ leaders: CopyGuardLeader[]; source:
   }
 }
 
+async function pinTraceJson(payload: unknown, decisionHash: string): Promise<{ provider: "Pinata"; status: "pinned"; cid: string; url: string } | { provider: "Pinata"; status: "unavailable"; detail: string } | null> {
+  const jwt = process.env.PINATA_JWT;
+  if (!jwt) return null;
+  try {
+    const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pinataMetadata: { name: `arcmind-trace-${decisionHash.slice(2, 14)}.json` },
+        pinataContent: payload,
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return { provider: "Pinata", status: "unavailable", detail: `HTTP ${res.status}` };
+    const data = await res.json() as { IpfsHash?: string };
+    if (!data.IpfsHash) return { provider: "Pinata", status: "unavailable", detail: "missing IpfsHash" };
+    return {
+      provider: "Pinata",
+      status: "pinned",
+      cid: data.IpfsHash,
+      url: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`,
+    };
+  } catch (err) {
+    return { provider: "Pinata", status: "unavailable", detail: err instanceof Error ? err.message : "pin failed" };
+  }
+}
+
+async function sendTelegramAlert(input: { action: string; risk?: number; decisionHash: string; txHash?: string | null; leaderSource: LeaderSource }): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return;
+  const key = `${input.action}:${input.decisionHash}`;
+  if (lastTelegramKey === key) return;
+  if (input.action === "ALLOW_COPY" || input.action === "HOLD_USDC") return;
+  lastTelegramKey = key;
+  const text = [
+    `ArcMind alert: ${input.action}`,
+    input.risk != null ? `Risk score: ${input.risk}/100` : null,
+    `Leader feed: ${input.leaderSource.status}`,
+    `Decision: ${input.decisionHash.slice(0, 18)}...`,
+    input.txHash ? `Arc tx: https://testnet.arcscan.app/tx/${input.txHash}` : "Arc tx: pending/paper",
+  ].filter(Boolean).join("\n");
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch {
+    // Alert delivery is best-effort and must not block decision recording.
+  }
+}
+
 function getArcWallet(): ethers.Wallet | null {
   if (!ARC_KEY) return null;
   if (!arcWallet) {
@@ -268,7 +303,7 @@ function appendLog(entry: Record<string, unknown>): void {
 export async function arcAgentLoop(): Promise<void> {
   const tag = "[arc-loop]";
   lastLoopStatus = { state: "running", startedAt: new Date().toISOString(), message: "Arc agent loop tick started." };
-  const [ethPrice, hlOI, leaderFeed] = await Promise.all([fetchEthPrice(), fetchHyperliquidOI(), fetchCopyLeaders()]);
+  const [ethPrice, hlOI, leaderFeed, sourceRadar] = await Promise.all([fetchEthPrice(), fetchHyperliquidOI(), fetchCopyLeaders(), Promise.resolve(buildArcSignalSourceRadar(process.env))]);
   if (!ethPrice) {
     console.warn(`${tag} Could not fetch ETH price; skipping tick`);
     lastLoopStatus = {
@@ -302,6 +337,7 @@ export async function arcAgentLoop(): Promise<void> {
     signals: copyGuardSignals,
     leaders: leaderFeed.leaders,
     riskProfile: "balanced",
+    sourceCoverage: sourceRadar.summary.configured,
   });
 
   const payload = {
@@ -315,10 +351,13 @@ export async function arcAgentLoop(): Promise<void> {
     leaderScores: copyGuard.leaderScores,
     allocation: copyGuard.allocation,
     leaderSource: leaderFeed.source,
+    signalGuard: copyGuard.signalGuard,
     reasoningTrace: copyGuard.reasoningTrace,
     copyGuardHash: copyGuard.decisionHash,
   };
   const decisionHash = "0x" + sha256Hex(JSON.stringify(payload));
+  const traceStorage = await pinTraceJson({ ...payload, decisionHash }, decisionHash);
+  const finalPayload = traceStorage ? { ...payload, traceStorage } : payload;
   lastLoopStatus = {
     ...lastLoopStatus,
     ethPrice,
@@ -331,7 +370,7 @@ export async function arcAgentLoop(): Promise<void> {
 
   const wallet = getArcWallet();
   if (!wallet || !AGENT_ID) {
-    appendLog({ ...payload, decisionHash, txHash: null, mode: "paper", note: "ARC_PRIVATE_KEY or ARC_AGENT_ID not set" });
+    appendLog({ ...finalPayload, decisionHash, txHash: null, mode: "paper", note: "ARC_PRIVATE_KEY or ARC_AGENT_ID not set" });
     lastLoopStatus = {
       ...lastLoopStatus,
       state: "recorded",
@@ -340,6 +379,7 @@ export async function arcAgentLoop(): Promise<void> {
       txHash: null,
       message: "Paper decision recorded; ARC_PRIVATE_KEY or ARC_AGENT_ID is not set.",
     };
+    await sendTelegramAlert({ action: copyGuard.signalGuard?.action ?? copyGuard.primaryAction, risk: copyGuard.signalGuard?.riskScore, decisionHash, txHash: null, leaderSource: leaderFeed.source });
     console.log(`${tag} Paper decision recorded locally; set ARC_PRIVATE_KEY + ARC_AGENT_ID for Arc registry writes`);
     return;
   }
@@ -355,7 +395,7 @@ export async function arcAgentLoop(): Promise<void> {
     const txHash = receipt.hash ?? tx.hash ?? "unknown";
 
     console.log(`${tag} Recorded -> ${txHash} | https://testnet.arcscan.app/tx/${txHash}`);
-    appendLog({ ...payload, decisionHash, txHash, mode: "arc" });
+    appendLog({ ...finalPayload, decisionHash, txHash, mode: "arc" });
     lastLoopStatus = {
       ...lastLoopStatus,
       state: "recorded",
@@ -364,6 +404,7 @@ export async function arcAgentLoop(): Promise<void> {
       txHash,
       message: "Decision recorded on Arc and appended to the local decision log.",
     };
+    await sendTelegramAlert({ action: copyGuard.signalGuard?.action ?? copyGuard.primaryAction, risk: copyGuard.signalGuard?.riskScore, decisionHash, txHash, leaderSource: leaderFeed.source });
 
     if (decision !== "HOLD") {
       const side = decision === "BUY" ? "BUY" : "SELL";
@@ -389,7 +430,7 @@ export async function arcAgentLoop(): Promise<void> {
     }
   } catch (err) {
     console.error(`${tag} recordDecision failed:`, (err as Error).message ?? err);
-    appendLog({ ...payload, decisionHash, txHash: null, mode: "paper", error: (err as Error).message });
+    appendLog({ ...finalPayload, decisionHash, txHash: null, mode: "paper", error: (err as Error).message });
     lastLoopStatus = {
       ...lastLoopStatus,
       state: "failed",
@@ -398,6 +439,7 @@ export async function arcAgentLoop(): Promise<void> {
       txHash: null,
       message: `recordDecision failed; paper decision was appended: ${(err as Error).message ?? "unknown error"}`,
     };
+    await sendTelegramAlert({ action: "ARC_RECORD_FAILED", risk: copyGuard.signalGuard?.riskScore, decisionHash, txHash: null, leaderSource: leaderFeed.source });
   }
 }
 
