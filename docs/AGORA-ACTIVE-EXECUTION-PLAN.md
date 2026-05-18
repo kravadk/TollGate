@@ -32,7 +32,7 @@
 
 ## Current Status
 
-**Last updated:** 2026-05-18 03:35 Europe/Kyiv
+**Last updated:** 2026-05-19 00:41 Europe/Kyiv
 
 **Done before this plan:**
 - `/live` has real wallet + Arc tx verification for trace unlock and portfolio start.
@@ -51,6 +51,7 @@
 - Task 10 is implemented: latest decisions now have a public share card and copyable share text with clipboard fallback and no payout/private data.
 - Task 11 is complete: final desktop/mobile QA, forbidden-pattern grep, build/test pass, and live demo runbook update are done.
 - Task 20 is implemented: API Mega List has been turned into an Arc-specific Signal Source Radar with backend source policy, `/live` UI, docs, and smoke coverage.
+- Production smoke passed on 2026-05-18/19 against `https://toll-gatee.vercel.app` and `https://tollgate-1.onrender.com`: `/live`, 10 Agora tabs, readiness, decision replay, and signal source radar.
 
 **Known caveat:**
 - Backend generic x402/MCP still has non-production dev-bypass support. Arc live client does not use it. Production must run with `NODE_ENV=production`.
@@ -71,6 +72,12 @@
 - [x] Task 18: Live submission summary generator.
 - [x] Task 19: Readiness deployment artifact fallback.
 - [x] Task 20: API Mega List Signal Source Radar.
+- [x] Task 21: Agora Max Product Control Layer.
+- [x] Task 22: Ask ArcMind evidence chat.
+- [x] Task 23: Prediction-market intelligence lane.
+- [x] Task 24: Perps/liquidation protection lane.
+- [x] Task 25: Cross-platform arbitrage profitability lane.
+- [ ] Task 26: Final production smoke and submission summary refresh.
 
 ---
 
@@ -778,3 +785,134 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 
 **Implementation log:**
 - 2026-05-18: Completed Task 20. Changed the files listed above. Next blocked step remains Task 15 production smoke once public frontend/backend URLs are available.
+
+---
+
+## Agora Max Phase: Product Depth for All RFBs
+
+**Goal:** keep ArcMind's primary identity as RFB 06 Social Trading Intelligence while adding product surfaces that prove it can interface with every Agora market track.
+
+**RFB coverage strategy:**
+- RFB 06: core CopyGuard leader selection, weighting, monitoring, lifecycle controls, and strategy decay.
+- RFB 04: portfolio lifecycle, USDC/USYC risk-off routing, rebalancing simulation, and strategy gallery.
+- RFB 02: source proof, prediction-market-style +EV explanation, confidence and sizing language.
+- RFB 01: liquidation guardrails, leverage caution, stop thresholds, and funding/crowding risk signals.
+- RFB 05: slippage, route/cost awareness, spread stress, and CCTP/App Kit surfaces.
+- RFB 03: market vertical ideation through source radar and future question/market templates, without diluting the core demo.
+
+---
+
+## Task 21: Agora Max Product Control Layer
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** competitors win trust with basic controls: profile pages, lifecycle status, pause/stop/reduce controls, source proof, strategy galleries, and backtest/replay surfaces. Agora judges also need visible agency beyond a single decision card.
+
+**Files:**
+- Modify: `src/pages/ArcMindLive.tsx`
+- Modify: `docs/AGORA-ACTIVE-EXECUTION-PLAN.md`
+
+**Implementation checklist:**
+- [x] Add portfolio lifecycle rail: setup, wallet, simulation, trace, portfolio, monitoring.
+- [x] Add user-safe pause/reduce/stop controls that are local policy states, not fake on-chain actions.
+- [x] Upgrade leader drawer with profile stats, RFB fit, risk badges, and source proof.
+- [x] Add Source Proof Drawer/list using configured signal sources and decision replay events.
+- [x] Add Backtest/Replay Lab using current decisions and CopyGuard actions.
+- [x] Add Strategy Gallery with simulate/apply actions and clear read-only boundaries.
+- [x] Keep all live execution/payment claims tied to verified backend responses.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [ ] `AGORA_FRONTEND_URL=http://127.0.0.1:<port> AGORA_BACKEND_URL=http://127.0.0.1:<port> npm run test:agora-live`
+- [x] Browser/Playwright desktop/mobile `/live` no horizontal overflow or console errors; Strategy Gallery and Source Proof Drawer interactions pass.
+
+---
+
+## Task 22: Ask ArcMind Evidence Chat
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** users naturally ask "why did you stop this trader?" A bounded evidence chat gives the product modern usability without hallucinating.
+
+**Implementation checklist:**
+- [x] Add a local, retrieval-style Ask ArcMind panel using only current live payload, source radar, replay, alerts, and settings.
+- [x] Add canned prompts: why stop, what changed, which source mattered, how to lower risk, what would make COPY safe.
+- [x] Show cited evidence rows under each answer.
+- [x] Avoid model/API claims unless a real LLM provider is configured later.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] Playwright desktop/mobile `/live` against local frontend/backend: Ask ArcMind prompts/custom question work, no horizontal overflow or console errors.
+
+---
+
+## Task 23: Prediction-Market Intelligence Lane
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** RFB 02/RFB 03 are not the core product, but ArcMind should show how prediction-style intelligence informs copy decisions.
+
+**Implementation checklist:**
+- [x] Add prediction intelligence card: confidence gap, Kelly-style sizing note, source credibility.
+- [x] Add market vertical templates: crypto leader decay, macro risk-off, source credibility, private/internal.
+- [x] Keep it advisory until real market execution/builder-code integration exists.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] Playwright desktop/mobile `/live` against local frontend/backend: Prediction Intelligence and Market Vertical Drafts render, Ask ArcMind still works, no horizontal overflow or console errors.
+
+---
+
+## Task 24: Perps/Liquidation Protection Lane
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** RFB 01 asks for leverage decisions and liquidation protection. CopyGuard already has drawdown/funding/crowding signals; expose them clearly.
+
+**Implementation checklist:**
+- [x] Add liquidation guard card with leverage cap, stop threshold, collateral reduce/hold/allow decision, and funding risk.
+- [x] Show no leverage execution unless a real venue integration exists.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] Playwright desktop/mobile `/live` against local frontend/backend: Perps Liquidation Guard renders, no horizontal overflow or console errors.
+
+---
+
+## Task 25: Cross-Platform Arbitrage Profitability Lane
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** RFB 05 values detect-route-execute-survive slippage. ArcMind has App Kit/CCTP surfaces; the live demo needs clearer route math.
+
+**Implementation checklist:**
+- [x] Add arbitrage calculator card: route, required spread, slippage reserve, Arc fee drag, quote status, reject reason.
+- [x] Use real available feeds where present; otherwise show unavailable/read-only states.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] Playwright desktop/mobile `/live` against local frontend/backend: Arbitrage Route Math renders and refuses profit claims without executable quotes.
+
+---
+
+## Task 26: Final Production Smoke and Submission Summary Refresh
+
+**Status:** Local verification done 2026-05-19; production smoke pending after deployment.
+
+**Why this matters:** every new product layer must survive public judge review.
+
+**Implementation checklist:**
+- [x] Run full local build/tests.
+- [x] Run local smoke.
+- [ ] Push and verify production smoke.
+- [ ] Regenerate submission summary from production.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`

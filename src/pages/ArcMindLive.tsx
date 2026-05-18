@@ -39,6 +39,9 @@ type CopyGuardAction = "COPY" | "REDUCE" | "STOP" | "HOLD_USDC" | "MOVE_TO_USYC"
 type RiskProfile = "conservative" | "balanced" | "aggressive";
 type ExecutionMode = "live" | "walkthrough";
 type FeedbackPrompt = "clarity" | "trust" | "willingness" | "confusion";
+type PortfolioPolicy = "monitoring" | "paused" | "reduced" | "stopped";
+type StrategyId = "copyguard-balanced" | "usyc-defense" | "social-alpha" | "arb-aware";
+type AskPromptId = "why-stop" | "what-changed" | "source-mattered" | "lower-risk" | "copy-safe" | "custom";
 
 type LeaderScore = {
   id: string;
@@ -180,6 +183,23 @@ type PortfolioReceipt = {
   txHash?: string | null;
 };
 
+type StrategyCard = {
+  id: StrategyId;
+  name: string;
+  rfb: string;
+  profile: RiskProfile;
+  maxAllocationPct: number;
+  maxDrawdownPct: number;
+  thesis: string;
+  bestFor: string;
+};
+
+type EvidenceAnswer = {
+  title: string;
+  answer: string;
+  evidence: Array<{ label: string; detail: string; tag: string }>;
+};
+
 const DECAY_FACTOR_ROWS: Array<[keyof NonNullable<LeaderScore["decayFactors"]>, string]> = [
   ["drawdown", "Drawdown"],
   ["recentLosses", "Recent losses"],
@@ -193,6 +213,57 @@ const FEEDBACK_PROMPTS: Array<{ id: FeedbackPrompt; label: string; placeholder: 
   { id: "trust", label: "Trust", placeholder: "What would make you trust or distrust this agent?" },
   { id: "willingness", label: "Would copy?", placeholder: "Would you use this before copying a trader? Why?" },
   { id: "confusion", label: "Confusion", placeholder: "What confused you first?" },
+];
+
+const ASK_PROMPTS: Array<{ id: AskPromptId; label: string }> = [
+  { id: "why-stop", label: "Why stop a leader?" },
+  { id: "what-changed", label: "What changed?" },
+  { id: "source-mattered", label: "Which source mattered?" },
+  { id: "lower-risk", label: "How do I lower risk?" },
+  { id: "copy-safe", label: "When is COPY safe?" },
+];
+
+const STRATEGY_GALLERY: StrategyCard[] = [
+  {
+    id: "copyguard-balanced",
+    name: "CopyGuard Balanced",
+    rfb: "RFB 06",
+    profile: "balanced",
+    maxAllocationPct: 35,
+    maxDrawdownPct: 12,
+    thesis: "Selects safer leaders, caps crowded strategies, and moves away from decay.",
+    bestFor: "First-time copy-traders who want an AI risk layer before mirroring leaders.",
+  },
+  {
+    id: "usyc-defense",
+    name: "USYC Defense",
+    rfb: "RFB 04",
+    profile: "conservative",
+    maxAllocationPct: 22,
+    maxDrawdownPct: 8,
+    thesis: "Keeps more idle capital in USDC/USYC when volatility or drawdown risk rises.",
+    bestFor: "Users who care more about capital preservation than maximum copy exposure.",
+  },
+  {
+    id: "social-alpha",
+    name: "Social Alpha Filter",
+    rfb: "RFB 02 + RFB 06",
+    profile: "balanced",
+    maxAllocationPct: 30,
+    maxDrawdownPct: 10,
+    thesis: "Requires social/news confirmation before increasing allocation to a leader.",
+    bestFor: "Users who want source-backed reasoning traces and less blind leaderboard chasing.",
+  },
+  {
+    id: "arb-aware",
+    name: "Arb-Aware Copy",
+    rfb: "RFB 05",
+    profile: "aggressive",
+    maxAllocationPct: 45,
+    maxDrawdownPct: 16,
+    thesis: "Allows larger copy weights only when spread/slippage stress is acceptable.",
+    bestFor: "Advanced users who want faster opportunity capture with explicit execution risk.",
+  },
 ];
 
 type Verification = {
@@ -435,6 +506,14 @@ export function ArcMindLive() {
   const [traceError, setTraceError] = useState<string | null>(null);
   const [riskProfile, setRiskProfile] = useState<RiskProfile>(initialProfile);
   const [amountUsd, setAmountUsd] = useState(Number.isFinite(initialStake) ? initialStake : 100);
+  const [portfolioPolicy, setPortfolioPolicy] = useState<PortfolioPolicy>(() => {
+    const saved = window.localStorage.getItem("arcmind-portfolio-policy");
+    return saved === "paused" || saved === "reduced" || saved === "stopped" || saved === "monitoring" ? saved : "monitoring";
+  });
+  const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId>(() => {
+    const saved = window.localStorage.getItem("arcmind-strategy-id");
+    return STRATEGY_GALLERY.some((strategy) => strategy.id === saved) ? saved as StrategyId : "copyguard-balanced";
+  });
   const [portfolio, setPortfolio] = useState<ProtectedPortfolio | null>(null);
   const [portfolioReceipt, setPortfolioReceipt] = useState<PortfolioReceipt | null>(null);
   const [portfolioBusy, setPortfolioBusy] = useState(false);
@@ -450,6 +529,9 @@ export function ArcMindLive() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [judgeOpen, setJudgeOpen] = useState(false);
+  const [sourceProofOpen, setSourceProofOpen] = useState(false);
+  const [askPrompt, setAskPrompt] = useState<AskPromptId>("why-stop");
+  const [customQuestion, setCustomQuestion] = useState("");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => {
     const saved = window.localStorage.getItem("arcmind-execution-mode");
     return saved === "live" || saved === "walkthrough" ? saved : "walkthrough";
@@ -728,6 +810,11 @@ export function ArcMindLive() {
   }, [executionMode]);
 
   useEffect(() => {
+    window.localStorage.setItem("arcmind-portfolio-policy", portfolioPolicy);
+    window.localStorage.setItem("arcmind-strategy-id", selectedStrategyId);
+  }, [portfolioPolicy, selectedStrategyId]);
+
+  useEffect(() => {
     void loadSimulation(simLeaderId);
   }, [riskProfile, amountUsd, maxDrawdownPct, simLeaderId, payload?.latestDecision?.decisionHash]);
 
@@ -752,10 +839,223 @@ export function ArcMindLive() {
   const decisionReplay = payload?.decisionReplay ?? null;
   const visibleSources = sourceRadar?.sources.filter((source) => source.status !== "blocked").slice(0, 6) ?? [];
   const blockedSources = sourceRadar?.sources.filter((source) => source.status === "blocked") ?? [];
+  const configuredSources = sourceRadar?.sources.filter((source) => source.status === "configured") ?? [];
+  const selectedStrategy = STRATEGY_GALLERY.find((strategy) => strategy.id === selectedStrategyId) ?? STRATEGY_GALLERY[0]!;
+  const mode = payload?.status.mode ?? "paper";
+  const sourceProofRows = [
+    ...configuredSources.slice(0, 5).map((source) => ({
+      id: source.id,
+      label: source.name,
+      detail: source.signalContribution,
+      status: signalStatusLabel(source.status),
+      rfb: source.rfbFit.join(" + ") || source.category,
+      url: source.url,
+    })),
+    ...((decisionReplay?.events ?? []).slice(0, 3).map((event) => ({
+      id: event.id,
+      label: event.title,
+      detail: event.detail,
+      status: event.status,
+      rfb: "Decision replay",
+      url: event.explorerUrl,
+    }))),
+  ];
+  const lifecycleSteps = [
+    { id: "setup", label: "Risk setup", ok: Boolean(riskProfile && amountUsd > 0), detail: `${riskProfile} / $${amountUsd.toFixed(0)} USDC` },
+    { id: "wallet", label: "Wallet", ok: Boolean(walletAddress), detail: walletAddress ? short(walletAddress, 8, 6) : "optional until paid action" },
+    { id: "simulate", label: "Simulation", ok: Boolean(simulation), detail: simulation ? `${simulation.portfolio.copyAllocations.length} copy legs` : "waiting for backend" },
+    { id: "trace", label: "Trace proof", ok: Boolean(traceReceipt), detail: traceReceipt ? "paid trace receipt" : "locked until $0.01 payment" },
+    { id: "portfolio", label: "Portfolio", ok: Boolean(portfolioReceipt), detail: portfolioReceipt ? portfolioPolicy : "receipt required for live copy" },
+    { id: "monitor", label: "Monitoring", ok: Boolean(latest), detail: latest ? `${latest.primaryAction ?? latest.decision} ${timeAgo(latest.ts)}` : "waiting for agent loop" },
+  ];
+  const backtestRows = (payload?.decisions ?? []).slice(0, 6).map((decision, index, rows) => {
+    const previous = rows[index + 1];
+    const priceMovePct = previous?.ethPrice ? ((decision.ethPrice - previous.ethPrice) / previous.ethPrice) * 100 : 0;
+    const action = decision.primaryAction ?? decision.decision;
+    const protectedMove = action === "COPY" || action === "BUY"
+      ? priceMovePct
+      : action === "STOP" || action === "HOLD_USDC" || action === "MOVE_TO_USYC"
+        ? Math.min(0, priceMovePct) * 0.25
+        : priceMovePct * 0.45;
+    return {
+      id: decision.decisionHash ?? `${decision.ts}-${index}`,
+      ts: decision.ts,
+      action,
+      ethPrice: decision.ethPrice,
+      leader: decision.leaderScores?.[0]?.name ?? "portfolio",
+      blindPct: priceMovePct,
+      protectedPct: protectedMove,
+    };
+  });
+  const backtestSummary = backtestRows.reduce((acc, row) => ({
+    blind: acc.blind + row.blindPct,
+    protected: acc.protected + row.protectedPct,
+  }), { blind: 0, protected: 0 });
+  const rfbCoverage = [
+    { id: "RFB 06", label: "Social copy intelligence", value: `${leaders.length} leaders`, detail: "Select, weight, monitor, stop." },
+    { id: "RFB 04", label: "Adaptive portfolio", value: simulation ? `${simulation.portfolio.riskOff.weightPct}% risk-off` : "simulating", detail: "USDC/USYC allocation and rebalance logic." },
+    { id: "RFB 02", label: "Trader intelligence", value: `${configuredSources.length} sources`, detail: "Source credibility and reasoning trace proof." },
+    { id: "RFB 01", label: "Perp guardrails", value: `${maxDrawdownPct}% stop`, detail: "Funding, crowding, and liquidation-risk proxy." },
+    { id: "RFB 05", label: "Arb awareness", value: "route math next", detail: "Spread/slippage controls via App Kit/CCTP surfaces." },
+  ];
+  const askAnswer: EvidenceAnswer = useMemo(() => {
+    const leader = stoppedLeader ?? topCopy ?? leaders[0];
+    const source = sourceProofRows[0];
+    const replay = decisionReplay?.events.at(-1);
+    const baseEvidence = [
+      leader ? { label: leader.name, detail: `${actionLabel(leader.action)} at ${leader.weightPct}% weight; decay ${leader.degradationScore.toFixed(1)}. ${leader.reason}`, tag: "leader" } : null,
+      source ? { label: source.label, detail: source.detail, tag: source.rfb } : null,
+      replay ? { label: replay.title, detail: replay.detail, tag: replay.status } : null,
+      { label: "User guardrails", detail: `${riskProfile} profile, ${maxAllocationPct}% max allocation, ${maxDrawdownPct}% drawdown stop, policy ${portfolioPolicy}.`, tag: "settings" },
+    ].filter(Boolean) as EvidenceAnswer["evidence"];
+
+    if (askPrompt === "what-changed") {
+      return {
+        title: "What changed in the latest decision?",
+        answer: latest
+          ? `ArcMind's latest action is ${actionLabel(latest.primaryAction ?? latest.decision)} from the newest leader scores, market state, and replay checks. The decision happened ${timeAgo(latest.ts)} and is treated as ${latest.mode ?? mode} mode.`
+          : "ArcMind is waiting for a live decision before it can explain a change.",
+        evidence: baseEvidence,
+      };
+    }
+    if (askPrompt === "source-mattered") {
+      return {
+        title: "Which source mattered most?",
+        answer: source
+          ? `${source.label} is the clearest visible proof input right now because it contributes ${source.detail.toLowerCase()} This board only uses configured sources and replay events, so it does not pretend missing APIs are live.`
+          : "No configured source proof is available yet. Check Signal Source Radar for missing keys or wait for the next replay event.",
+        evidence: baseEvidence,
+      };
+    }
+    if (askPrompt === "lower-risk") {
+      return {
+        title: "How can I lower risk?",
+        answer: `Switch to USYC Defense, lower max allocation below ${maxAllocationPct}%, tighten the stop threshold below ${maxDrawdownPct}%, or set policy to Pause/Reduce. Those controls affect simulation and portfolio payloads but never create on-chain changes without wallet verification.`,
+        evidence: baseEvidence,
+      };
+    }
+    if (askPrompt === "copy-safe") {
+      return {
+        title: "When is COPY safe?",
+        answer: topCopy
+          ? `${topCopy.name} is currently the strongest COPY candidate at ${topCopy.weightPct}% because degradation is ${topCopy.degradationScore.toFixed(1)}. COPY stays safer when losses, drawdown, volatility, and signal divergence remain below the configured stop boundary.`
+          : "COPY is not currently preferred. ArcMind needs a leader with low degradation, acceptable liquidity, and source-backed confidence before increasing allocation.",
+        evidence: baseEvidence,
+      };
+    }
+    if (askPrompt === "custom") {
+      const clean = customQuestion.trim().toLowerCase();
+      const answer = clean.includes("source") || clean.includes("proof")
+        ? (source ? `${source.label}: ${source.detail}` : "No source proof rows are available yet.")
+        : clean.includes("risk") || clean.includes("safe")
+          ? `Current risk controls are ${riskProfile}, ${maxAllocationPct}% max allocation, ${maxDrawdownPct}% stop, and ${portfolioPolicy} policy.`
+          : clean.includes("leader") && leader
+            ? `${leader.name}: ${actionLabel(leader.action)} at ${leader.weightPct}% because ${leader.reason}`
+            : "Ask ArcMind answers only from the current payload: leaders, source proof, decision replay, alerts, and settings. Try asking about a leader, source, risk, or proof.";
+      return { title: customQuestion.trim() || "Custom evidence question", answer, evidence: baseEvidence };
+    }
+    return {
+      title: "Why stop or reduce a leader?",
+      answer: stoppedLeader
+        ? `${stoppedLeader.name} is blocked because its decay score reached ${stoppedLeader.degradationScore.toFixed(1)} and crossed the current guardrails. ArcMind would keep exposure away until recent losses, drawdown, liquidity, and signal divergence improve.`
+        : topCopy
+          ? `No leader is currently stopped. ${topCopy.name} remains copy-eligible, but CopyGuard still caps allocation at ${maxAllocationPct}% and keeps risk-off capital available.`
+          : "No COPY or STOP leader is available yet. ArcMind is waiting for backend leader scores.",
+      evidence: baseEvidence,
+    };
+  }, [
+    askPrompt,
+    customQuestion,
+    decisionReplay?.events,
+    leaders,
+    latest,
+    maxAllocationPct,
+    maxDrawdownPct,
+    mode,
+    portfolioPolicy,
+    riskProfile,
+    sourceProofRows,
+    stoppedLeader,
+    topCopy,
+  ]);
+  const sourceTotal = Math.max(1, (sourceRadar?.summary.total ?? configuredSources.length) || 1);
+  const signalCredibilityPct = Math.min(100, Math.round((configuredSources.length / sourceTotal) * 100));
+  const leaderEdgePct = topCopy ? Math.max(0, Math.round(100 - topCopy.degradationScore)) : 0;
+  const kellyCapPct = Math.max(1, Math.min(maxAllocationPct, Math.round((leaderEdgePct / 100) * maxAllocationPct * 0.5)));
+  const predictionSignals = [
+    {
+      label: "Confidence gap",
+      value: topCopy ? `${leaderEdgePct}%` : "waiting",
+      detail: topCopy ? `${topCopy.name} remains copy-eligible, but sizing is capped by decay and risk settings.` : "No copy-eligible leader yet.",
+      tag: "RFB 02",
+    },
+    {
+      label: "Kelly-style cap",
+      value: `${kellyCapPct}%`,
+      detail: `Recommended sizing ceiling based on live guardrails, never above your ${maxAllocationPct}% max allocation.`,
+      tag: "sizing",
+    },
+    {
+      label: "Source credibility",
+      value: `${signalCredibilityPct}%`,
+      detail: `${configuredSources.length} configured source inputs out of ${sourceRadar?.summary.total ?? configuredSources.length}. Missing keys lower confidence instead of being hidden.`,
+      tag: "proof",
+    },
+  ];
+  const marketTemplates = [
+    {
+      label: "Crypto leader decay",
+      question: "Will this leader underperform their cohort over the next 7 days?",
+      source: stoppedLeader?.name ?? topCopy?.name ?? "leader scores",
+      status: leaders.length ? "ready to draft" : "needs leader scores",
+    },
+    {
+      label: "Macro risk-off",
+      question: "Will CopyGuard route more than 40% to USDC/USYC in the next cycle?",
+      source: simulation ? `${simulation.portfolio.riskOff.weightPct}% current risk-off` : "portfolio simulation",
+      status: simulation ? "ready to draft" : "needs simulation",
+    },
+    {
+      label: "Source credibility",
+      question: "Will configured source coverage increase before submission?",
+      source: `${configuredSources.length} configured sources`,
+      status: sourceRadar?.summary.needsKey ? "needs API keys" : "ready to draft",
+    },
+    {
+      label: "Private desk/internal",
+      question: "Will a monitored trader breach a custom drawdown threshold?",
+      source: `${maxDrawdownPct}% user threshold`,
+      status: "read-only template",
+    },
+  ];
+  const parsedFundingRate = Number.parseFloat(String(latest?.fundingRate ?? "0"));
+  const fundingBps = Number.isFinite(parsedFundingRate) ? parsedFundingRate * (Math.abs(parsedFundingRate) < 1 ? 10_000 : 1) : 0;
+  const perpsRiskScore = Math.max(0, Math.min(100, Math.round((stoppedLeader?.degradationScore ?? topCopy?.degradationScore ?? 45) + Math.abs(fundingBps) * 1.5)));
+  const leverageCap = perpsRiskScore >= 70
+    ? "0.0x"
+    : riskProfile === "conservative"
+      ? "1.2x"
+      : riskProfile === "balanced"
+        ? "2.0x"
+        : "3.0x";
+  const perpsGuardrails = [
+    { label: "Liquidation risk", value: `${perpsRiskScore}/100`, detail: perpsRiskScore >= 70 ? "No new leverage; reduce or hold USDC." : "Leverage allowed only within the user stop boundary." },
+    { label: "Leverage cap", value: leverageCap, detail: `Derived from ${riskProfile} profile and current decay/funding stress.` },
+    { label: "Funding stress", value: `${fundingBps.toFixed(2)} bps`, detail: latest?.fundingRate ? "Read from latest market payload." : "No live funding field available; treated as neutral." },
+    { label: "Collateral action", value: perpsRiskScore >= 70 ? "Reduce" : perpsRiskScore >= 45 ? "Hold" : "Allow", detail: `Still requires manual approval: ${manualApproval ? "on" : "off"}.` },
+  ];
+  const arcFeePct = amountUsd > 0 ? (0.01 / amountUsd) * 100 : 0;
+  const slippageReservePct = riskProfile === "aggressive" ? 0.08 : riskProfile === "balanced" ? 0.12 : 0.18;
+  const requiredSpreadPct = arcFeePct + slippageReservePct;
+  const arbitrageRows = [
+    { label: "Route", value: "Arc USDC -> venue", detail: "Gateway/App Kit surface prepared; execution stays disabled until a real venue quote is configured." },
+    { label: "Min spread", value: `${requiredSpreadPct.toFixed(3)}%`, detail: `Arc fee drag ${arcFeePct.toFixed(3)}% plus ${slippageReservePct.toFixed(2)}% slippage reserve.` },
+    { label: "Quote status", value: configuredSources.length >= 2 ? "watching" : "needs quotes", detail: "Requires at least two executable venue quotes before detect-route-execute is honest." },
+    { label: "Reject reason", value: "No executable quote", detail: "The calculator shows route math but refuses to claim profit without a signed venue response." },
+  ];
   const mm = secsLeft !== null ? String(Math.floor(secsLeft / 60)).padStart(2, "0") : "--";
   const ss = secsLeft !== null ? String(secsLeft % 60).padStart(2, "0") : "--";
   const progress = secsLeft !== null ? Math.max(0, Math.min(100, (1 - secsLeft / (LOOP_MS / 1000)) * 100)) : 0;
-  const mode = payload?.status.mode ?? "paper";
   const isArcWallet = walletChain?.toLowerCase() === ARC_CHAIN_HEX;
   const motionClass = softMotion ? "am-motion" : "am-no-motion";
   const compactClass = compactMode ? "am-compact" : "";
@@ -800,6 +1100,15 @@ export function ArcMindLive() {
     calm: "Market calm lowers volatility penalty and may allow reduced leaders back into COPY with capped weights.",
     liquidity: "Liquidity drain punishes small leaders first, even when their win rate still looks high.",
   }[scenario];
+
+  function applyStrategy(strategy: StrategyCard) {
+    setSelectedStrategyId(strategy.id);
+    setRiskProfile(strategy.profile);
+    setMaxAllocationPct(strategy.maxAllocationPct);
+    setMaxDrawdownPct(strategy.maxDrawdownPct);
+    if (strategy.id === "usyc-defense") setPortfolioPolicy("reduced");
+    if (strategy.id === "copyguard-balanced") setPortfolioPolicy("monitoring");
+  }
 
   async function buyTrace() {
     if (isWalkthrough) {
@@ -1111,6 +1420,237 @@ export function ArcMindLive() {
 
         <section className="am-two-col">
           <Section>
+            <div className="am-panel-title"><Shield size={18} /> Portfolio Lifecycle <strong>{portfolioPolicy}</strong></div>
+            <div className="am-lifecycle">
+              {lifecycleSteps.map((step, index) => (
+                <div key={step.id} className={step.ok ? "is-ok" : ""}>
+                  <span>{step.ok ? <CheckCircle2 size={14} /> : index + 1}</span>
+                  <div><b>{step.label}</b><p>{step.detail}</p></div>
+                </div>
+              ))}
+            </div>
+            <div className="am-policy-controls">
+              {([
+                ["monitoring", "Monitor"],
+                ["paused", "Pause"],
+                ["reduced", "Reduce"],
+                ["stopped", "Stop"],
+              ] as Array<[PortfolioPolicy, string]>).map(([policy, label]) => (
+                <button key={policy} className={portfolioPolicy === policy ? "is-active" : ""} onClick={() => setPortfolioPolicy(policy)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="am-readonly-hint">
+              These are user policy controls for review and simulation. Live on-chain portfolio changes still require wallet payment and backend verification.
+            </p>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><BarChart3 size={18} /> RFB Coverage Map</div>
+            <div className="am-rfb-grid">
+              {rfbCoverage.map((item) => (
+                <div key={item.id}>
+                  <span>{item.id}</span>
+                  <b>{item.value}</b>
+                  <p>{item.label}</p>
+                  <small>{item.detail}</small>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </section>
+
+        <section className="am-three-col">
+          <Section>
+            <div className="am-panel-title"><SlidersHorizontal size={18} /> Strategy Gallery <strong>{selectedStrategy.rfb}</strong></div>
+            <p className="am-muted">
+              Prebuilt guardrail presets help a first-time user pick a copy-trading style without understanding every decay factor first.
+            </p>
+            <div className="am-strategy-list">
+              {STRATEGY_GALLERY.map((strategy) => (
+                <button key={strategy.id} className={selectedStrategyId === strategy.id ? "is-active" : ""} onClick={() => applyStrategy(strategy)}>
+                  <span>{strategy.rfb}</span>
+                  <b>{strategy.name}</b>
+                  <p>{strategy.thesis}</p>
+                  <small>{strategy.profile} - max {strategy.maxAllocationPct}% / {strategy.maxDrawdownPct}% stop</small>
+                </button>
+              ))}
+            </div>
+            <div className="am-selected-strategy">
+              <b>Best for</b>
+              <p>{selectedStrategy.bestFor}</p>
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><BarChart3 size={18} /> Backtest Replay Lab <strong>{backtestRows.length} decisions</strong></div>
+            <p className="am-muted">
+              Uses recent backend decisions to compare blind copying with CopyGuard-protected allocation. It is a review tool, not a PnL claim.
+            </p>
+            <div className="am-backtest-score">
+              <MiniStat label="Blind copy move" value={`${backtestSummary.blind >= 0 ? "+" : ""}${backtestSummary.blind.toFixed(2)}%`} accent={backtestSummary.blind >= 0 ? "#10B981" : "#EF4444"} />
+              <MiniStat label="Protected move" value={`${backtestSummary.protected >= 0 ? "+" : ""}${backtestSummary.protected.toFixed(2)}%`} accent={backtestSummary.protected >= 0 ? "#10B981" : "#EF4444"} />
+            </div>
+            <div className="am-backtest-list">
+              {backtestRows.map((row) => (
+                <div key={row.id}>
+                  <b>{actionLabel(row.action)} - {row.leader}</b>
+                  <span>{timeAgo(row.ts)} / ETH ${row.ethPrice.toLocaleString()}</span>
+                  <small>blind {row.blindPct >= 0 ? "+" : ""}{row.blindPct.toFixed(2)}% to protected {row.protectedPct >= 0 ? "+" : ""}{row.protectedPct.toFixed(2)}%</small>
+                </div>
+              ))}
+              {!backtestRows.length && <p className="am-muted">Waiting for enough decisions to build a replay.</p>}
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><Link2 size={18} /> Source Proof Board <strong>{sourceProofRows.length}</strong></div>
+            <p className="am-muted">
+              Judges can inspect which configured sources and decision-replay steps feed the current agent state.
+            </p>
+            <div className="am-proof-mini">
+              {sourceProofRows.slice(0, 4).map((row) => (
+                <a key={row.id} href={row.url ?? "#"} target={row.url ? "_blank" : undefined} rel="noreferrer">
+                  <span>{row.status}</span>
+                  <b>{row.label}</b>
+                  <small>{row.rfb}</small>
+                </a>
+              ))}
+              {!sourceProofRows.length && <p className="am-muted">No configured source proof rows yet.</p>}
+            </div>
+            <button className="am-secondary" onClick={() => setSourceProofOpen(true)}><ExternalLink size={14} /> Open full source proof</button>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
+          <Section>
+            <div className="am-panel-title"><Brain size={18} /> Ask ArcMind <strong>evidence-only</strong></div>
+            <p className="am-muted">
+              A bounded assistant for normal users: it explains decisions from current leader scores, source proof, replay events, alerts, and settings only.
+            </p>
+            <div className="am-ask-prompts">
+              {ASK_PROMPTS.map((prompt) => (
+                <button key={prompt.id} className={askPrompt === prompt.id ? "is-active" : ""} onClick={() => setAskPrompt(prompt.id)}>
+                  {prompt.label}
+                </button>
+              ))}
+            </div>
+            <div className="am-ask-input">
+              <input
+                value={customQuestion}
+                onChange={(e) => { setCustomQuestion(e.currentTarget.value); setAskPrompt("custom"); }}
+                placeholder="Ask about risk, a leader, source proof, or portfolio policy"
+                maxLength={140}
+              />
+              <button onClick={() => setAskPrompt("custom")} disabled={!customQuestion.trim()}>Ask</button>
+            </div>
+            <div className="am-answer-card">
+              <b>{askAnswer.title}</b>
+              <p>{askAnswer.answer}</p>
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><Link2 size={18} /> Answer Evidence <strong>{askAnswer.evidence.length}</strong></div>
+            <div className="am-evidence-list">
+              {askAnswer.evidence.map((item) => (
+                <div key={`${item.tag}-${item.label}`}>
+                  <span>{item.tag}</span>
+                  <b>{item.label}</b>
+                  <p>{item.detail}</p>
+                </div>
+              ))}
+            </div>
+            <p className="am-readonly-hint">
+              No model provider is claimed here. This is retrieval-style product UX over live app state, so the demo stays honest even without an LLM key.
+            </p>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
+          <Section>
+            <div className="am-panel-title"><TrendingUp size={18} /> Prediction Intelligence <strong>RFB 02</strong></div>
+            <p className="am-muted">
+              CopyGuard frames leader allocation like a trader-intelligence problem: confidence, source credibility, and capped sizing before any real trade.
+            </p>
+            <div className="am-prediction-grid">
+              {predictionSignals.map((signal) => (
+                <div key={signal.label}>
+                  <span>{signal.tag}</span>
+                  <b>{signal.value}</b>
+                  <p>{signal.label}</p>
+                  <small>{signal.detail}</small>
+                </div>
+              ))}
+            </div>
+            <div className="am-decision-note">
+              <b>Execution boundary</b>
+              <p>This is advisory intelligence only. Real prediction-market execution or builder-code attribution should be added only after a venue integration is configured.</p>
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><Link2 size={18} /> Market Vertical Drafts <strong>RFB 03</strong></div>
+            <div className="am-market-template-list">
+              {marketTemplates.map((template) => (
+                <div key={template.label}>
+                  <span>{template.status}</span>
+                  <b>{template.label}</b>
+                  <p>{template.question}</p>
+                  <small>Evidence seed: {template.source}</small>
+                </div>
+              ))}
+            </div>
+            <p className="am-readonly-hint">
+              These drafts turn current signals into possible markets; they are not live markets and do not claim liquidity, odds, or execution.
+            </p>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
+          <Section>
+            <div className="am-panel-title"><Shield size={18} /> Perps Liquidation Guard <strong>RFB 01</strong></div>
+            <p className="am-muted">
+              CopyGuard exposes leverage safety before a user copies a trader. It can recommend reduce/hold/allow, but does not place leveraged trades in this demo.
+            </p>
+            <div className="am-risk-grid">
+              {perpsGuardrails.map((row) => (
+                <div key={row.label}>
+                  <span>{row.label}</span>
+                  <b>{row.value}</b>
+                  <p>{row.detail}</p>
+                </div>
+              ))}
+            </div>
+            <div className="am-decision-note">
+              <b>Liquidation policy</b>
+              <p>When leader decay and funding stress rise together, ArcMind routes users toward STOP, HOLD_USDC, or MOVE_TO_USYC instead of pretending every signal should become leverage.</p>
+            </div>
+          </Section>
+
+          <Section>
+            <div className="am-panel-title"><CircleDollarSign size={18} /> Arbitrage Route Math <strong>RFB 05</strong></div>
+            <p className="am-muted">
+              A route checker for detect-route-execute-survive slippage. It shows costs and reject reasons before any cross-platform execution is allowed.
+            </p>
+            <div className="am-risk-grid">
+              {arbitrageRows.map((row) => (
+                <div key={row.label}>
+                  <span>{row.label}</span>
+                  <b>{row.value}</b>
+                  <p>{row.detail}</p>
+                </div>
+              ))}
+            </div>
+            <p className="am-readonly-hint">
+              This is intentionally strict: no profit claim is shown without a real second venue quote and executable route.
+            </p>
+          </Section>
+        </section>
+
+        <section className="am-two-col">
+          <Section>
             <div className="am-block-head">
               <div><h2><Activity size={18} /> Latest CopyGuard Decision</h2><p>{latest ? `${timeAgo(latest.ts)} - ETH $${latest.ethPrice?.toLocaleString() ?? "n/a"} - OI ${latest.oiValue ?? "n/a"}` : "Waiting for agent loop"}</p></div>
               {latest?.txHash && <a href={`${ARC_EXPLORER_TX}${latest.txHash}`} target="_blank" rel="noreferrer">Arc tx <ExternalLink size={13} /></a>}
@@ -1414,6 +1954,36 @@ export function ArcMindLive() {
         </footer>
       </main>
 
+      {sourceProofOpen && (
+        <div className="am-drawer" role="dialog" aria-modal="true">
+          <div className="am-drawer__backdrop" onClick={() => setSourceProofOpen(false)} />
+          <div className="am-drawer__panel">
+            <button className="am-close" onClick={() => setSourceProofOpen(false)}><X size={16} /></button>
+            <h2>Source Proof Board</h2>
+            <p className="am-muted">
+              A compact evidence ledger for the current live demo: configured data sources, decision replay steps, and which Agora RFB each proof supports.
+            </p>
+            <div className="am-proof-drawer-list">
+              {sourceProofRows.map((row) => (
+                <a key={row.id} href={row.url ?? "#"} target={row.url ? "_blank" : undefined} rel="noreferrer">
+                  <div>
+                    <span>{row.status}</span>
+                    <b>{row.label}</b>
+                  </div>
+                  <p>{row.detail}</p>
+                  <small>{row.rfb}</small>
+                </a>
+              ))}
+              {!sourceProofRows.length && <p className="am-muted">No proof rows are available yet. Check Signal Source Radar or wait for the next agent decision.</p>}
+            </div>
+            <div className="am-decision-note">
+              <b>Why this matters for judges</b>
+              <p>ArcMind exposes source provenance instead of only showing a black-box recommendation. That directly supports agentic sophistication, innovation, and the RFB 02/RFB 06 story.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedLeader && (
         <div className="am-drawer" role="dialog" aria-modal="true">
           <div className="am-drawer__backdrop" onClick={() => setSelectedLeader(null)} />
@@ -1426,6 +1996,20 @@ export function ArcMindLive() {
               <MiniStat label="Degradation" value={selectedLeader.degradationScore.toFixed(1)} accent={actionColor(selectedLeader.action)} />
               <MiniStat label="Weight" value={`${selectedLeader.weightPct}%`} accent="#60A5FA" />
               <MiniStat label="Action" value={actionLabel(selectedLeader.action)} accent={actionColor(selectedLeader.action)} />
+            </div>
+            <h3>Leader Profile</h3>
+            <div className="am-profile-metrics">
+              <div><span>Win rate</span><b>{selectedLeader.winRatePct !== undefined ? `${selectedLeader.winRatePct.toFixed(1)}%` : "n/a"}</b></div>
+              <div><span>Sharpe</span><b>{selectedLeader.sharpe !== undefined ? selectedLeader.sharpe.toFixed(2) : "n/a"}</b></div>
+              <div><span>Max drawdown</span><b>{selectedLeader.maxDrawdownPct !== undefined ? `${selectedLeader.maxDrawdownPct.toFixed(1)}%` : "n/a"}</b></div>
+              <div><span>Recent PnL</span><b>{selectedLeader.recentPnlPct !== undefined ? `${selectedLeader.recentPnlPct >= 0 ? "+" : ""}${selectedLeader.recentPnlPct.toFixed(1)}%` : "n/a"}</b></div>
+              <div><span>Liquidity</span><b>{selectedLeader.liquidityUsd !== undefined ? `$${selectedLeader.liquidityUsd.toLocaleString()}` : "n/a"}</b></div>
+              <div><span>Recent losses</span><b>{selectedLeader.recentLosses ?? "n/a"}</b></div>
+            </div>
+            <div className="am-rfb-pills">
+              <span>RFB 06 social intelligence</span>
+              <span>RFB 04 allocation guardrail</span>
+              <span>{selectedLeader.action === "STOP" ? "Risk blocked" : "Copy eligible"}</span>
             </div>
             <h3>Decay Factor Breakdown</h3>
             {selectedLeader.decayFactors ? (
@@ -1440,6 +2024,16 @@ export function ArcMindLive() {
             <div className="am-decision-note">
               <b>Why this action?</b>
               <p>{selectedLeader.reason}</p>
+            </div>
+            <h3>Evidence Used</h3>
+            <div className="am-proof-mini">
+              {sourceProofRows.slice(0, 3).map((row) => (
+                <a key={`${selectedLeader.id}-${row.id}`} href={row.url ?? "#"} target={row.url ? "_blank" : undefined} rel="noreferrer">
+                  <span>{row.status}</span>
+                  <b>{row.label}</b>
+                  <small>{row.detail}</small>
+                </a>
+              ))}
             </div>
             <h3>What would change it?</h3>
             <ul className="am-explain">
@@ -1669,6 +2263,69 @@ export function ArcMindLive() {
         .am-wallet-card div { display: flex; justify-content: space-between; gap: 12px; font-size: .78rem; line-height: 1.45; }
         .am-wallet-card span, .am-kv span, .am-stat__label { color: #7890ad; }
         .am-wallet-card a { color: #60A5FA; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+        .am-lifecycle { display: grid; gap: 9px; }
+        .am-lifecycle > div { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: center; border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 10px; }
+        .am-lifecycle > div.is-ok { border-color: #10B98155; background: #10B98110; }
+        .am-lifecycle > div > span { width: 26px; height: 26px; border: 1px solid #26364d; border-radius: 999px; display: grid; place-items: center; color: #9fb2cc; font-weight: 950; font-size: .72rem; }
+        .am-lifecycle b { display: block; line-height: 1.25; }
+        .am-lifecycle p { color: #9fb2cc; margin: 3px 0 0; font-size: .74rem; line-height: 1.4; overflow-wrap: anywhere; }
+        .am-policy-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+        .am-policy-controls button { border: 1px solid #26364d; background: #101827; color: #d8e4f6; border-radius: 10px; padding: 9px 10px; font-weight: 900; cursor: pointer; }
+        .am-policy-controls button.is-active { border-color: #60A5FA66; background: #60A5FA18; color: #bfdbfe; }
+        .am-rfb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .am-rfb-grid > div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 12px; min-width: 0; }
+        .am-rfb-grid span { display: inline-flex; border: 1px solid #60A5FA44; background: #60A5FA12; color: #bfdbfe; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 8px; }
+        .am-rfb-grid b { display: block; color: #dbeafe; line-height: 1.25; overflow-wrap: anywhere; }
+        .am-rfb-grid p { color: #f5f7fb; margin: 7px 0 3px; font-size: .78rem; line-height: 1.35; }
+        .am-rfb-grid small { display: block; color: #7890ad; line-height: 1.4; font-size: .68rem; }
+        .am-strategy-list { display: grid; gap: 9px; margin-top: 12px; }
+        .am-strategy-list button { border: 1px solid #1b2a40; background: #08111e; color: inherit; border-radius: 12px; padding: 12px; text-align: left; cursor: pointer; }
+        .am-strategy-list button.is-active { border-color: #10B98166; background: #10B98112; }
+        .am-strategy-list span { display: inline-flex; color: #93c5fd; border: 1px solid #60A5FA44; background: #60A5FA12; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 7px; }
+        .am-strategy-list b { display: block; color: #dbeafe; line-height: 1.25; }
+        .am-strategy-list p { color: #9fb2cc; margin: 6px 0; font-size: .76rem; line-height: 1.45; }
+        .am-strategy-list small { color: #7890ad; font-size: .68rem; line-height: 1.35; }
+        .am-selected-strategy { border: 1px solid #10B98144; background: #10B98110; border-radius: 12px; padding: 11px 12px; margin-top: 12px; }
+        .am-selected-strategy p { color: #a7f3d0; margin: 5px 0 0; font-size: .76rem; line-height: 1.45; }
+        .am-backtest-score { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+        .am-backtest-list, .am-proof-mini, .am-proof-drawer-list { display: grid; gap: 9px; }
+        .am-backtest-list > div, .am-proof-mini a, .am-proof-drawer-list a { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 11px 12px; min-width: 0; color: inherit; text-decoration: none; }
+        .am-backtest-list b, .am-proof-mini b, .am-proof-drawer-list b { display: block; color: #dbeafe; line-height: 1.3; overflow-wrap: anywhere; }
+        .am-backtest-list span { display: block; color: #7890ad; margin-top: 4px; font-size: .7rem; line-height: 1.35; }
+        .am-backtest-list small, .am-proof-mini small, .am-proof-drawer-list small { display: block; color: #9fb2cc; margin-top: 5px; font-size: .68rem; line-height: 1.4; overflow-wrap: anywhere; }
+        .am-proof-mini { margin: 12px 0; }
+        .am-proof-mini span, .am-proof-drawer-list span { display: inline-flex; color: #bfdbfe; border: 1px solid #60A5FA44; background: #60A5FA12; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 7px; text-transform: uppercase; }
+        .am-proof-drawer-list a { display: grid; gap: 3px; }
+        .am-proof-drawer-list a > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
+        .am-proof-drawer-list p { color: #9fb2cc; margin: 4px 0 0; font-size: .76rem; line-height: 1.45; }
+        .am-ask-prompts { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+        .am-ask-prompts button { border: 1px solid #26364d; background: #101827; color: #d8e4f6; border-radius: 999px; padding: 8px 10px; font-size: .72rem; font-weight: 900; cursor: pointer; }
+        .am-ask-prompts button.is-active { border-color: #8B5CF666; background: #8B5CF61f; color: #ddd6fe; }
+        .am-ask-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin: 12px 0; }
+        .am-ask-input input { min-width: 0; border: 1px solid #1b2a40; background: #08111e; color: #dbeafe; border-radius: 10px; padding: 11px 12px; outline: 0; }
+        .am-ask-input button { border: 1px solid #8B5CF655; background: #8B5CF61f; color: #ddd6fe; border-radius: 10px; padding: 10px 12px; font-weight: 900; cursor: pointer; }
+        .am-ask-input button:disabled { opacity: .55; cursor: not-allowed; }
+        .am-answer-card { border: 1px solid #8B5CF655; background: #8B5CF614; border-radius: 13px; padding: 13px; }
+        .am-answer-card b { color: #ddd6fe; line-height: 1.3; }
+        .am-answer-card p { color: #dbeafe; margin: 7px 0 0; line-height: 1.55; font-size: .84rem; }
+        .am-evidence-list { display: grid; gap: 9px; }
+        .am-evidence-list div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 11px 12px; }
+        .am-evidence-list span { display: inline-flex; color: #bfdbfe; border: 1px solid #60A5FA44; background: #60A5FA12; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 7px; text-transform: uppercase; }
+        .am-evidence-list b { display: block; color: #dbeafe; line-height: 1.3; overflow-wrap: anywhere; }
+        .am-evidence-list p { color: #9fb2cc; margin: 5px 0 0; font-size: .76rem; line-height: 1.45; }
+        .am-prediction-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+        .am-prediction-grid div, .am-market-template-list div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 12px; min-width: 0; }
+        .am-prediction-grid span, .am-market-template-list span { display: inline-flex; color: #a7f3d0; border: 1px solid #10B98144; background: #10B98112; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 8px; text-transform: uppercase; }
+        .am-prediction-grid b { display: block; color: #dbeafe; font-size: 1.2rem; line-height: 1; overflow-wrap: anywhere; }
+        .am-prediction-grid p, .am-market-template-list p { color: #f5f7fb; margin: 7px 0 4px; font-size: .78rem; line-height: 1.35; }
+        .am-prediction-grid small, .am-market-template-list small { display: block; color: #7890ad; font-size: .68rem; line-height: 1.4; overflow-wrap: anywhere; }
+        .am-market-template-list { display: grid; gap: 9px; }
+        .am-market-template-list b { display: block; color: #dbeafe; line-height: 1.3; overflow-wrap: anywhere; }
+        .am-risk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+        .am-risk-grid div { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 12px; min-width: 0; }
+        .am-risk-grid span { display: block; color: #7890ad; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 900; margin-bottom: 6px; }
+        .am-risk-grid b { display: block; color: #dbeafe; font-size: 1.05rem; line-height: 1.15; overflow-wrap: anywhere; }
+        .am-risk-grid p { color: #9fb2cc; margin: 6px 0 0; font-size: .76rem; line-height: 1.45; }
         .am-block-head { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
         .am-block-head h2 { margin: 0; font-size: 1.05rem; }
         .am-block-head p { color: #7890ad; font-size: .75rem; margin: 4px 0 0; }
@@ -1783,6 +2440,12 @@ export function ArcMindLive() {
         .am-factor-track span { display: block; height: 100%; border-radius: inherit; }
         .am-decision-note { border: 1px solid #26364d; background: #101827; border-radius: 13px; padding: 12px; margin-top: 12px; }
         .am-decision-note p { color: #9fb2cc; margin: 6px 0 0; line-height: 1.5; font-size: .8rem; }
+        .am-profile-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+        .am-profile-metrics div { border: 1px solid #1b2a40; background: #08111e; border-radius: 11px; padding: 10px; min-width: 0; }
+        .am-profile-metrics span { display: block; color: #7890ad; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 900; margin-bottom: 4px; }
+        .am-profile-metrics b { color: #dbeafe; overflow-wrap: anywhere; }
+        .am-rfb-pills { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 0; }
+        .am-rfb-pills span { border: 1px solid #60A5FA44; background: #60A5FA12; color: #bfdbfe; border-radius: 999px; padding: 6px 8px; font-size: .68rem; font-weight: 900; line-height: 1.2; }
         .am-explain { padding: 0; list-style: none; display: grid; gap: 10px; }
         .am-explain li { display: flex; gap: 8px; color: #9fb2cc; line-height: 1.45; }
         .am-checklist, .am-link-list, .am-proof-list { display: grid; gap: 10px; margin: 16px 0 20px; }
@@ -1826,7 +2489,7 @@ export function ArcMindLive() {
           .am-topbar { flex-wrap: wrap; }
           .am-mode-switch { min-width: 100%; order: 5; }
           .am-judgebtn, .am-walletbtn { flex: 1 1 auto; justify-content: center; }
-          .am-controls, .am-hash-grid, .am-stat-grid, .am-traction-grid, .am-profile-grid, .am-setting-grid, .am-feedback-prompts, .am-sim-leaders, .am-sim-result, .am-readiness-checks, .am-source-grid { grid-template-columns: 1fr; }
+          .am-controls, .am-hash-grid, .am-stat-grid, .am-traction-grid, .am-profile-grid, .am-setting-grid, .am-feedback-prompts, .am-sim-leaders, .am-sim-result, .am-readiness-checks, .am-source-grid, .am-rfb-grid, .am-policy-controls, .am-backtest-score, .am-profile-metrics, .am-ask-input, .am-prediction-grid, .am-risk-grid { grid-template-columns: 1fr; }
           .am-share-card { grid-template-columns: 1fr; }
           .am-share-card button { justify-content: center; }
           .am-segment { grid-template-columns: 1fr; }
