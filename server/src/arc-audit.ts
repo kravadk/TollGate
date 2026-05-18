@@ -66,13 +66,19 @@ function leaderNameList(leaders: AnyRecord[], action?: string): string {
   return selected.map((leader) => asString(leader["name"]) ?? "Unknown leader").slice(0, 3).join(", ") || "none";
 }
 
+function verifiedLeaderScores(decision: AnyRecord): AnyRecord[] {
+  const source = typeof decision["leaderSource"] === "object" && decision["leaderSource"] ? decision["leaderSource"] as AnyRecord : null;
+  if (asString(source?.["status"]) !== "configured") return [];
+  return Array.isArray(decision["leaderScores"]) ? decision["leaderScores"] as AnyRecord[] : [];
+}
+
 export function buildArcDecisionReplay(decision: AnyRecord | null | undefined): ArcDecisionReplay | null {
   if (!decision) return null;
   const ts = asString(decision["ts"]);
   const decisionHash = asString(decision["decisionHash"]);
   const mode = asString(decision["mode"]);
-  const leaders = Array.isArray(decision["leaderScores"]) ? decision["leaderScores"] as AnyRecord[] : [];
-  const allocation = Array.isArray(decision["allocation"]) ? decision["allocation"] as AnyRecord[] : [];
+  const leaders = verifiedLeaderScores(decision);
+  const allocation = leaders.length && Array.isArray(decision["allocation"]) ? decision["allocation"] as AnyRecord[] : [];
   const signals = typeof decision["signals"] === "object" && decision["signals"] ? decision["signals"] as AnyRecord : decision;
   const ethPrice = asNumber(signals["ethPrice"]) ?? asNumber(decision["ethPrice"]);
   const fundingRate = asString(decision["fundingRate"]) ?? (asNumber(signals["fundingRate"]) != null ? String(asNumber(signals["fundingRate"])) : undefined);
@@ -98,7 +104,7 @@ export function buildArcDecisionReplay(decision: AnyRecord | null | undefined): 
       title: "Leaders scored",
       detail: leaders.length
         ? `${leaders.length} leaders scored. Top copy: ${asString(topCopy?.["name"]) ?? "none"}. Stopped: ${leaderNameList(leaders, "STOP")}.`
-        : "No leader scores were available for this decision.",
+        : "No verified leader feed is configured for this decision; synthetic/legacy leader rows are not used.",
       ts,
       status: "scored",
     },
@@ -195,7 +201,7 @@ export function buildArcAlerts(decisions: AnyRecord[], degradationThreshold = 50
   if (!latest) return [];
   const ts = asString(latest["ts"]);
   const alerts: ArcAlert[] = [];
-  const leaderScores = Array.isArray(latest["leaderScores"]) ? latest["leaderScores"] as AnyRecord[] : [];
+  const leaderScores = verifiedLeaderScores(latest);
 
   for (const leader of leaderScores) {
     const action = asString(leader["action"]);

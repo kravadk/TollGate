@@ -1,9 +1,8 @@
 /**
  * ArcMind autonomous decision loop.
  *
- * The loop always creates a local CopyGuard decision for the live demo. When
- * ARC_PRIVATE_KEY and ARC_AGENT_ID are configured, it also records the decision
- * hash on Arc L1 through ArcMindRegistry.recordDecision().
+ * The loop records live market observations. Copy-leader rows are loaded only
+ * from a configured external feed; the server must not invent leader metrics.
  */
 
 import { createHash } from "node:crypto";
@@ -17,6 +16,7 @@ const ARC_RPC = process.env.ARC_RPC_URL ?? "https://rpc.testnet.arc-node.thecant
 const ARC_KEY = process.env.ARC_PRIVATE_KEY ?? "";
 const AGENT_ID = process.env.ARC_AGENT_ID ?? "";
 const REGISTRY = process.env.VITE_ARC_REGISTRY_ADDRESS ?? "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
+const LEADER_FEED_URL = process.env.ARC_LEADER_FEED_URL ?? "";
 
 const REGISTRY_ABI = [
   "function recordDecision(bytes32 agentId, bytes32 decisionHash) external returns (uint256 index)",
@@ -29,6 +29,15 @@ export const ARC_AGENT_INTERVAL_MS = Number(process.env.ARC_AGENT_INTERVAL_MS ??
 let prevEthPrice: number | null = null;
 let arcWallet: ethers.Wallet | null = null;
 let schedulerStop: (() => void) | null = null;
+
+type LeaderSourceStatus = "configured" | "missing" | "unavailable";
+type LeaderSource = {
+  status: LeaderSourceStatus;
+  provider: string;
+  detail: string;
+  sourceUrl?: string;
+  requiredEnv?: string[];
+};
 
 function sha256Hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
@@ -104,41 +113,125 @@ function makeDecision(ethPrice: number, oi: { fundingRate: string } | null): "BU
   return "HOLD";
 }
 
-function defaultCopyLeaders(ethPrice: number, fundingRate: number): CopyGuardLeader[] {
-  const crowdingPenalty = Math.abs(fundingRate) > 0.00018 ? 1 : 0;
-  const priceBias = prevEthPrice !== null ? ((ethPrice - prevEthPrice) / prevEthPrice) * 100 : 0;
-  return [
-    {
-      id: "hl_whale_alpha",
-      name: "HL Whale Alpha",
-      winRatePct: 68,
-      sharpe: 2.1,
-      maxDrawdownPct: priceBias < -1 ? 14 : 9,
-      recentPnlPct: priceBias > 0 ? 5.8 : 1.6,
-      liquidityUsd: 2_500_000,
-      recentLosses: priceBias < -1 ? 2 : 1,
-    },
-    {
-      id: "hl_crowded_momentum",
-      name: "Crowded Momentum",
-      winRatePct: 61,
-      sharpe: 1.4,
-      maxDrawdownPct: 18 + crowdingPenalty * 13,
-      recentPnlPct: priceBias < 0 ? -6.4 : 2.2,
-      liquidityUsd: 1_200_000,
-      recentLosses: 2 + crowdingPenalty * 3,
-    },
-    {
-      id: "hl_low_liq_sprinter",
-      name: "Low-Liq Sprinter",
-      winRatePct: 74,
-      sharpe: 0.9,
-      maxDrawdownPct: 32,
-      recentPnlPct: -9.5,
-      liquidityUsd: 90_000,
-      recentLosses: 5,
-    },
-  ];
+function cleanString(value: unknown, max = 160): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/[^\x20-\x7E]/g, "");
+  return trimmed ? trimmed.slice(0, max) : null;
+}
+
+function finiteNumber(value: unknown): number | null {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickNumber(raw: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = finiteNumber(raw[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function normalizeExternalLeader(raw: unknown, index: number): CopyGuardLeader | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const address = cleanString(row["address"] ?? row["wallet"] ?? row["account"], 80) ?? undefined;
+  const id = cleanString(row["id"], 80) ?? address ?? `leader-${index + 1}`;
+  const name = cleanString(row["name"] ?? row["displayName"] ?? row["label"], 80)
+    ?? (address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null);
+  const winRatePct = pickNumber(row, ["winRatePct", "winRate", "win_rate_pct"]);
+  const sharpe = pickNumber(row, ["sharpe", "sharpeRatio", "sharpe_ratio"]);
+  const maxDrawdownPct = pickNumber(row, ["maxDrawdownPct", "maxDrawdown", "max_drawdown_pct"]);
+  const recentPnlPct = pickNumber(row, ["recentPnlPct", "recentPnl", "recent_pnl_pct", "pnl7dPct"]);
+  const liquidityUsd = pickNumber(row, ["liquidityUsd", "liquidity", "aumUsd", "notionalUsd"]);
+  const recentLosses = pickNumber(row, ["recentLosses", "lossStreak", "losses7d"]);
+  if (!name || winRatePct === null || sharpe === null || maxDrawdownPct === null || recentPnlPct === null || liquidityUsd === null || recentLosses === null) {
+    return null;
+  }
+  return {
+    id,
+    name,
+    address,
+    winRatePct,
+    sharpe,
+    maxDrawdownPct,
+    recentPnlPct,
+    liquidityUsd,
+    recentLosses: Math.max(0, Math.round(recentLosses)),
+    source: cleanString(row["source"], 80) ?? "External leader feed",
+    sourceUrl: cleanString(row["sourceUrl"] ?? row["url"], 240) ?? LEADER_FEED_URL,
+    metricsNote: cleanString(row["metricsNote"], 240) ?? "Metrics are supplied by ARC_LEADER_FEED_URL; ArcMind only scores and caps allocation.",
+  };
+}
+
+async function fetchCopyLeaders(): Promise<{ leaders: CopyGuardLeader[]; source: LeaderSource }> {
+  if (!LEADER_FEED_URL) {
+    return {
+      leaders: [],
+      source: {
+        status: "missing",
+        provider: "External leader feed",
+        detail: "ARC_LEADER_FEED_URL is not configured, so ArcMind hides copy-leader rows instead of generating sample traders.",
+        requiredEnv: ["ARC_LEADER_FEED_URL"],
+      },
+    };
+  }
+
+  try {
+    const res = await fetch(LEADER_FEED_URL, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      return {
+        leaders: [],
+        source: {
+          status: "unavailable",
+          provider: "External leader feed",
+          detail: `ARC_LEADER_FEED_URL returned HTTP ${res.status}; no synthetic leaders were created.`,
+          sourceUrl: LEADER_FEED_URL,
+          requiredEnv: ["ARC_LEADER_FEED_URL"],
+        },
+      };
+    }
+    const data = await res.json() as unknown;
+    const rows = Array.isArray(data)
+      ? data
+      : data && typeof data === "object" && Array.isArray((data as { leaders?: unknown[] }).leaders)
+        ? (data as { leaders: unknown[] }).leaders
+        : [];
+    const leaders = rows
+      .map((row, index) => normalizeExternalLeader(row, index))
+      .filter(Boolean) as CopyGuardLeader[];
+    return {
+      leaders,
+      source: leaders.length
+        ? {
+          status: "configured",
+          provider: "External leader feed",
+          detail: `${leaders.length} verified leader rows loaded from ARC_LEADER_FEED_URL.`,
+          sourceUrl: LEADER_FEED_URL,
+        }
+        : {
+          status: "unavailable",
+          provider: "External leader feed",
+          detail: "ARC_LEADER_FEED_URL responded, but no rows matched the required metric schema.",
+          sourceUrl: LEADER_FEED_URL,
+          requiredEnv: ["ARC_LEADER_FEED_URL"],
+        },
+    };
+  } catch (err) {
+    return {
+      leaders: [],
+      source: {
+        status: "unavailable",
+        provider: "External leader feed",
+        detail: `ARC_LEADER_FEED_URL failed: ${err instanceof Error ? err.message : "unknown error"}. No synthetic leaders were created.`,
+        sourceUrl: LEADER_FEED_URL,
+        requiredEnv: ["ARC_LEADER_FEED_URL"],
+      },
+    };
+  }
 }
 
 function getArcWallet(): ethers.Wallet | null {
@@ -160,7 +253,7 @@ function appendLog(entry: Record<string, unknown>): void {
 
 export async function arcAgentLoop(): Promise<void> {
   const tag = "[arc-loop]";
-  const [ethPrice, hlOI] = await Promise.all([fetchEthPrice(), fetchHyperliquidOI()]);
+  const [ethPrice, hlOI, leaderFeed] = await Promise.all([fetchEthPrice(), fetchHyperliquidOI(), fetchCopyLeaders()]);
   if (!ethPrice) {
     console.warn(`${tag} Could not fetch ETH price; skipping tick`);
     return;
@@ -181,11 +274,11 @@ export async function arcAgentLoop(): Promise<void> {
     openInterestUsd: hlOI?.oiUsd ?? 0,
     fundingRate,
     volatilityPct: previousEthPrice ? Math.min(12, Math.abs(ethPriceChangePct) * 3 + 2) : 2.5,
-    polymarketYesPct: decision === "BUY" ? 58 : decision === "SELL" ? 42 : 50,
+    polymarketYesPct: null,
   };
   const copyGuard = buildCopyGuardDecision({
     signals: copyGuardSignals,
-    leaders: defaultCopyLeaders(ethPrice, fundingRate),
+    leaders: leaderFeed.leaders,
     riskProfile: "balanced",
   });
 
@@ -199,6 +292,7 @@ export async function arcAgentLoop(): Promise<void> {
     agentId: AGENT_ID,
     leaderScores: copyGuard.leaderScores,
     allocation: copyGuard.allocation,
+    leaderSource: leaderFeed.source,
     reasoningTrace: copyGuard.reasoningTrace,
     copyGuardHash: copyGuard.decisionHash,
   };

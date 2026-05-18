@@ -18,7 +18,7 @@ const baseSignals: CopyGuardSignals = {
 
 const strongLeader: CopyGuardLeader = {
   id: "hl_whale_alpha",
-  name: "HL Whale Alpha",
+  name: "Verified Leader Alpha",
   winRatePct: 68,
   sharpe: 2.1,
   maxDrawdownPct: 9,
@@ -130,6 +130,6 @@ describe("Arc CopyGuard scoring", () => {
     assert.ok(decision.decisionHash.startsWith("0x"));
     assert.equal(decision.decisionHash.length, 66);
     assert.ok(decision.leaderScores.length >= 2);
-    assert.ok(decision.reasoningTrace.includes("HL Whale Alpha"));
+    assert.ok(decision.reasoningTrace.includes("Verified Leader Alpha"));
   });
 });

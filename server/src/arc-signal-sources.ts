@@ -35,13 +35,29 @@ export type ArcSignalSourceRadar = {
 type EnvLike = Record<string, string | undefined>;
 
 type CatalogItem = Omit<ArcSignalSource, "status"> & {
-  tokenKind?: "apify";
+  tokenKind?: "apify" | "leader_feed";
   blocked?: boolean;
 };
 
 const APIFY_TOKEN_ENV = "APIFY_TOKEN";
+const LEADER_FEED_ENV = "ARC_LEADER_FEED_URL";
 
 const CATALOG: CatalogItem[] = [
+  {
+    id: "copy-leader-feed",
+    name: "Copy Leader Performance Feed",
+    provider: "External JSON / Nansen export",
+    category: "market",
+    tokenKind: "leader_feed",
+    requiredEnv: LEADER_FEED_ENV,
+    url: "https://docs.nansen.ai/api/hyperliquid/hyperliquid-leaderboard",
+    rfbFit: ["RFB 06", "RFB 04"],
+    userValue: "Shows only verified copy leaders with supplied performance metrics instead of sample personas.",
+    judgeValue: "Proves the copy-trading layer has a real data boundary and does not manufacture leader profiles.",
+    signalContribution: "Feeds qualityScore, degradationScore, allocation caps, STOP/REDUCE/COPY actions, and leader profile pages.",
+    riskLevel: "medium",
+    riskNote: "Feed must include win rate, Sharpe, drawdown, recent PnL, liquidity, and recent losses per leader.",
+  },
   {
     id: "reddit-trends",
     name: "Reddit Searcher / Subreddit Scraper",
@@ -202,6 +218,7 @@ function statusFor(item: CatalogItem, env: EnvLike, mode: ArcSignalSourceRadar["
   if (item.blocked) return "blocked";
   if (mode === "off") return "watchlist";
   if (item.tokenKind === "apify" && !env[APIFY_TOKEN_ENV]) return "needs_key";
+  if (item.tokenKind === "leader_feed" && !env[LEADER_FEED_ENV]) return "needs_key";
   if (mode === "live") return "configured";
   return "watchlist";
 }
@@ -229,11 +246,13 @@ export function buildArcSignalSourceRadar(env: EnvLike = process.env): ArcSignal
   );
 
   const missing = new Set<string>();
-  if (sources.some((source) => source.status === "needs_key")) missing.add(APIFY_TOKEN_ENV);
+  if (sources.some((source) => source.status === "needs_key" && source.requiredEnv === APIFY_TOKEN_ENV)) missing.add(APIFY_TOKEN_ENV);
+  if (sources.some((source) => source.status === "needs_key" && source.requiredEnv === LEADER_FEED_ENV)) missing.add(LEADER_FEED_ENV);
   if (mode !== "live") missing.add("ARC_SIGNAL_SOURCE_MODE=live");
 
   const recommendedActions = [
     ...(missing.has(APIFY_TOKEN_ENV) ? ["Add APIFY_TOKEN to enable Apify-backed social/news source checks."] : []),
+    ...(missing.has(LEADER_FEED_ENV) ? ["Add ARC_LEADER_FEED_URL to enable real copy-leader scoring; synthetic leaders stay hidden until then."] : []),
     ...(mode !== "live" ? ["Set ARC_SIGNAL_SOURCE_MODE=live after validating quotas, caching, and source terms."] : []),
     "Persist source ids, timestamps, and links in each paid reasoning trace.",
     "Keep paywalled/bypass actors blocked; use headline/link discovery instead.",

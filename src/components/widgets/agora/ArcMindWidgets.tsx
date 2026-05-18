@@ -681,9 +681,9 @@ interface FetchedSignal {
 }
 
 interface SignalsPayload {
-  polymarket: { question: string; yesPct: number; volume24h: number };
-  whale: { netFlow: number; direction: "bullish" | "bearish" | "neutral" };
-  ethPrice: number;
+  polymarket?: { available?: boolean; question?: string | null; yesPct?: number | null; volume24h?: number | null };
+  whale?: { available?: boolean; netFlow?: number | null; direction?: "bullish" | "bearish" | "neutral" };
+  ethPrice?: number | null;
 }
 
 export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) {
@@ -725,9 +725,14 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
           const sData = await sRes.json() as SignalsPayload;
           setSignalsData(sData);
           if (src.id === "polymarket") {
-            value = `${sData.polymarket.yesPct}% YES · vol $${(sData.polymarket.volume24h / 1000).toFixed(0)}k`;
+            if (sData.polymarket?.available && typeof sData.polymarket.yesPct === "number") {
+              const volume = typeof sData.polymarket.volume24h === "number" ? sData.polymarket.volume24h : 0;
+              value = `${sData.polymarket.yesPct}% YES · vol $${(volume / 1000).toFixed(0)}k`;
+            }
           } else {
-            value = `${sData.whale.netFlow.toFixed(1)}M net · ${sData.whale.direction}`;
+            if (sData.whale?.available && typeof sData.whale.netFlow === "number") {
+              value = `${sData.whale.netFlow.toFixed(1)}M net · ${sData.whale.direction ?? "neutral"}`;
+            }
           }
         }
       } catch {
@@ -755,16 +760,16 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
     let direction: "BULLISH" | "BEARISH" | "HOLD" = "HOLD";
     let ethStr = "";
     if (signalsData) {
-      const whaleBull = signalsData.whale.direction === "bullish";
-      const whaleBear = signalsData.whale.direction === "bearish";
-      const polyBull  = signalsData.polymarket.yesPct > 55;
-      const polyBear  = signalsData.polymarket.yesPct < 45;
+      const whaleBull = signalsData.whale?.available && signalsData.whale.direction === "bullish";
+      const whaleBear = signalsData.whale?.available && signalsData.whale.direction === "bearish";
+      const polyBull  = signalsData.polymarket?.available && typeof signalsData.polymarket.yesPct === "number" && signalsData.polymarket.yesPct > 55;
+      const polyBear  = signalsData.polymarket?.available && typeof signalsData.polymarket.yesPct === "number" && signalsData.polymarket.yesPct < 45;
       if (whaleBull && polyBull) direction = "BULLISH";
       else if (whaleBear && polyBear) direction = "BEARISH";
       else if (whaleBull || polyBull) direction = "BULLISH";
       else if (whaleBear || polyBear) direction = "BEARISH";
       else direction = "HOLD";
-      if (signalsData.ethPrice) ethStr = ` · ETH $${signalsData.ethPrice.toLocaleString()}`;
+      if (typeof signalsData.ethPrice === "number") ethStr = ` · ETH $${signalsData.ethPrice.toLocaleString()}`;
     } else {
       setDecision("ArcMind needs at least one live `/api/signals` source before composing a trade decision.");
       return;
@@ -849,15 +854,10 @@ export function ArcMindSignalHubWidget({ workspace }: { workspace: Workspace }) 
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 if (!queryText.trim() || signals.length === 0) return;
-                const q = queryText.trim().toLowerCase();
-                const isBullish = q.includes("buy") || q.includes("bull") || q.includes("long") || q.includes("rise");
-                const isBearish = q.includes("sell") || q.includes("bear") || q.includes("short") || q.includes("fall");
                 const oi = signals.find(s => s.id === "hyperliquid")?.value ?? "unknown OI";
                 const wh = signals.find(s => s.id === "onchain")?.value ?? "neutral whale flow";
                 const poly = signals.find(s => s.id === "polymarket")?.value ?? "no sentiment";
-                if (isBullish) setQueryAnswer(`Based on current signals (${oi}, ${wh}), ArcMind leans BULLISH. Polymarket: ${poly}. Recommend: add 10-15% ETH on next dip. Confidence: 68%.`);
-                else if (isBearish) setQueryAnswer(`Based on current signals (${oi}), ArcMind sees BEARISH pressure. Whale flow: ${wh}. Recommend: reduce ETH, hold USDC. Confidence: 61%.`);
-                else setQueryAnswer(`Signals mixed: OI=${oi}, whale=${wh}, sentiment=${poly}. ArcMind recommends HOLD and waiting for next 30-min decision cycle. Kelly sizing: 0%.`);
+                setQueryAnswer(`Available live inputs: OI=${oi}, whale=${wh}, sentiment=${poly}. ArcMind only answers from fetched sources here; no unsourced confidence score or fake trade recommendation is generated.`);
                 setQueryText("");
               }
             }}
@@ -1332,7 +1332,7 @@ export function ArcMindPnLWidget() {
       let ethNow = liveEth;
       try {
         const cg = await fetch(`${SERVER_URL_MA}/api/signals`, { signal: AbortSignal.timeout(6_000) });
-        const d = await cg.json() as { ethPrice?: number };
+        const d = await cg.json() as { ethPrice?: number | null };
         ethNow = d.ethPrice ?? null;
         if (ethNow) setLiveEth(ethNow);
       } catch { /* ignore */ }
@@ -1344,12 +1344,13 @@ export function ArcMindPnLWidget() {
         const decs = [...data.decisions].reverse(); // oldest first
         if (!decs.length) return;
 
-        let capital = 1000; // virtual $1000
+        let capital = 1000; // virtual backtest notional; requires recorded/live prices
         let ethHeld = 0;
         const pts: PnLPoint[] = [{ ts: decs[0].ts, pnl: 0, decision: "START" }];
 
         for (const dec of decs) {
-          const price = dec.ethPrice || ethNow || 3400;
+          const price = dec.ethPrice || ethNow;
+          if (!price) continue;
           if (dec.decision === "BUY" && capital > 0) {
             ethHeld = capital / price;
             capital = 0;

@@ -621,7 +621,12 @@ interface HlCtx { openInterest: string; funding: string }
 interface PmMarket { question: string; outcomePrices?: string[]; volume24hr?: number }
 
 apiRouter.get("/signals", async (_req: Request, res: Response) => {
-  let whale: { netFlow: number; direction: "bullish" | "bearish" | "neutral" } = { netFlow: 0, direction: "neutral" };
+  let whale: { available: boolean; netFlow: number | null; direction: "bullish" | "bearish" | "neutral"; status: string } = {
+    available: false,
+    netFlow: null,
+    direction: "neutral",
+    status: "hyperliquid_unavailable",
+  };
   try {
     const hlRes = await fetch("https://api.hyperliquid.xyz/info", {
       method: "POST",
@@ -637,15 +642,22 @@ apiRouter.get("/signals", async (_req: Request, res: Response) => {
         const oi  = parseFloat(ctx.openInterest);
         const fr  = parseFloat(ctx.funding);
         whale = {
-          netFlow: isNaN(oi) ? 0 : parseFloat((oi / 1e6).toFixed(1)),
+          available: Number.isFinite(oi),
+          netFlow: Number.isFinite(oi) ? parseFloat((oi / 1e6).toFixed(1)) : null,
           direction: (!isNaN(fr) && fr > 0.0001) ? "bullish" : (!isNaN(fr) && fr < -0.0001) ? "bearish" : "neutral",
+          status: "live",
         };
       }
     }
-  } catch { /* fallback */ }
+  } catch { /* source stays unavailable */ }
 
-  let polymarket: { question: string; yesPct: number; volume24h: number } =
-    { question: "ETH above $3000 by EOY?", yesPct: 50, volume24h: 0 };
+  let polymarket: { available: boolean; question: string | null; yesPct: number | null; volume24h: number | null; status: string } = {
+    available: false,
+    question: null,
+    yesPct: null,
+    volume24h: null,
+    status: "polymarket_unavailable",
+  };
   try {
     const pmRes = await fetch(
       "https://gamma-api.polymarket.com/markets?tag=crypto&limit=5&active=true",
@@ -656,16 +668,19 @@ apiRouter.get("/signals", async (_req: Request, res: Response) => {
       const mkt = Array.isArray(pmData) ? pmData[0] : null;
       if (mkt) {
         const prices = Array.isArray(mkt.outcomePrices) ? mkt.outcomePrices.map(Number) : [0.5];
+        const yesPct = Number.isFinite(prices[0]) ? Math.round((prices[0] ?? 0.5) * 100) : null;
         polymarket = {
-          question: mkt.question ?? polymarket.question,
-          yesPct: Math.round((prices[0] ?? 0.5) * 100),
-          volume24h: mkt.volume24hr ?? 0,
+          available: yesPct !== null,
+          question: mkt.question ?? null,
+          yesPct,
+          volume24h: typeof mkt.volume24hr === "number" ? mkt.volume24hr : null,
+          status: "live",
         };
       }
     }
-  } catch { /* fallback */ }
+  } catch { /* source stays unavailable */ }
 
-  let ethPrice = 0;
+  let ethPrice: number | null = null;
   try {
     const cgRes = await fetch(
       "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
@@ -673,11 +688,21 @@ apiRouter.get("/signals", async (_req: Request, res: Response) => {
     );
     if (cgRes.ok) {
       const cgData = await cgRes.json() as { ethereum?: { usd?: number } };
-      ethPrice = cgData?.ethereum?.usd ?? 0;
+      ethPrice = typeof cgData?.ethereum?.usd === "number" ? cgData.ethereum.usd : null;
     }
-  } catch { /* fallback */ }
+  } catch { /* source stays unavailable */ }
 
-  res.json({ polymarket, whale, ethPrice, ts: new Date().toISOString() });
+  res.json({
+    polymarket,
+    whale,
+    ethPrice,
+    sources: {
+      hyperliquid: whale.available ? "live" : "unavailable",
+      polymarket: polymarket.available ? "live" : "unavailable",
+      coingecko: ethPrice !== null ? "live" : "unavailable",
+    },
+    ts: new Date().toISOString(),
+  });
 });
 
 // ─── USYC APY (DeFiLlama → Circle USYC pool) ─────────────────────────────────
@@ -685,16 +710,18 @@ apiRouter.get("/signals", async (_req: Request, res: Response) => {
 interface LlamaPool { symbol: string; apy: number; project?: string }
 
 apiRouter.get("/usyc-apy", async (_req: Request, res: Response) => {
-  let apy = 5.1; // Circle USYC typical APY fallback
   try {
     const r = await fetch("https://yields.llama.fi/pools", { signal: AbortSignal.timeout(8_000) });
     if (r.ok) {
       const data = await r.json() as { data: LlamaPool[] };
       const pool = data.data?.find(p => p.symbol?.toUpperCase().includes("USYC"));
-      if (pool?.apy) apy = parseFloat(pool.apy.toFixed(2));
+      if (pool?.apy) {
+        const apy = parseFloat(pool.apy.toFixed(2));
+        return res.json({ apy, asset: "USYC", provider: "DeFiLlama", network: "arc-testnet", ts: new Date().toISOString() });
+      }
     }
-  } catch { /* fallback */ }
-  res.json({ apy, asset: "USYC", provider: "Circle", network: "arc-testnet", ts: new Date().toISOString() });
+  } catch { /* handled below */ }
+  res.status(503).json({ ok: false, reason: "usyc_apy_unavailable", asset: "USYC", provider: "DeFiLlama", network: "arc-testnet", ts: new Date().toISOString() });
 });
 
 // ─── Swap quote (real ETH price via CoinGecko) ────────────────────────────────
@@ -703,14 +730,17 @@ apiRouter.get("/swap-quote", async (req: Request, res: Response) => {
   const side = String(req.query["side"] ?? "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
   const amountIn = Math.min(Math.max(parseFloat(String(req.query["amountIn"] ?? "100")) || 100, 0.001), 1_000_000);
 
-  let ethPrice = 3412.5;
+  let ethPrice: number | null = null;
   try {
     const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6_000) });
     if (r.ok) {
       const d = await r.json() as { ethereum?: { usd?: number } };
-      ethPrice = d?.ethereum?.usd ?? ethPrice;
+      ethPrice = typeof d?.ethereum?.usd === "number" ? d.ethereum.usd : null;
     }
-  } catch { /* fallback */ }
+  } catch { /* handled below */ }
+  if (ethPrice === null) {
+    return res.status(503).json({ error: "eth_price_unavailable", source: "coingecko", ts: new Date().toISOString() });
+  }
 
   const slippage = 0.001; // 0.1%
   const amountOut = side === "BUY"
@@ -734,36 +764,42 @@ const BEARISH_ARGS = [
 ];
 
 apiRouter.get("/arc-debate", async (_req: Request, res: Response) => {
-  let ethPrice = 3400;
-  let oiValue = "n/a";
+  let ethPrice: number | null = null;
+  let oiValue: string | null = null;
+  let fundingRate: number | null = null;
   try {
     const cg = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { signal: AbortSignal.timeout(6_000) });
     const cgData = await cg.json() as { ethereum?: { usd?: number } };
-    ethPrice = cgData?.ethereum?.usd ?? ethPrice;
-  } catch { /* fallback */ }
+    ethPrice = typeof cgData?.ethereum?.usd === "number" ? cgData.ethereum.usd : null;
+  } catch { /* handled below */ }
   try {
     const hl = await fetch("https://api.hyperliquid.xyz/info", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "metaAndAssetCtxs" }), signal: AbortSignal.timeout(6_000),
     });
-    const hlData = await hl.json() as [{ universe: { name: string }[] }, { openInterest: string }[]];
+    const hlData = await hl.json() as [{ universe: { name: string }[] }, { openInterest: string; funding?: string }[]];
     const idx = hlData[0].universe.findIndex(u => u.name === "ETH");
     if (idx >= 0 && hlData[1][idx]) {
       const oi = parseFloat(hlData[1][idx].openInterest);
-      oiValue = isNaN(oi) ? "n/a" : `${(oi / 1e6).toFixed(1)}M`;
+      oiValue = Number.isFinite(oi) ? `${(oi / 1e6).toFixed(1)}M` : null;
+      const fr = parseFloat(hlData[1][idx].funding ?? "");
+      fundingRate = Number.isFinite(fr) ? fr : null;
     }
-  } catch { /* fallback */ }
+  } catch { /* handled below */ }
+  if (ethPrice === null || oiValue === null) {
+    return res.status(503).json({ ok: false, reason: "live_sources_unavailable", ts: new Date().toISOString() });
+  }
 
-  const seed = Math.floor(Date.now() / (5 * 60_000)) % 3;
+  const fundingSignal = fundingRate ?? 0;
   const fallbackBull = (eth: number, oi: string) =>
     `ETH at $${eth.toLocaleString()} with OI ${oi} signals accumulation. Kelly sizing suggests a cautious long.`;
   const fallbackBear = (eth: number, oi: string) =>
     `OI ${oi} with ETH at $${eth.toLocaleString()} suggests crowding risk. Reduce exposure until confirmation improves.`;
-  const bullArg = (BULLISH_ARGS[seed] ?? fallbackBull)(ethPrice, oiValue);
-  const bearArg = (BEARISH_ARGS[seed] ?? fallbackBear)(ethPrice, oiValue);
-  const verdict: "BUY" | "SELL" | "HOLD" = seed === 0 ? "BUY" : seed === 1 ? "SELL" : "HOLD";
+  const bullArg = (BULLISH_ARGS[0] ?? fallbackBull)(ethPrice, oiValue);
+  const bearArg = (BEARISH_ARGS[0] ?? fallbackBear)(ethPrice, oiValue);
+  const verdict: "BUY" | "SELL" | "HOLD" = fundingSignal > 0.0001 ? "BUY" : fundingSignal < -0.0001 ? "SELL" : "HOLD";
 
-  res.json({ ethPrice, oiValue, bullArg, bearArg, verdict, ts: new Date().toISOString() });
+  res.json({ ethPrice, oiValue, bullArg, bearArg, verdict, fundingRate, ts: new Date().toISOString() });
 });
 
 // ─── Agent leaderboard ────────────────────────────────────────────────────────

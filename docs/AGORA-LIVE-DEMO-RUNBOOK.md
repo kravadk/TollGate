@@ -145,7 +145,7 @@ Show:
 Show:
 
 - Latest CopyGuard Decision
-- Low-Liq Sprinter `STOP`
+- verified leader feed status; if `ARC_LEADER_FEED_URL` is missing, show the honest "feed needed" state
 - decay factor drawer
 - shareable decision card
 - Decision Replay timeline

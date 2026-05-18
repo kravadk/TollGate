@@ -9,7 +9,7 @@ export type CopyGuardSignals = {
   openInterestUsd: number;
   fundingRate: number;
   volatilityPct: number;
-  polymarketYesPct: number;
+  polymarketYesPct?: number | null;
 };
 
 export type CopyGuardLeader = {
@@ -21,6 +21,10 @@ export type CopyGuardLeader = {
   recentPnlPct: number;
   liquidityUsd: number;
   recentLosses: number;
+  address?: string;
+  source?: string;
+  sourceUrl?: string;
+  metricsNote?: string;
 };
 
 export type CopyGuardDecayFactors = {
@@ -139,7 +143,8 @@ export function scoreLeader(
     0,
     100,
   );
-  const marketBearishness = Math.max(0, 50 - signals.polymarketYesPct) * 1.6;
+  const polymarketYesPct = typeof signals.polymarketYesPct === "number" ? signals.polymarketYesPct : null;
+  const marketBearishness = polymarketYesPct === null ? 0 : Math.max(0, 50 - polymarketYesPct) * 1.6;
   const momentumAgainst = Math.max(0, -signals.ethPriceChangePct) * 12;
   const signalDivergence = clamp(marketBearishness + momentumAgainst + fundingCrowding * 0.2, 0, 100);
   const lossClusterPenalty = Math.max(0, recentLosses - 35) * 0.08;
@@ -214,9 +219,11 @@ export function buildCopyGuardDecision(input: {
   }));
   const firstActive = leaderScores.find((leader) => leader.weightPct > 0);
   const primaryAction = firstActive?.action ?? (leaderScores.some((leader) => leader.action === "STOP") ? "STOP" : "HOLD_USDC");
-  const reasoningTrace = leaderScores
-    .map((leader) => `${leader.name}: ${leader.action} ${leader.weightPct}% - ${leader.reason}`)
-    .join("\n");
+  const reasoningTrace = leaderScores.length
+    ? leaderScores
+      .map((leader) => `${leader.name}: ${leader.action} ${leader.weightPct}% - ${leader.reason}`)
+      .join("\n")
+    : "No verified copy-leader feed is configured. ArcMind holds USDC/USYC and does not display synthetic copy leaders.";
 
   const hashBasis = {
     ts,

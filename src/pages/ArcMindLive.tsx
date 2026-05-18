@@ -66,6 +66,18 @@ type LeaderScore = {
   recentPnlPct?: number;
   liquidityUsd?: number;
   recentLosses?: number;
+  address?: string;
+  source?: string;
+  sourceUrl?: string;
+  metricsNote?: string;
+};
+
+type LeaderSource = {
+  status: "configured" | "missing" | "unavailable";
+  provider: string;
+  detail: string;
+  sourceUrl?: string;
+  requiredEnv?: string[];
 };
 
 type Decision = {
@@ -81,6 +93,7 @@ type Decision = {
   copyGuardHash?: string;
   leaderScores?: LeaderScore[];
   allocation?: Array<{ leaderId: string; name: string; weightPct: number; action: CopyGuardAction }>;
+  leaderSource?: LeaderSource;
   reasoningTrace?: string;
 };
 
@@ -869,7 +882,15 @@ export function ArcMindLive() {
   }, []);
 
   const latest = payload?.latestDecision ?? null;
-  const leaders = latest?.leaderScores ?? [];
+  const leaderSource = latest?.leaderSource ?? {
+    status: "missing" as const,
+    provider: "Leader feed not declared",
+    detail: "This decision was created before leader source metadata existed. Legacy leader rows are hidden instead of treated as real.",
+    requiredEnv: ["ARC_LEADER_FEED_URL"],
+  };
+  const leadersAreVerified = leaderSource.status === "configured";
+  const hiddenLegacyLeaderCount = leadersAreVerified ? 0 : (latest?.leaderScores?.length ?? 0);
+  const leaders = leadersAreVerified ? (latest?.leaderScores ?? []) : [];
   const stoppedLeader = leaders.find((leader) => leader.action === "STOP");
   const topCopy = leaders.find((leader) => leader.action === "COPY");
   const stats = payload?.stats;
@@ -939,7 +960,7 @@ export function ArcMindLive() {
       ts: decision.ts,
       action,
       ethPrice: decision.ethPrice,
-      leader: decision.leaderScores?.[0]?.name ?? "portfolio",
+      leader: decision.leaderSource?.status === "configured" ? (decision.leaderScores?.[0]?.name ?? "portfolio") : "portfolio",
       blindPct: priceMovePct,
       protectedPct: protectedMove,
     };
@@ -949,7 +970,7 @@ export function ArcMindLive() {
     protected: acc.protected + row.protectedPct,
   }), { blind: 0, protected: 0 });
   const rfbCoverage = [
-    { id: "RFB 06", label: "Social copy intelligence", value: `${leaders.length} leaders`, detail: "Select, weight, monitor, stop." },
+    { id: "RFB 06", label: "Social copy intelligence", value: leadersAreVerified ? `${leaders.length} leaders` : "feed needed", detail: leadersAreVerified ? "Select, weight, monitor, stop." : "Add ARC_LEADER_FEED_URL for real leader scoring." },
     { id: "RFB 04", label: "Adaptive portfolio", value: simulation ? `${simulation.portfolio.riskOff.weightPct}% risk-off` : "simulating", detail: "USDC/USYC allocation and rebalance logic." },
     { id: "RFB 02", label: "Trader intelligence", value: `${configuredSources.length} sources`, detail: "Source credibility and reasoning trace proof." },
     { id: "RFB 01", label: "Perp guardrails", value: `${maxDrawdownPct}% stop`, detail: "Funding, crowding, and liquidation-risk proxy." },
@@ -1149,17 +1170,24 @@ export function ArcMindLive() {
   const motionClass = softMotion ? "am-motion" : "am-no-motion";
   const compactClass = compactMode ? "am-compact" : "";
   const isWalkthrough = executionMode === "walkthrough";
+  const visibleLatest = latest
+    ? {
+      ...latest,
+      leaderScores: leaders,
+      allocation: leadersAreVerified ? latest.allocation : [],
+    }
+    : null;
 
   const traceProduct = useMemo(() => buildArcTraceProduct({
-    latestDecision: latest,
+    latestDecision: visibleLatest,
     unlocked: traceOpen,
     receipt: traceReceipt,
-  }), [latest, traceOpen, traceReceipt]);
+  }), [visibleLatest, traceOpen, traceReceipt]);
   const shareCard = useMemo(() => buildArcShareCard({
-    latestDecision: latest,
+    latestDecision: visibleLatest,
     shareUrl: typeof window !== "undefined" ? window.location.href : "",
     payoutAddress: payload?.status.payoutAddress,
-  }), [latest, payload?.status.payoutAddress]);
+  }), [visibleLatest, payload?.status.payoutAddress]);
   const judgeBrief = useMemo(() => {
     const lines = [
       "ArcMind CopyGuard is an AI risk layer for copy-traders on Arc.",
@@ -1806,7 +1834,7 @@ export function ArcMindLive() {
             <div className="am-stat-grid">
               <MiniStat label="Primary action" value={actionLabel(latest?.primaryAction ?? latest?.decision)} accent={actionColor(latest?.primaryAction ?? latest?.decision ?? "HOLD")} />
               <MiniStat label="Top copy target" value={topCopy ? `${topCopy.weightPct}%` : "0%"} accent="#10B981" />
-              <MiniStat label="Stopped leader" value={stoppedLeader ? "1" : "0"} accent="#EF4444" />
+              <MiniStat label="Leader feed" value={leadersAreVerified ? "verified" : "needed"} accent={leadersAreVerified ? "#10B981" : "#F59E0B"} />
             </div>
 
             {latest?.decisionHash && (
@@ -1827,7 +1855,7 @@ export function ArcMindLive() {
 
             <div className="am-leader-table">
               <div className="am-leader-head"><span>Leader</span><span>Action</span><span>Weight</span><span>Decay</span><span>Reason</span></div>
-              {leaders.map((leader) => (
+              {leadersAreVerified ? leaders.map((leader) => (
                 <button key={leader.id} className="am-leader-row" onClick={() => setSelectedLeader(leader)}>
                   <strong>{leader.name}</strong>
                   <span style={{ color: actionColor(leader.action) }}>{actionLabel(leader.action)}</span>
@@ -1835,7 +1863,14 @@ export function ArcMindLive() {
                   <span>{leader.degradationScore.toFixed(1)}</span>
                   <span>{leader.decaySummary ?? leader.reason}</span>
                 </button>
-              ))}
+              )) : (
+                <div className="am-empty-state">
+                  <b>{leaderSource.provider}</b>
+                  <p>{leaderSource.detail}</p>
+                  {hiddenLegacyLeaderCount > 0 && <p>{hiddenLegacyLeaderCount} legacy leader rows are hidden because they do not include source metadata.</p>}
+                  <code>{leaderSource.requiredEnv?.join(", ") ?? "ARC_LEADER_FEED_URL"}</code>
+                </div>
+              )}
             </div>
           </Section>
 
@@ -2196,7 +2231,11 @@ export function ArcMindLive() {
               <div><span>Recent PnL</span><b>{selectedLeader.recentPnlPct !== undefined ? `${selectedLeader.recentPnlPct >= 0 ? "+" : ""}${selectedLeader.recentPnlPct.toFixed(1)}%` : "n/a"}</b></div>
               <div><span>Liquidity</span><b>{selectedLeader.liquidityUsd !== undefined ? `$${selectedLeader.liquidityUsd.toLocaleString()}` : "n/a"}</b></div>
               <div><span>Recent losses</span><b>{selectedLeader.recentLosses ?? "n/a"}</b></div>
+              <div><span>Source</span><b>{selectedLeader.source ?? leaderSource.provider}</b></div>
+              <div><span>Address</span><b>{selectedLeader.address ? short(selectedLeader.address, 8, 6) : "n/a"}</b></div>
             </div>
+            {selectedLeader.metricsNote && <p className="am-readonly-hint">{selectedLeader.metricsNote}</p>}
+            {selectedLeader.sourceUrl && <a className="am-trace-link" href={selectedLeader.sourceUrl} target="_blank" rel="noreferrer">Open leader source <ExternalLink size={12} /></a>}
             <div className="am-rfb-pills">
               <span>RFB 06 social intelligence</span>
               <span>RFB 04 allocation guardrail</span>
@@ -2572,6 +2611,10 @@ export function ArcMindLive() {
         .am-leader-head { padding: 10px 12px; color: #7890ad; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; background: #101827; }
         .am-leader-row { width: 100%; border: 0; border-top: 1px solid #1b2a40; background: transparent; color: #f5f7fb; padding: 14px 12px; text-align: left; font-size: .78rem; cursor: pointer; line-height: 1.45; }
         .am-leader-row:hover { background: #101827; }
+        .am-empty-state { border-top: 1px solid #1b2a40; background: #08111e; padding: 16px; display: grid; gap: 8px; }
+        .am-empty-state b { color: #dbeafe; }
+        .am-empty-state p { color: #9fb2cc; margin: 0; line-height: 1.45; font-size: .78rem; }
+        .am-empty-state code { display: inline-block; width: fit-content; border: 1px solid #F59E0B44; background: #F59E0B12; color: #fcd34d; border-radius: 8px; padding: 6px 8px; margin: 0; }
         .am-side { display: flex; flex-direction: column; gap: 18px; }
         .am-danger { color: #fca5a5; line-height: 1.55; }
         .am-ok { color: #86efac; }

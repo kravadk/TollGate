@@ -9,14 +9,14 @@ const latestDecision = {
   fundingRate: "-0.0000038",
   decisionHash: "0xdecision",
   copyGuardHash: "0xcopyguard",
-  reasoningTrace: "HL Whale Alpha: COPY 17.11% - Copy with low decay.\nLow-Liq Sprinter: STOP 0% - Drawdown risk.",
+  reasoningTrace: "Verified Leader Alpha: COPY 17.11% - Copy with low decay.\nVerified Decay Leader: STOP 0% - Drawdown risk.",
   allocation: [
-    { leaderId: "alpha", name: "HL Whale Alpha", weightPct: 17.11, action: "COPY" },
-    { leaderId: "sprinter", name: "Low-Liq Sprinter", weightPct: 0, action: "STOP" },
+    { leaderId: "alpha", name: "Verified Leader Alpha", weightPct: 17.11, action: "COPY" },
+    { leaderId: "sprinter", name: "Verified Decay Leader", weightPct: 0, action: "STOP" },
   ],
   leaderScores: [
-    { name: "HL Whale Alpha", action: "COPY", weightPct: 17.11, degradationScore: 15.4 },
-    { name: "Low-Liq Sprinter", action: "STOP", weightPct: 0, degradationScore: 57.2 },
+    { name: "Verified Leader Alpha", action: "COPY", weightPct: 17.11, degradationScore: 15.4 },
+    { name: "Verified Decay Leader", action: "STOP", weightPct: 0, degradationScore: 57.2 },
   ],
 };
 

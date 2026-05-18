@@ -941,3 +941,26 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 - [x] `npm run build`
 - [x] Playwright desktop/mobile `/live`: starter flow, business model, delivery settings, and Escape-close work with no horizontal overflow or console errors.
 - [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`
+
+---
+
+## Task 28: Remove Synthetic Data and Require Real Leader Feeds
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** judges must not see local mock traders, fallback prices, fake APY, or synthetic decision inputs presented as live product state.
+
+**Implementation checklist:**
+- [x] Remove generated `HL Whale Alpha` / `Crowded Momentum` / `Low-Liq Sprinter` backend leaders.
+- [x] Require `ARC_LEADER_FEED_URL` for real copy-leader scoring.
+- [x] Hide legacy leader rows in the live UI and audit/replay surfaces when source metadata is missing.
+- [x] Replace hardcoded Polymarket, USYC APY, swap quote, and debate fallbacks with unavailable states.
+- [x] Update signal radar and env sample to show the missing leader feed requirement.
+- [x] Run full tests/build and live smoke after cleanup.
+
+**Verification:**
+- [x] `npm test`
+- [x] `npm run build`
+- [x] `cd server; npm test`
+- [x] `cd server; npm run build`
+- [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`

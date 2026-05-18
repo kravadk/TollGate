@@ -16,6 +16,7 @@ describe("Arc signal source radar", () => {
     const radar = buildArcSignalSourceRadar({
       ARC_SIGNAL_SOURCE_MODE: "live",
       APIFY_TOKEN: "configured-secret",
+      ARC_LEADER_FEED_URL: "https://example.com/leaders.json",
     });
 
     assert.ok(radar.summary.configured > 0);

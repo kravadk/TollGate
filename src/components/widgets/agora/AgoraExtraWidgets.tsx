@@ -17,16 +17,16 @@ function paidGatewayHeaders(agentId: string, extra: Record<string, string> = {})
 // ── Adaptive Portfolio Manager ──────────────────────────────────────────────────
 
 const ASSETS = [
-  { symbol: "USDC", weight: 40, price: 1.000,  color: "#1652F0" },
-  { symbol: "ETH",  weight: 30, price: 3412.50, color: "#627EEA" },
-  { symbol: "BTC",  weight: 20, price: 67840.0, color: "#F7931A" },
-  { symbol: "ARC",  weight: 10, price: 2.14,    color: "#4B7BFF" },
+  { symbol: "USDC", weight: 70, price: 1.000, color: "#1652F0" },
+  { symbol: "ETH", weight: 30, price: 0, color: "#627EEA" },
 ];
 
-async function fetchLivePrices(): Promise<{ eth: number; btc: number }> {
+async function fetchLivePrices(): Promise<{ eth: number }> {
   const res = await fetch(`${SERVER_URL}/api/signals`, { signal: AbortSignal.timeout(6_000) });
-  const data = await res.json() as { ethPrice?: number };
-  return { eth: data.ethPrice ?? 3412.50, btc: 67840.0 };
+  if (!res.ok) throw new Error("signals_unavailable");
+  const data = await res.json() as { ethPrice?: number | null };
+  if (typeof data.ethPrice !== "number") throw new Error("eth_price_unavailable");
+  return { eth: data.ethPrice };
 }
 
 type Holding = { symbol: string; weight: number; value: number; price: number; color: string };
@@ -47,8 +47,8 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
     setRunning(true);
     setPhase("Fetching live prices via CoinGecko…");
 
-    let liveEth = ASSETS[1].price, liveBtc = ASSETS[2].price;
-    try { ({ eth: liveEth, btc: liveBtc } = await fetchLivePrices()); } catch {
+    let liveEth = ASSETS[1].price;
+    try { ({ eth: liveEth } = await fetchLivePrices()); } catch {
       setPhase("Live price feed unavailable. Rebalance was not executed.");
       setRunning(false);
       return;
@@ -73,7 +73,8 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
       return;
     }
 
-    const ethDir = liveEth > ASSETS[1].price ? 1 : -1;
+    const currentEth = holdings.find((h) => h.symbol === "ETH")?.price || liveEth;
+    const ethDir = liveEth >= currentEth ? 1 : -1;
     const newWeights = ASSETS.map((a, i) => {
       const signal = i === 1 ? ethDir * 4 : i === 2 ? ethDir * 2 : -ethDir;
       return Math.max(5, Math.min(60, a.weight + signal));
@@ -84,7 +85,7 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
     setPhase(rebalanceReceiptId ? `x402 receipt ${rebalanceReceiptId.slice(0, 12)}… — applying trades` : "Applying rebalance…");
     await new Promise(r => setTimeout(r, 600));
 
-    const livePrices = [1.000, liveEth, liveBtc, ASSETS[3].price];
+    const livePrices = [1.000, liveEth];
     const newHoldings = ASSETS.map((a, i) => ({
       ...a,
       price: livePrices[i],
@@ -132,7 +133,7 @@ export function AgoraPortfolioWidget({ workspace }: { workspace: Workspace }) {
             <div key={h.symbol} style={{ flex: h.weight, background: h.color, transition: "flex 0.6s ease" }} />
           ))}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
           {holdings.map(h => (
             <div key={h.symbol} style={{ padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${h.color}33`, background: "var(--card-bg)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
@@ -635,10 +636,15 @@ export function ArcAppKitWidget({ workspace }: { workspace: Workspace }) {
 
   async function doQuote() {
     setSwapQuote(null);
+    setAppKitError(null);
     try {
       const res = await fetch(`${SERVER_URL}/api/swap-quote?side=${swapSide}&amountIn=${encodeURIComponent(swapAmt)}`, { signal: AbortSignal.timeout(8_000) });
-      if (res.ok) { const d = await res.json() as { amountOut: number; price: number }; setSwapQuote(d); }
-    } catch { /* no quote */ }
+      if (!res.ok) throw new Error("quote_unavailable");
+      const d = await res.json() as { amountOut: number; price: number };
+      setSwapQuote(d);
+    } catch {
+      setAppKitError("Live ETH quote unavailable. No swap quote or local fallback was created.");
+    }
   }
 
   async function doSwap() {
@@ -857,10 +863,14 @@ export function ArcMindSwapWidget({ workspace }: { workspace: Workspace }) {
   async function fetchQuote() {
     setQuoting(true);
     setQuote(null);
+    setSwapError(null);
     try {
       const res = await fetch(`${SERVER_URL}/api/swap-quote?side=${side}&amountIn=${encodeURIComponent(amountIn)}`, { signal: AbortSignal.timeout(8_000) });
-      if (res.ok) setQuote(await res.json() as SwapQuote);
-    } catch { /* keep null */ }
+      if (!res.ok) throw new Error("quote_unavailable");
+      setQuote(await res.json() as SwapQuote);
+    } catch {
+      setSwapError("Live ETH quote unavailable. No local fallback quote was created.");
+    }
     setQuoting(false);
   }
 
@@ -998,7 +1008,10 @@ export function ArcMindYieldWidget({ workspace }: { workspace: Workspace }) {
 
   useEffect(() => {
     fetch(`${SERVER_URL}/api/usyc-apy`, { signal: AbortSignal.timeout(8_000) })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error("usyc_apy_unavailable");
+        return r.json();
+      })
       .then((d: { apy?: number }) => setApy(typeof d.apy === "number" ? d.apy : null))
       .catch(() => {
         setApy(null);

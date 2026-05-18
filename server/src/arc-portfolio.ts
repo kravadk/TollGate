@@ -13,6 +13,7 @@ type LatestDecisionLike = {
   decisionHash?: string;
   copyGuardHash?: string;
   allocation?: DecisionAllocation[];
+  leaderSource?: { status?: string };
 };
 
 export type ProtectedPortfolio = {
@@ -93,7 +94,8 @@ export function buildProtectedPortfolio(input: {
   const sessionId = cleanSessionId(input.sessionId);
   const wallet = cleanWallet(input.wallet);
   const createdAt = input.nowIso ?? new Date().toISOString();
-  const allocations = Array.isArray(input.latestDecision?.allocation)
+  const leaderFeedVerified = input.latestDecision?.leaderSource?.status === "configured";
+  const allocations = leaderFeedVerified && Array.isArray(input.latestDecision?.allocation)
     ? input.latestDecision.allocation
     : [];
 
@@ -168,7 +170,7 @@ export function buildPortfolioSimulation(input: {
     mode: "paper",
     nowIso: input.nowIso,
   });
-  const allocations = Array.isArray(input.latestDecision?.allocation) ? input.latestDecision.allocation : [];
+  const allocations = input.latestDecision?.leaderSource?.status === "configured" && Array.isArray(input.latestDecision?.allocation) ? input.latestDecision.allocation : [];
   const selectedLeaderId = typeof input.selectedLeaderId === "string" ? input.selectedLeaderId : undefined;
   const selected = allocations.find((leader) => leader.leaderId === selectedLeaderId) ?? allocations[0];
   const selectedLeader = selected ? {

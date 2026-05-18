@@ -10,8 +10,8 @@ describe("Arc share card", () => {
         txHash: "0xabc123",
         decisionHash: "0xdecision",
         leaderScores: [
-          { name: "HL Whale Alpha", action: "COPY", weightPct: 17.1, degradationScore: 15.4 },
-          { name: "Low-Liq Sprinter", action: "STOP", weightPct: 0, degradationScore: 57.2 },
+          { name: "Verified Leader Alpha", action: "COPY", weightPct: 17.1, degradationScore: 15.4 },
+          { name: "Verified Decay Leader", action: "STOP", weightPct: 0, degradationScore: 57.2 },
         ],
       },
       shareUrl: "https://example.com/live?profile=balanced&stake=100",
@@ -19,7 +19,7 @@ describe("Arc share card", () => {
     });
 
     expect(card.title).toContain("COPY");
-    expect(card.lines.join("\n")).toContain("HL Whale Alpha");
+    expect(card.lines.join("\n")).toContain("Verified Leader Alpha");
     expect(card.shareText).toContain("ArcMind CopyGuard");
     expect(card.shareText).toContain("https://example.com/live");
     expect(card.shareText).not.toContain("0x1111111111111111111111111111111111111111");

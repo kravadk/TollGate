@@ -6,9 +6,10 @@ const latestDecision = {
   ts: "2026-05-17T20:00:00.000Z",
   decisionHash: "0x" + "a".repeat(64),
   copyGuardHash: "0x" + "b".repeat(64),
+  leaderSource: { status: "configured" },
   allocation: [
-    { leaderId: "alpha", name: "HL Whale Alpha", weightPct: 17, action: "COPY" as const },
-    { leaderId: "decay", name: "Low-Liq Sprinter", weightPct: 0, action: "STOP" as const },
+    { leaderId: "alpha", name: "Verified Leader Alpha", weightPct: 17, action: "COPY" as const },
+    { leaderId: "decay", name: "Verified Decay Leader", weightPct: 0, action: "STOP" as const },
   ],
 };
 
@@ -37,7 +38,7 @@ describe("Arc protected portfolio builder", () => {
     assert.equal(portfolio.copyAllocations[0]?.leaderId, "alpha");
     assert.equal(portfolio.copyAllocations[0]?.notionalUsd, 17);
     assert.equal(portfolio.riskOff.notionalUsd, 83);
-    assert.equal(portfolio.blockedLeaders[0]?.name, "Low-Liq Sprinter");
+    assert.equal(portfolio.blockedLeaders[0]?.name, "Verified Decay Leader");
     assert.ok(portfolio.portfolioId.startsWith("pf_arc_"));
     assert.ok(portfolio.requestHash.startsWith("0x"));
     assert.equal(portfolio.requestHash.length, 66);
@@ -55,11 +56,25 @@ describe("Arc protected portfolio builder", () => {
     });
 
     assert.equal(simulation.readOnly, true);
-    assert.equal(simulation.selectedLeader?.name, "HL Whale Alpha");
+    assert.equal(simulation.selectedLeader?.name, "Verified Leader Alpha");
     assert.equal(simulation.expectedStopThresholdPct, 12);
     assert.equal(simulation.estimatedFeesUsd, 0.01);
     assert.equal(simulation.portfolio.copyAllocations[0]?.notionalUsd, 34);
-    assert.match(simulation.summary, /COPY HL Whale Alpha/);
+    assert.match(simulation.summary, /COPY Verified Leader Alpha/);
     assert.match(simulation.summary, /166 USYC/);
+  });
+
+  it("does not allocate from legacy decisions without verified leader source metadata", () => {
+    const portfolio = buildProtectedPortfolio({
+      latestDecision: { ...latestDecision, leaderSource: undefined },
+      riskProfile: "balanced",
+      amountUsd: 100,
+      sessionId: "judge-session",
+      nowIso: "2026-05-17T20:03:00.000Z",
+    });
+
+    assert.equal(portfolio.copyAllocations.length, 0);
+    assert.equal(portfolio.blockedLeaders.length, 0);
+    assert.equal(portfolio.riskOff.notionalUsd, 100);
   });
 });

@@ -7,10 +7,16 @@ const latestDecision = {
   mode: "arc",
   txHash: "0x5354003168fb680b4fee10d03b73d90470ed81f3148170ed1e799f77ed17d520",
   decisionHash: "0x80409e52644cf141c2ea6c2dcdc81aaa6c02233e5ee7005ce1960241b3652a9a",
+  leaderSource: { status: "configured", provider: "test-feed" },
   leaderScores: [
-    { id: "alpha", name: "HL Whale Alpha", action: "COPY", degradationScore: 16.2, weightPct: 16.99 },
-    { id: "sprinter", name: "Low-Liq Sprinter", action: "STOP", degradationScore: 51.9, weightPct: 0 },
+    { id: "alpha", name: "Verified Leader Alpha", action: "COPY", degradationScore: 16.2, weightPct: 16.99 },
+    { id: "sprinter", name: "Verified Decay Leader", action: "STOP", degradationScore: 51.9, weightPct: 0 },
   ],
+};
+
+const legacyDecision = {
+  ...latestDecision,
+  leaderSource: undefined,
 };
 
 describe("Arc audit and alerts", () => {
@@ -54,7 +60,15 @@ describe("Arc audit and alerts", () => {
       replay?.events.map((event) => event.step),
       ["signal_observed", "leaders_scored", "risk_checked", "action_chosen", "arc_proof"],
     );
-    assert.ok(replay?.events.some((event) => event.detail.includes("Low-Liq Sprinter")));
+    assert.ok(replay?.events.some((event) => event.detail.includes("Verified Decay Leader")));
     assert.ok(replay?.events.some((event) => event.explorerUrl?.includes("testnet.arcscan.app/tx/")));
+  });
+
+  it("does not build leader alerts from legacy decisions without source metadata", () => {
+    const alerts = buildArcAlerts([legacyDecision], 55);
+    const replay = buildArcDecisionReplay(legacyDecision);
+
+    assert.equal(alerts.some((alert) => alert.type === "leader_stop"), false);
+    assert.ok(replay?.events.some((event) => event.detail.includes("No verified leader feed")));
   });
 });
