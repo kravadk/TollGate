@@ -30,6 +30,18 @@ let prevEthPrice: number | null = null;
 let arcWallet: ethers.Wallet | null = null;
 let schedulerStop: (() => void) | null = null;
 
+export type ArcAgentLoopStatus = {
+  state: "idle" | "running" | "skipped" | "recorded" | "failed";
+  startedAt?: string;
+  finishedAt?: string;
+  decisionHash?: string;
+  txHash?: string | null;
+  mode?: "paper" | "arc";
+  ethPrice?: number;
+  leaderSource?: LeaderSource;
+  message?: string;
+};
+
 type LeaderSourceStatus = "configured" | "missing" | "unavailable";
 type LeaderSource = {
   status: LeaderSourceStatus;
@@ -38,6 +50,8 @@ type LeaderSource = {
   sourceUrl?: string;
   requiredEnv?: string[];
 };
+
+let lastLoopStatus: ArcAgentLoopStatus = { state: "idle", message: "Arc agent loop has not run in this process yet." };
 
 function sha256Hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
@@ -253,9 +267,17 @@ function appendLog(entry: Record<string, unknown>): void {
 
 export async function arcAgentLoop(): Promise<void> {
   const tag = "[arc-loop]";
+  lastLoopStatus = { state: "running", startedAt: new Date().toISOString(), message: "Arc agent loop tick started." };
   const [ethPrice, hlOI, leaderFeed] = await Promise.all([fetchEthPrice(), fetchHyperliquidOI(), fetchCopyLeaders()]);
   if (!ethPrice) {
     console.warn(`${tag} Could not fetch ETH price; skipping tick`);
+    lastLoopStatus = {
+      ...lastLoopStatus,
+      state: "skipped",
+      finishedAt: new Date().toISOString(),
+      leaderSource: leaderFeed.source,
+      message: "Could not fetch a live ETH price, so no decision was recorded.",
+    };
     return;
   }
 
@@ -297,12 +319,27 @@ export async function arcAgentLoop(): Promise<void> {
     copyGuardHash: copyGuard.decisionHash,
   };
   const decisionHash = "0x" + sha256Hex(JSON.stringify(payload));
+  lastLoopStatus = {
+    ...lastLoopStatus,
+    ethPrice,
+    leaderSource: leaderFeed.source,
+    decisionHash,
+    message: "Decision payload built.",
+  };
 
   console.log(`${tag} ${decision}/${copyGuard.primaryAction} | ETH $${ethPrice} | OI ${hlOI?.oiValue ?? "n/a"} | hash ${decisionHash.slice(0, 14)}...`);
 
   const wallet = getArcWallet();
   if (!wallet || !AGENT_ID) {
     appendLog({ ...payload, decisionHash, txHash: null, mode: "paper", note: "ARC_PRIVATE_KEY or ARC_AGENT_ID not set" });
+    lastLoopStatus = {
+      ...lastLoopStatus,
+      state: "recorded",
+      finishedAt: new Date().toISOString(),
+      mode: "paper",
+      txHash: null,
+      message: "Paper decision recorded; ARC_PRIVATE_KEY or ARC_AGENT_ID is not set.",
+    };
     console.log(`${tag} Paper decision recorded locally; set ARC_PRIVATE_KEY + ARC_AGENT_ID for Arc registry writes`);
     return;
   }
@@ -319,6 +356,14 @@ export async function arcAgentLoop(): Promise<void> {
 
     console.log(`${tag} Recorded -> ${txHash} | https://testnet.arcscan.app/tx/${txHash}`);
     appendLog({ ...payload, decisionHash, txHash, mode: "arc" });
+    lastLoopStatus = {
+      ...lastLoopStatus,
+      state: "recorded",
+      finishedAt: new Date().toISOString(),
+      mode: "arc",
+      txHash,
+      message: "Decision recorded on Arc and appended to the local decision log.",
+    };
 
     if (decision !== "HOLD") {
       const side = decision === "BUY" ? "BUY" : "SELL";
@@ -345,7 +390,19 @@ export async function arcAgentLoop(): Promise<void> {
   } catch (err) {
     console.error(`${tag} recordDecision failed:`, (err as Error).message ?? err);
     appendLog({ ...payload, decisionHash, txHash: null, mode: "paper", error: (err as Error).message });
+    lastLoopStatus = {
+      ...lastLoopStatus,
+      state: "failed",
+      finishedAt: new Date().toISOString(),
+      mode: "paper",
+      txHash: null,
+      message: `recordDecision failed; paper decision was appended: ${(err as Error).message ?? "unknown error"}`,
+    };
   }
+}
+
+export function getArcAgentLoopStatus(): ArcAgentLoopStatus {
+  return lastLoopStatus;
 }
 
 export function startArcAgentScheduler(options: {

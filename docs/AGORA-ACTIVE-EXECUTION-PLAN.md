@@ -964,3 +964,21 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 - [x] `cd server; npm test`
 - [x] `cd server; npm run build`
 - [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`
+
+---
+
+## Task 29: Production Agent Tick Control
+
+**Status:** Done 2026-05-19.
+
+**Why this matters:** Render can start with an empty persistent decision log, and waiting for the next 30-minute scheduler tick is awkward during final submission prep.
+
+**Implementation checklist:**
+- [x] Add `/api/arc-agent/status` for safe loop observability without secrets.
+- [x] Add protected `POST /api/arc-agent/tick` gated by `ARC_ADMIN_TOKEN`.
+- [x] Keep manual tick disabled unless the admin token exists.
+
+**Verification:**
+- [x] `npm test`
+- [x] `cd server; npm test`
+- [x] `cd server; npm run build`

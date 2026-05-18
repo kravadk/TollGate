@@ -17,6 +17,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { getAddress, JsonRpcProvider, parseUnits } from "ethers";
+import { timingSafeEqual } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { env, isProd } from "./env.js";
@@ -28,6 +29,7 @@ import {
   readArcTractionEvents,
 } from "./arc-traction.js";
 import { buildPortfolioSimulation, buildProtectedPortfolio } from "./arc-portfolio.js";
+import { arcAgentLoop, getArcAgentLoopStatus } from "./arc-agent-loop.js";
 import { buildArcReadinessReport } from "./arc-readiness.js";
 import { buildArcSignalSourceRadar } from "./arc-signal-sources.js";
 import { uploadToOg } from "./og-upload.js";
@@ -80,6 +82,16 @@ function publicService(s: Service) {
 }
 
 export const apiRouter = Router();
+
+function hasArcAdmin(req: Request): boolean {
+  const expected = process.env.ARC_ADMIN_TOKEN;
+  if (!expected) return false;
+  const raw = req.header("X-Arc-Admin-Token") ?? req.header("Authorization")?.replace(/^Bearer\s+/i, "");
+  if (!raw) return false;
+  const a = Buffer.from(raw);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 function cleanArcAddress(v: unknown): string | null {
   if (typeof v !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(v)) return null;
@@ -562,6 +574,30 @@ apiRouter.get("/arc-decision-replay/latest", (_req: Request, res: Response) => {
 
 apiRouter.get("/arc-signal-sources", (_req: Request, res: Response) => {
   res.json(buildArcSignalSourceRadar(process.env));
+});
+
+apiRouter.get("/arc-agent/status", (_req: Request, res: Response) => {
+  res.json({
+    status: getArcAgentLoopStatus(),
+    manualTickConfigured: Boolean(process.env.ARC_ADMIN_TOKEN),
+    intervalMs: process.env.ARC_AGENT_INTERVAL_MS ?? null,
+    ts: new Date().toISOString(),
+  });
+});
+
+apiRouter.post("/arc-agent/tick", async (req: Request, res: Response) => {
+  if (!hasArcAdmin(req)) {
+    return res.status(process.env.ARC_ADMIN_TOKEN ? 403 : 404).json({
+      error: process.env.ARC_ADMIN_TOKEN ? "forbidden" : "manual_tick_not_configured",
+    });
+  }
+  await arcAgentLoop();
+  res.json({
+    ok: true,
+    status: getArcAgentLoopStatus(),
+    latestDecision: readArcDecisionLog()[0] ?? null,
+    ts: new Date().toISOString(),
+  });
 });
 
 apiRouter.get("/arc-verify/latest", async (_req: Request, res: Response) => {
