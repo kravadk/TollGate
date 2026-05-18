@@ -987,7 +987,7 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 
 ## Task 30: Free API SignalGuard / No-Nansen Mode
 
-**Status:** Done locally 2026-05-19; production deploy/smoke pending after push.
+**Status:** Done 2026-05-19.
 
 **Why this matters:** without Nansen or a real leader feed, the product should still feel strong and honest. The judge should see live public data, risk decisions, source proof, Telegram/trace plumbing, and no fake copy-trader rows.
 
@@ -1000,7 +1000,7 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 - [x] Update environment example so `ARC_LEADER_FEED_URL` is optional, not required.
 - [x] Run frontend/server tests and builds.
 - [x] Run local smoke on isolated ports.
-- [ ] Run production smoke after deployment.
+- [x] Run production smoke after deployment.
 
 **Verification:**
 - [x] `npm test`
@@ -1008,4 +1008,5 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 - [x] `cd server; npm test`
 - [x] `cd server; npm run build`
 - [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5181 AGORA_BACKEND_URL=http://127.0.0.1:8790 npm run test:agora-live`
+- [x] `AGORA_FRONTEND_URL=https://toll-gatee.vercel.app AGORA_BACKEND_URL=https://tollgate-1.onrender.com npm run test:agora-live`
 - [x] Playwright DOM check: SignalGuard and Free Source Stack visible; no horizontal overflow.
