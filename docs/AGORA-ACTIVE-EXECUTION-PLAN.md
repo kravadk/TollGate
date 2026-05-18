@@ -32,7 +32,7 @@
 
 ## Current Status
 
-**Last updated:** 2026-05-19 00:41 Europe/Kyiv
+**Last updated:** 2026-05-19 00:45 Europe/Kyiv
 
 **Done before this plan:**
 - `/live` has real wallet + Arc tx verification for trace unlock and portfolio start.
@@ -902,17 +902,19 @@ AGORA_FRONTEND_URL=https://<frontend-domain> AGORA_BACKEND_URL=https://<backend-
 
 ## Task 26: Final Production Smoke and Submission Summary Refresh
 
-**Status:** Local verification done 2026-05-19; production smoke pending after deployment.
+**Status:** Local verification and push done 2026-05-19; production smoke pending after Vercel deploys commit `d1d45df`.
 
 **Why this matters:** every new product layer must survive public judge review.
 
 **Implementation checklist:**
 - [x] Run full local build/tests.
 - [x] Run local smoke.
-- [ ] Push and verify production smoke.
+- [x] Push commit `d1d45df` to `origin/main`.
+- [ ] Verify production smoke after Vercel deploy includes new Agora Max sections.
 - [ ] Regenerate submission summary from production.
 
 **Verification:**
 - [x] `npm test`
 - [x] `npm run build`
 - [x] `AGORA_FRONTEND_URL=http://127.0.0.1:5178 AGORA_BACKEND_URL=http://127.0.0.1:8788 npm run test:agora-live`
+- [x] Production deploy poll checked `https://toll-gatee.vercel.app/live`; new sections were not live yet, so production smoke remains pending.
