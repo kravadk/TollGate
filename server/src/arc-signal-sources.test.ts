@@ -25,6 +25,17 @@ describe("Arc signal source radar", () => {
     assert.equal(radar.sources.find((source) => source.id === "bloomberg-paywall-bypass")?.status, "blocked");
   });
 
+  it("does not treat pasted JSON as a configured leader feed", () => {
+    const radar = buildArcSignalSourceRadar({
+      ARC_SIGNAL_SOURCE_MODE: "live",
+      APIFY_TOKEN: "configured-secret",
+      ARC_LEADER_FEED_URL: "{\"leaders\":[]}",
+    });
+
+    assert.equal(radar.sources.find((source) => source.id === "copy-leader-feed")?.status, "needs_key");
+    assert.ok(radar.missing.includes("ARC_LEADER_FEED_URL"));
+  });
+
   it("keeps configured tokens in watchlist mode until explicitly enabled", () => {
     const radar = buildArcSignalSourceRadar({
       ARC_SIGNAL_SOURCE_MODE: "watchlist",

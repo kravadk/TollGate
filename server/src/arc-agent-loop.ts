@@ -18,7 +18,7 @@ const ARC_RPC = process.env.ARC_RPC_URL ?? "https://rpc.testnet.arc-node.thecant
 const ARC_KEY = process.env.ARC_PRIVATE_KEY ?? "";
 const AGENT_ID = process.env.ARC_AGENT_ID ?? "";
 const REGISTRY = process.env.VITE_ARC_REGISTRY_ADDRESS ?? "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
-const LEADER_FEED_URL = process.env.ARC_LEADER_FEED_URL ?? "";
+const LEADER_FEED_URL = (process.env.ARC_LEADER_FEED_URL ?? "").trim();
 
 const REGISTRY_ABI = [
   "function recordDecision(bytes32 agentId, bytes32 decisionHash) external returns (uint256 index)",
@@ -63,6 +63,15 @@ function sha256Hex(s: string): string {
 function toBytes32(hex: string): string {
   const clean = hex.replace(/^0x/, "").padStart(64, "0");
   return "0x" + clean;
+}
+
+function httpUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchEthPrice(): Promise<number | null> {
@@ -151,26 +160,29 @@ function normalizeExternalLeader(raw: unknown, index: number): CopyGuardLeader |
     liquidityUsd,
     recentLosses: Math.max(0, Math.round(recentLosses)),
     source: cleanString(row["source"], 80) ?? "External leader feed",
-    sourceUrl: cleanString(row["sourceUrl"] ?? row["url"], 240) ?? LEADER_FEED_URL,
+    sourceUrl: httpUrl(cleanString(row["sourceUrl"] ?? row["url"], 240) ?? "") ?? httpUrl(LEADER_FEED_URL) ?? undefined,
     metricsNote: cleanString(row["metricsNote"], 240) ?? "Metrics are supplied by ARC_LEADER_FEED_URL; ArcMind only scores and caps allocation.",
   };
 }
 
 async function fetchCopyLeaders(): Promise<{ leaders: CopyGuardLeader[]; source: LeaderSource }> {
-  if (!LEADER_FEED_URL) {
+  const leaderFeedUrl = httpUrl(LEADER_FEED_URL);
+  if (!leaderFeedUrl) {
     return {
       leaders: [],
       source: {
         status: "missing",
         provider: "External leader feed",
-        detail: "ARC_LEADER_FEED_URL is not configured, so ArcMind hides copy-leader rows instead of generating sample traders.",
+        detail: LEADER_FEED_URL
+          ? "ARC_LEADER_FEED_URL is set but is not an http(s) JSON endpoint, so ArcMind ignores it and keeps SignalGuard active."
+          : "ARC_LEADER_FEED_URL is not configured, so ArcMind hides copy-leader rows instead of generating sample traders.",
         requiredEnv: ["ARC_LEADER_FEED_URL"],
       },
     };
   }
 
   try {
-    const res = await fetch(LEADER_FEED_URL, {
+    const res = await fetch(leaderFeedUrl, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -181,7 +193,7 @@ async function fetchCopyLeaders(): Promise<{ leaders: CopyGuardLeader[]; source:
           status: "unavailable",
           provider: "External leader feed",
           detail: `ARC_LEADER_FEED_URL returned HTTP ${res.status}; no synthetic leaders were created.`,
-          sourceUrl: LEADER_FEED_URL,
+          sourceUrl: leaderFeedUrl,
           requiredEnv: ["ARC_LEADER_FEED_URL"],
         },
       };
@@ -202,13 +214,13 @@ async function fetchCopyLeaders(): Promise<{ leaders: CopyGuardLeader[]; source:
           status: "configured",
           provider: "External leader feed",
           detail: `${leaders.length} verified leader rows loaded from ARC_LEADER_FEED_URL.`,
-          sourceUrl: LEADER_FEED_URL,
+          sourceUrl: leaderFeedUrl,
         }
         : {
           status: "unavailable",
           provider: "External leader feed",
           detail: "ARC_LEADER_FEED_URL responded, but no rows matched the required metric schema.",
-          sourceUrl: LEADER_FEED_URL,
+          sourceUrl: leaderFeedUrl,
           requiredEnv: ["ARC_LEADER_FEED_URL"],
         },
     };
@@ -219,7 +231,7 @@ async function fetchCopyLeaders(): Promise<{ leaders: CopyGuardLeader[]; source:
         status: "unavailable",
         provider: "External leader feed",
         detail: `ARC_LEADER_FEED_URL failed: ${err instanceof Error ? err.message : "unknown error"}. No synthetic leaders were created.`,
-        sourceUrl: LEADER_FEED_URL,
+        sourceUrl: leaderFeedUrl,
         requiredEnv: ["ARC_LEADER_FEED_URL"],
       },
     };

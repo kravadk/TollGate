@@ -214,11 +214,21 @@ function normalizeMode(v: string | undefined): ArcSignalSourceRadar["mode"] {
   return "watchlist";
 }
 
+function hasHttpUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function statusFor(item: CatalogItem, env: EnvLike, mode: ArcSignalSourceRadar["mode"]): ArcSignalSourceStatus {
   if (item.blocked) return "blocked";
   if (mode === "off") return "watchlist";
   if (item.tokenKind === "apify" && !env[APIFY_TOKEN_ENV]) return "needs_key";
-  if (item.tokenKind === "leader_feed" && !env[LEADER_FEED_ENV]) return "needs_key";
+  if (item.tokenKind === "leader_feed" && !hasHttpUrl(env[LEADER_FEED_ENV])) return "needs_key";
   if (mode === "live") return "configured";
   return "watchlist";
 }
@@ -252,7 +262,7 @@ export function buildArcSignalSourceRadar(env: EnvLike = process.env): ArcSignal
 
   const recommendedActions = [
     ...(missing.has(APIFY_TOKEN_ENV) ? ["Add APIFY_TOKEN to enable Apify-backed social/news source checks."] : []),
-    ...(missing.has(LEADER_FEED_ENV) ? ["Add ARC_LEADER_FEED_URL to enable real copy-leader scoring; synthetic leaders stay hidden until then."] : []),
+    ...(missing.has(LEADER_FEED_ENV) ? ["Add ARC_LEADER_FEED_URL as an http(s) JSON endpoint to enable real copy-leader scoring; synthetic leaders stay hidden until then."] : []),
     ...(mode !== "live" ? ["Set ARC_SIGNAL_SOURCE_MODE=live after validating quotas, caching, and source terms."] : []),
     "Persist source ids, timestamps, and links in each paid reasoning trace.",
     "Keep paywalled/bypass actors blocked; use headline/link discovery instead.",
