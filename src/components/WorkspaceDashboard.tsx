@@ -185,9 +185,12 @@ export function pageKind(tab: string, index: number): "overview" | "agents" | "r
   if (index === 0 || t.includes("overview")) return "overview";
   if (t.includes("gateway") || t.includes("explainer") || t.includes("debugger") || t.includes("playground") || t.includes("sdk")) return "gateway";
   if (t.includes("ai services") || t.includes("agent services")) return "service";
+  if (t.includes("agent identity") || t.includes("agent wallet") || t.includes("agent marketplace") || t.includes("agent economy") || t.includes("agent arena") || t.includes("agent credit") || t.includes("budget dashboard") || t.includes("qie wallet")) return "service";
+  if (t.includes("wallet protection")) return "verify";
   if (t.includes("approval")) return "agents";
-  if (t.includes("merchant dashboard") || t.includes("receipt") || t.includes("payment") || t.includes("invoice") || t.includes("ledger") || t.includes("subscription")) return "receipts";
-  if (t.includes("marketplace") || t.includes("catalog") || t.includes("my service") || t.includes("my paid") || t.includes("paid tool")) return "catalogue";
+  if (t.includes("merchant dashboard") || t.includes("receipt") || t.includes("invoice") || t.includes("ledger") || t.includes("subscription")) return "receipts";
+  if (t.includes("marketplace")) return "service";
+  if (t.includes("catalog") || t.includes("my service") || t.includes("my paid") || t.includes("paid tool")) return "catalogue";
   if (t.includes("privacy") || t.includes("risk rules") || t.includes("compliance") || t.includes("verif") || t.includes("proof") || t.includes("audit")) return "verify";
   if (SERVICE_TAB_KW.some((k) => t.includes(k))) return "service";
   if (t.includes("agent") || t.includes("budget") || t.includes("policy") || t.includes("companion") || t.includes("wallet")) return "agents";
@@ -829,6 +832,126 @@ const TAB_COPY: Record<string, [string, string]> = {
   "transaction explainer": ["Transaction explainer", "Decode a pending wallet action: what it does, what it touches and whether it's safe, caution or danger."],
   "alerts": ["Alerts", "Subscriptions to events — each alert delivery is metered."],
 };
+
+type ProductTabCopy = {
+  title: string;
+  sub: string;
+  intent: string;
+  proof: string;
+};
+
+function productTabCopy(workspace: Workspace, tabLabel: string, fallbackTitle: string, fallbackSub: string): ProductTabCopy {
+  const t = tabLabel.toLowerCase();
+  const base = {
+    title: fallbackTitle,
+    sub: fallbackSub,
+    intent: "Workflow",
+    proof: `${workspace.shortName} settlement`,
+  };
+
+  if (workspace.id === "agora") {
+    if (t.includes("signal") || t.includes("hub")) return { title: "SignalGuard decision cockpit", sub: "Live market sources, debate, PnL and decision logs for HOLD, REDUCE or ALLOW actions on Arc.", intent: "RFB 02 / 03", proof: "sourced signals + Arc receipts" };
+    if (t.includes("reasoning") || t.includes("trace")) return { title: "Reasoning trace marketplace", sub: "Inspect the evidence, confidence shift and source contribution behind each agent decision.", intent: "RFB 06", proof: "trace hash + paid unlock" };
+    if (t.includes("copy")) return { title: "Copy trading lifecycle", sub: "Set stake, monitor decay, pause, stop or reduce allocation before blind copy-trading can hurt the user.", intent: "RFB 06", proof: "copy controls + risk rules" };
+    if (t.includes("kill") || t.includes("risk")) return { title: "Autonomous risk kill switch", sub: "Configure drawdown, liquidation and source-divergence protections before the agent keeps trading.", intent: "RFB 01", proof: "Telegram + Arc action trail" };
+    if (t.includes("usyc") || t.includes("yield") || t.includes("swap")) return { title: "Risk-off capital router", sub: "Move idle capital between USDC, USYC and swap routes when the agent detects hostile conditions.", intent: "RFB 04", proof: "USDC denominated settlement" };
+    if (t.includes("arbitrage") || t.includes("arb")) return { title: "Cross-platform arbitrage route", sub: "Detect price gaps, choose route, estimate slippage and show the CCTP/Gateway path before execution.", intent: "RFB 05", proof: "route + receipt" };
+    if (t.includes("portfolio")) return { title: "Adaptive portfolio manager", sub: "Detect market regime, rebalance exposure and park capital in risk-off assets when needed.", intent: "RFB 04", proof: "allocation plan" };
+    if (t.includes("circle") || t.includes("x402") || t.includes("kit") || t.includes("merchant")) return { title: "Circle and Arc tool console", sub: "Use App Kit, CCTP, Gateway, x402 and nanopayment flows as the product's settlement layer.", intent: "Circle stack", proof: "USDC payments on Arc" };
+    if (t.includes("receipt")) return { title: "Arc settlement ledger", sub: "Review paid agent actions and receipts that prove which product flows actually settled.", intent: "Proof layer", proof: "receipt history" };
+  }
+
+  if (workspace.id === "0g") {
+    if (t.includes("identity") || t.includes("agent")) return { title: "Agent identity and authority", sub: "Register agent identity, set budget authority and connect it to paid compute/storage actions.", intent: "Identity", proof: "agent registry" };
+    if (t.includes("compute") || t.includes("inference")) return { title: "0G compute job console", sub: "Run inference jobs, compare cost, track queue state and verify execution metadata.", intent: "Compute", proof: "job receipt" };
+    if (t.includes("trading")) return { title: "0G trading arena", sub: "Use 0G compute as the arena where agents generate, compare and settle market signals.", intent: "Agent market", proof: "A2A loop" };
+    if (t.includes("storage")) return { title: "0G storage memory layer", sub: "Pin agent memory, manage allowlists and prove which data was stored or retrieved.", intent: "Storage", proof: "content hash" };
+    if (t.includes("privacy") || t.includes("tee") || t.includes("sovereign")) return { title: "TEE privacy proof flow", sub: "Seal payloads, run private execution and unseal only with matching receipt proof.", intent: "Privacy", proof: "attestation" };
+  }
+
+  if (workspace.id === "arbitrum") {
+    if (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc")) return { title: "USDC payment operations", sub: "Send, schedule and batch Arbitrum USDC payments through agent-safe controls.", intent: "Payments", proof: "USDC transfer flow" };
+    if (t.includes("escrow")) return { title: "Agent escrow release flow", sub: "Hold funds until delivery is verified, then release, refund or dispute with clear audit state.", intent: "Escrow", proof: "release/refund state" };
+    if (t.includes("orbit") || t.includes("monitor")) return { title: "Orbit chain health monitor", sub: "Track settlement health, bridge status and operational readiness for Orbit-based products.", intent: "Monitoring", proof: "chain status" };
+    if (t.includes("agent") || t.includes("marketplace")) return { title: "Agent service marketplace", sub: "Register services, enforce budgets and route agent intents through onchain-safe rails.", intent: "Marketplace", proof: "registry + budget" };
+    if (t.includes("risk") || t.includes("rule") || t.includes("protection")) return { title: "Spend protection rules", sub: "Define allowlists, max spend and contract safety checks before payments are approved.", intent: "Risk control", proof: "policy enforcement" };
+    if (t.includes("stylus") || t.includes("rust")) return { title: "Stylus contract workspace", sub: "Review and simulate Rust/Stylus contract payment flows before shipping them.", intent: "Contracts", proof: "contract sim" };
+  }
+
+  if (workspace.id === "mantle") {
+    if (t.includes("economy")) return { title: "Mantle agent economy", sub: "Track autonomous agent wallets, service demand and paid economic loops on Mantle.", intent: "Economy", proof: "agent activity" };
+    if (t.includes("alpha")) return { title: "Alpha intelligence desk", sub: "Combine whale alerts, alpha feeds and bot decisions into a tradable signal workspace.", intent: "Alpha", proof: "signal feed" };
+    if (t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("compare")) return { title: "Yield allocation console", sub: "Compare mETH, USDY and yield routes, then simulate rebalancing before capital moves.", intent: "Yield", proof: "projection" };
+    if (t.includes("rwa")) return { title: "RWA registry and risk desk", sub: "Review RWA instruments, risk attributes and evidence before agent allocation.", intent: "RWA", proof: "registry" };
+    if (t.includes("strateg") || t.includes("sandbox")) return { title: "Strategy simulation lab", sub: "Run backtests, deploy strategy candidates and keep receipts for each simulation.", intent: "Simulation", proof: "backtest result" };
+    if (t.includes("devtool") || t.includes("dev tool")) return { title: "Mantle developer toolbench", sub: "Optimize gas, inspect chain settings and turn dev actions into product-ready flows.", intent: "Developer", proof: "tool output" };
+    if (t.includes("credit") || t.includes("budget")) return { title: "Agent credit and budget desk", sub: "Score agents, approve credit lines and constrain daily spend before autonomous execution.", intent: "Credit", proof: "budget policy" };
+    if (t.includes("a2a") || t.includes("loop")) return { title: "Agent-to-agent loop", sub: "Show how Mantle agents discover, pay and complete services with traceable state.", intent: "A2A", proof: "loop receipt" };
+  }
+
+  if (workspace.id === "sui") {
+    if (t.includes("walrus") || t.includes("storage")) return { title: "Walrus storage workflow", sub: "Store assets and agent memory, then verify object references and payment state.", intent: "Storage", proof: "object proof" };
+    if (t.includes("move") || t.includes("contracts")) return { title: "Move contract workspace", sub: "Inspect Move contract flows and payment hooks in the context of agent actions.", intent: "Contracts", proof: "module view" };
+    if (t.includes("nft") || t.includes("market")) return { title: "Sui NFT market flow", sub: "List, buy and evaluate NFT actions through agent-controlled payment and reputation.", intent: "Market", proof: "NFT action" };
+    if (t.includes("wallet") || t.includes("agent")) return { title: "Sui agent wallet", sub: "Control agent wallet state, zkLogin, approvals and economy loop from one place.", intent: "Wallet", proof: "wallet policy" };
+    if (t.includes("yield") || t.includes("escrow")) return { title: "DeepBook yield escrow", sub: "Preview yield and escrow actions before an agent commits funds.", intent: "Yield", proof: "escrow state" };
+    if (t.includes("arena")) return { title: "Battle arena", sub: "Let agents compete, spend and earn with visible rules and result receipts.", intent: "Game economy", proof: "match result" };
+    if (t.includes("pay widget") || t.includes("pay button") || t.includes("widget")) return { title: "Sui pay widget", sub: "Configure a payment widget as the entry point for user-facing agent commerce.", intent: "Payments", proof: "widget config" };
+    if (t.includes("memory")) return { title: "Agent memory network", sub: "Connect memory records, ownership and retrieval to usable agent workflows.", intent: "Memory", proof: "memory graph" };
+    if (t.includes("intent")) return { title: "Intent engine", sub: "Translate user intent into executable agent steps with explicit constraints.", intent: "Intent", proof: "intent plan" };
+    if (t.includes("receipt")) return { title: "Reputation receipts", sub: "Turn completed actions into reputation evidence that users can inspect.", intent: "Reputation", proof: "NFT receipt" };
+  }
+
+  if (workspace.id === "qie") {
+    if (t.includes("checkout") || t.includes("merchant")) return { title: "Merchant checkout workspace", sub: "Create payment links, split settlement and track POS requests for real merchants.", intent: "Commerce", proof: "checkout receipt" };
+    if (t.includes("qiedex") || t.includes("dex")) return { title: "QIEDEX swap desk", sub: "Quote swaps, inspect liquidity and execute only after the route is understandable.", intent: "DEX", proof: "quote result" };
+    if (t.includes("gaming") || t.includes("game")) return { title: "Game item economy", sub: "Sell items, route payments and track creator/game receipts inside one flow.", intent: "Gaming", proof: "item receipt" };
+    if (t.includes("social") || t.includes("creator")) return { title: "Creator monetization flow", sub: "Handle tips, subscriptions and social payments with clear settlement state.", intent: "Creator", proof: "subscription/tip" };
+    if (t.includes("wallet")) return { title: "QIE wallet control room", sub: "Review wallet balances, actions and agent spending from the user's perspective.", intent: "Wallet", proof: "wallet activity" };
+    if (t.includes("oracle")) return { title: "Oracle feed workspace", sub: "Inspect feed values, freshness and downstream product impact before agents use them.", intent: "Oracle", proof: "feed freshness" };
+    if (t.includes("credit")) return { title: "Credit decision workspace", sub: "Score credit, preview limits and record decisions as auditable agent actions.", intent: "Credit", proof: "score output" };
+    if (t.includes("pass")) return { title: "QIE Pass identity gate", sub: "Issue access passes and enforce identity-gated commerce without exposing private data.", intent: "Identity", proof: "access proof" };
+  }
+
+  if (workspace.id === "polygon") {
+    if (t.includes("merchant") || t.includes("mode")) return { title: "Merchant Mode onboarding", sub: "Guide a merchant from setup to first payment with Polygon-native settlement.", intent: "Merchant", proof: "onboarding state" };
+    if (t.includes("trade") || t.includes("finance")) return { title: "Trade finance desk", sub: "Model invoices, financing and payment status for cross-border business flows.", intent: "Trade finance", proof: "invoice state" };
+    if (t.includes("marketplace") || t.includes("agent")) return { title: "Agent marketplace", sub: "Browse paid agent services and inspect payment/reputation before calling them.", intent: "Marketplace", proof: "service profile" };
+    if (t.includes("usdc") || t.includes("payment") || t.includes("remittance")) return { title: "USDC remittance flow", sub: "Send and track low-cost USDC payments with user-readable status.", intent: "Payments", proof: "payment receipt" };
+    if (t.includes("overview")) return { title: "Polygon operating dashboard", sub: "See workspace-level traction, payments and agent activity without endpoint clutter.", intent: "Overview", proof: "live metrics" };
+    if (t.includes("receipt")) return { title: "Polygon receipt ledger", sub: "Review settled Polygon payments and keep the proof trail clear for users.", intent: "Receipts", proof: "settlement list" };
+  }
+
+  return base;
+}
+
+function ProductTabHeader({ workspace, tabLabel, copy }: { workspace: Workspace; tabLabel: string; copy: ProductTabCopy }) {
+  return (
+    <div className="product-tab-head">
+      <div className="product-tab-head__main">
+        <small>{workspace.shortName} product flow · {tabLabel}</small>
+        <h2>{copy.title}</h2>
+        <p>{copy.sub}</p>
+      </div>
+      <div className="product-tab-head__rail">
+        <span>{copy.intent}</span>
+        <b>{copy.proof}</b>
+      </div>
+    </div>
+  );
+}
+
+function ProductProofStrip({ workspace, scopedCount, receiptCount, revenue }: { workspace: Workspace; scopedCount: number; receiptCount: number; revenue: number }) {
+  const primaryNetwork = workspace.networks[0] ?? workspace.shortName;
+  return (
+    <div className="product-proof-strip">
+      <div><b>{receiptCount}</b><span>receipts from this flow</span></div>
+      <div><b>{primaryNetwork}</b><span>settlement rail</span></div>
+      <div><b>{scopedCount}</b><span>paid primitives behind it</span></div>
+      <div><b>{revenue > 0 ? fmtUsd(revenue) : "ready"}</b><span>user-visible payment proof</span></div>
+    </div>
+  );
+}
 
 // ── Bespoke per-workspace flavor panels ──────────────────────────────────────
 
@@ -1959,37 +2082,40 @@ export function ServiceTabPage({
     t.includes("checkout") || t.includes("orbit") || t.includes("monitor") || t.includes("qiedex") || t.includes("dex") ||
     // Arbitrum: "Stylus Contracts" is the API reference tab — excluded so grid shows there
     (workspace.id === "arbitrum" && (t.includes("stablecoin") || t.includes("payment") || t.includes("usdc") || t.includes("agent") || t.includes("marketplace") || t.includes("risk") || t.includes("rule") || t.includes("protection") || t.includes("rust"))) ||
-    // Mantle: "AI DevTools" is the API reference tab — excluded so grid shows there
-    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("compare") || t.includes("rwa") || t.includes("economy") || t.includes("credit") || t.includes("budget") || t.includes("a2a") || t.includes("loop"))) ||
-    // Sui: "Pay Widget" is the API reference tab — excluded so grid shows there
-    (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("memory") || t.includes("intent") || t.includes("receipt"))) ||
-    // QIE: "Oracle Feed" is the API reference tab — excluded so grid shows there
-    (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet") || t.includes("credit"))) ||
+    (workspace.id === "mantle" && (t.includes("alpha") || t.includes("meth") || t.includes("usdy") || t.includes("yield") || t.includes("compare") || t.includes("rwa") || t.includes("economy") || t.includes("credit") || t.includes("budget") || t.includes("a2a") || t.includes("loop") || t.includes("devtool") || t.includes("dev tool"))) ||
+    (workspace.id === "sui" && (t.includes("walrus") || t.includes("storage") || t.includes("move") || t.includes("contracts") || t.includes("nft") || t.includes("market") || t.includes("wallet") || t.includes("agent") || t.includes("yield") || t.includes("escrow") || t.includes("arena") || t.includes("memory") || t.includes("intent") || t.includes("receipt") || t.includes("pay widget") || t.includes("pay button") || t.includes("widget"))) ||
+    (workspace.id === "qie" && (t.includes("merchant") || t.includes("gaming") || t.includes("game") || t.includes("social") || t.includes("creator") || t.includes("wallet") || t.includes("credit") || t.includes("oracle") || t.includes("pass"))) ||
     // 0G: "Receipts" is the API reference tab — excluded so grid shows there
     (workspace.id === "0g" && (t.includes("compute") || t.includes("inference") || t.includes("storage") || t.includes("trading") || t.includes("privacy") || t.includes("sovereign") || t.includes("tee") || t.includes("identity") || t.includes("agent"))) ||
-    // Agora: "App Kit" is the API reference tab — excluded (no "kit"/"app kit") so grid shows there
-    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt") || t.includes("copy") || t.includes("reasoning") || t.includes("trace") || t.includes("signal") || t.includes("hub") || t.includes("kill") || t.includes("risk") || t.includes("usyc") || t.includes("yield") || t.includes("swap"))) ||
-    // Polygon: "Agent Marketplace" is the API reference tab — excluded ("marketplace"+"agent" removed) so grid shows there
-    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview") || t.includes("receipt")));
+    (workspace.id === "agora" && (t.includes("arbitrage") || t.includes("arb") || t.includes("portfolio") || t.includes("x402") || t.includes("circle") || t.includes("merchant") || t.includes("receipt") || t.includes("copy") || t.includes("reasoning") || t.includes("trace") || t.includes("signal") || t.includes("hub") || t.includes("kill") || t.includes("risk") || t.includes("usyc") || t.includes("yield") || t.includes("swap") || t.includes("app kit") || t.includes("kit"))) ||
+    (workspace.id === "polygon" && (t.includes("merchant") || t.includes("mode") || t.includes("trade") || t.includes("finance") || t.includes("usdc") || t.includes("payment") || t.includes("remittance") || t.includes("overview") || t.includes("receipt") || t.includes("marketplace") || t.includes("agent")));
+
+  const productCopy = productTabCopy(workspace, tabLabel, ttl, sub);
 
   return (
-    <section className="svc-tab">
-      <div className="pay-market-hero">
-        <small>{workspace.shortName} · {tabLabel}</small>
-        <h2>{ttl}</h2>
-        <p>{sub}</p>
-        <label>
-          <Search size={17} />
-          <input value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder={`Search ${tabLabel.toLowerCase()}…`} />
-        </label>
-      </div>
+    <section className={"svc-tab" + (hasFlavor ? " svc-tab--product" : " svc-tab--api")}>
+      {hasFlavor ? (
+        <ProductTabHeader workspace={workspace} tabLabel={tabLabel} copy={productCopy} />
+      ) : (
+        <>
+          <div className="pay-market-hero">
+            <small>{workspace.shortName} · {tabLabel}</small>
+            <h2>{ttl}</h2>
+            <p>{sub}</p>
+            <label>
+              <Search size={17} />
+              <input value={q} onChange={(e) => setQ(e.currentTarget.value)} placeholder={`Search ${tabLabel.toLowerCase()}…`} />
+            </label>
+          </div>
 
-      <div className="svc-kpis">
-        <div className="svc-kpi"><span className="svc-kpi__k">Endpoints</span><span className="svc-kpi__v">{scoped.length}</span><span className="svc-kpi__d">{tabCat ? `${tabCat} category` : `across ${workspace.shortName}`}</span></div>
-        <div className="svc-kpi"><span className="svc-kpi__k">Calls · 7d</span><span className="svc-kpi__v">{wsReceipts7d.length.toLocaleString()}</span><span className="svc-kpi__d">confirmed · {workspace.shortName}</span></div>
-        <div className="svc-kpi"><span className="svc-kpi__k">Avg price</span><span className="svc-kpi__v">${scopedAvg.toFixed(3)}</span><span className="svc-kpi__d">per request here</span></div>
-        <div className="svc-kpi"><span className="svc-kpi__k">Settled here</span><span className="svc-kpi__v">{tabReceipts.length}</span><span className="svc-kpi__d">{scopedRevenue > 0 ? fmtUsd(scopedRevenue) + " total" : "no receipts yet"}</span></div>
-      </div>
+          <div className="svc-kpis">
+            <div className="svc-kpi"><span className="svc-kpi__k">Endpoints</span><span className="svc-kpi__v">{scoped.length}</span><span className="svc-kpi__d">{tabCat ? `${tabCat} category` : `across ${workspace.shortName}`}</span></div>
+            <div className="svc-kpi"><span className="svc-kpi__k">Calls · 7d</span><span className="svc-kpi__v">{wsReceipts7d.length.toLocaleString()}</span><span className="svc-kpi__d">confirmed · {workspace.shortName}</span></div>
+            <div className="svc-kpi"><span className="svc-kpi__k">Avg price</span><span className="svc-kpi__v">${scopedAvg.toFixed(3)}</span><span className="svc-kpi__d">per request here</span></div>
+            <div className="svc-kpi"><span className="svc-kpi__k">Settled here</span><span className="svc-kpi__v">{tabReceipts.length}</span><span className="svc-kpi__d">{scopedRevenue > 0 ? fmtUsd(scopedRevenue) + " total" : "no receipts yet"}</span></div>
+          </div>
+        </>
+      )}
 
       {/* ── FUNCTIONAL ZONE — the page is built around what you can DO here ── */}
 
@@ -2210,56 +2336,62 @@ export function ServiceTabPage({
         </div>
       )}
 
-      {/* ── REFERENCE ── integrate / pricing / networks ── */}
-      <div className="svc-tab__foot">
-        <div className="panel block">
-          <div className="block-head"><div className="ttl"><span className="sq soft"><Code width={15} height={15} /></span><div><h3>Integrate this endpoint</h3><div className="sub">{primary.name}</div></div></div></div>
-          <div className="svc-foot__snip">
-            <div className="svc-foot__snip-head"><span>cURL</span><CopyLine text={`curl -s https://gateway.tollgate.dev/${workspace.id}/${endpointPath(primary).split("/").pop()} \\\n  -H "X-Payment: $(tollgate pay ${primary.id})"`} /></div>
-            <pre className="code-block">{`curl -s https://gateway.tollgate.dev/${workspace.id}/${endpointPath(primary).split("/").pop()} \\\n  -H "X-Payment: $(tollgate pay ${primary.id})"`}</pre>
-          </div>
-          <div className="svc-foot__snip">
-            <div className="svc-foot__snip-head"><span>SDK</span><CopyLine text={`import { TollGate } from "@tollgate/sdk";\nconst ap = new TollGate({ wallet });\nconst res = await ap.call("${primary.id}", ${primary.sampleIn});`} /></div>
-            <pre className="code-block">{`import { TollGate } from "@tollgate/sdk";\nconst ap = new TollGate({ wallet });\nconst res = await ap.call("${primary.id}", ${primary.sampleIn});`}</pre>
-          </div>
-        </div>
-
-        <div className="panel block">
-          <div className="block-head"><div className="ttl"><span className="sq soft"><CircleDollarSign width={15} height={15} /></span><div><h3>Pricing tiers</h3><div className="sub">per-call, billed against the agent budget</div></div></div></div>
-          <div className="svc-table__scroll"><table className="svc-table">
-            <thead><tr><th>Tier</th><th>Rate</th><th>Best for</th></tr></thead>
-            <tbody>
-              <tr><td><b>Free</b></td><td className="svc-table__num">100 calls / mo</td><td className="muted">trying it out</td></tr>
-              <tr><td><b>Pro</b></td><td className="svc-table__num">${avgPrice.toFixed(3)} <span className="muted">/ call</span></td><td className="muted">pooled monthly billing</td></tr>
-              <tr><td><b>Scale</b></td><td className="svc-table__num">${(avgPrice * 0.7).toFixed(3)} <span className="muted">/ call</span></td><td className="muted">volume −30% · invoiced</td></tr>
-            </tbody>
-          </table></div>
-        </div>
-
-        <div className="panel block">
-          <div className="block-head"><div className="ttl"><span className="sq soft"><Network width={15} height={15} /></span><div><h3>Networks &amp; contracts</h3><div className="sub">where settlement happens</div></div></div></div>
-          <div className="svc-hist">
-            {workspace.networks.map((n) => (
-              <div className="svc-hist__row" key={n}>
-                <span className="svc-hist__dot" style={{ background: "var(--accent-primary)" }} />
-                <div className="svc-hist__main"><b>{n}</b><span>x402 gateway live</span></div>
-                <span className="pill ok">active</span>
+      {hasFlavor ? (
+        <ProductProofStrip workspace={workspace} scopedCount={scoped.length} receiptCount={tabReceipts.length} revenue={scopedRevenue} />
+      ) : (
+        <>
+          {/* ── REFERENCE ── integrate / pricing / networks ── */}
+          <div className="svc-tab__foot">
+            <div className="panel block">
+              <div className="block-head"><div className="ttl"><span className="sq soft"><Code width={15} height={15} /></span><div><h3>Integrate this endpoint</h3><div className="sub">{primary.name}</div></div></div></div>
+              <div className="svc-foot__snip">
+                <div className="svc-foot__snip-head"><span>cURL</span><CopyLine text={`curl -s https://gateway.tollgate.dev/${workspace.id}/${endpointPath(primary).split("/").pop()} \\\n  -H "X-Payment: $(tollgate pay ${primary.id})"`} /></div>
+                <pre className="code-block">{`curl -s https://gateway.tollgate.dev/${workspace.id}/${endpointPath(primary).split("/").pop()} \\\n  -H "X-Payment: $(tollgate pay ${primary.id})"`}</pre>
               </div>
-            ))}
-            <div className="svc-hist__row">
-              <span className="svc-hist__dot" style={{ background: "var(--muted)" }} />
-              <div className="svc-hist__main"><b>Gateway</b><span><code>0x{fnvHex(`${workspace.id}-gw`)}…{fnvHex(`${workspace.id}-gw2`).slice(0, 4)}</code></span></div>
+              <div className="svc-foot__snip">
+                <div className="svc-foot__snip-head"><span>SDK</span><CopyLine text={`import { TollGate } from "@tollgate/sdk";\nconst ap = new TollGate({ wallet });\nconst res = await ap.call("${primary.id}", ${primary.sampleIn});`} /></div>
+                <pre className="code-block">{`import { TollGate } from "@tollgate/sdk";\nconst ap = new TollGate({ wallet });\nconst res = await ap.call("${primary.id}", ${primary.sampleIn});`}</pre>
+              </div>
             </div>
-            <div className="svc-hist__row">
-              <span className="svc-hist__dot" style={{ background: "var(--muted)" }} />
-              <div className="svc-hist__main"><b>Settlement</b><span><code>0x{fnvHex(`${workspace.id}-settle`)}…{fnvHex(`${workspace.id}-st2`).slice(0, 4)}</code></span></div>
+
+            <div className="panel block">
+              <div className="block-head"><div className="ttl"><span className="sq soft"><CircleDollarSign width={15} height={15} /></span><div><h3>Pricing tiers</h3><div className="sub">per-call, billed against the agent budget</div></div></div></div>
+              <div className="svc-table__scroll"><table className="svc-table">
+                <thead><tr><th>Tier</th><th>Rate</th><th>Best for</th></tr></thead>
+                <tbody>
+                  <tr><td><b>Free</b></td><td className="svc-table__num">100 calls / mo</td><td className="muted">trying it out</td></tr>
+                  <tr><td><b>Pro</b></td><td className="svc-table__num">${avgPrice.toFixed(3)} <span className="muted">/ call</span></td><td className="muted">pooled monthly billing</td></tr>
+                  <tr><td><b>Scale</b></td><td className="svc-table__num">${(avgPrice * 0.7).toFixed(3)} <span className="muted">/ call</span></td><td className="muted">volume -30% · invoiced</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+
+            <div className="panel block">
+              <div className="block-head"><div className="ttl"><span className="sq soft"><Network width={15} height={15} /></span><div><h3>Networks &amp; contracts</h3><div className="sub">where settlement happens</div></div></div></div>
+              <div className="svc-hist">
+                {workspace.networks.map((n) => (
+                  <div className="svc-hist__row" key={n}>
+                    <span className="svc-hist__dot" style={{ background: "var(--accent-primary)" }} />
+                    <div className="svc-hist__main"><b>{n}</b><span>x402 gateway live</span></div>
+                    <span className="pill ok">active</span>
+                  </div>
+                ))}
+                <div className="svc-hist__row">
+                  <span className="svc-hist__dot" style={{ background: "var(--muted)" }} />
+                  <div className="svc-hist__main"><b>Gateway</b><span><code>0x{fnvHex(`${workspace.id}-gw`)}…{fnvHex(`${workspace.id}-gw2`).slice(0, 4)}</code></span></div>
+                </div>
+                <div className="svc-hist__row">
+                  <span className="svc-hist__dot" style={{ background: "var(--muted)" }} />
+                  <div className="svc-hist__main"><b>Settlement</b><span><code>0x{fnvHex(`${workspace.id}-settle`)}…{fnvHex(`${workspace.id}-st2`).slice(0, 4)}</code></span></div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* ── INSIGHTS — collapsed by default so functional surfaces dominate; scoped to this tab ── */}
-      <details className="svc-insights">
+      {!hasFlavor && <details className="svc-insights">
         <summary>{tabLabel} insights — usage chart · {variant === "verify" ? "guarantees" : "recent activity"} · top callers (scoped to this tab)</summary>
         <div style={{ marginTop: 14 }}>
           <div className="svc-tab__foot">
@@ -2302,7 +2434,7 @@ export function ServiceTabPage({
             </div>
           </div>
         </div>
-      </details>
+      </details>}
     </section>
   );
 }

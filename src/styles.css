@@ -9896,6 +9896,164 @@ select.twk-field {
 .svc-insights[open] > summary::before { transform: rotate(90deg); }
 .svc-insights > summary:hover { color: var(--ink); }
 
+.svc-tab--product {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.product-tab-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, .34fr);
+  gap: 18px;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 22px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #ff9b00) 26%, var(--line-2, rgba(140,140,150,.22)));
+  background:
+    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--workspace-accent, #ff9b00) 25%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--workspace-accent, #ff9b00) 13%, var(--bg-2, #fff)), var(--bg-2, #fff));
+  box-shadow: 0 20px 70px -50px color-mix(in srgb, var(--workspace-accent, #ff9b00) 70%, transparent);
+}
+
+.product-tab-head::after {
+  content: "";
+  position: absolute;
+  inset: auto -70px -120px auto;
+  width: 260px;
+  height: 260px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #ff9b00) 28%, transparent);
+  opacity: .5;
+  pointer-events: none;
+}
+
+.product-tab-head__main {
+  position: relative;
+  min-width: 0;
+}
+
+.product-tab-head small {
+  display: block;
+  margin-bottom: 8px;
+  color: color-mix(in srgb, var(--workspace-accent, #ff9b00) 70%, var(--muted, #948e86));
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.product-tab-head h2 {
+  margin: 0;
+  max-width: 860px;
+  color: var(--ink, #1c1916);
+  font-family: var(--display);
+  font-size: clamp(1.45rem, 2.8vw, 2.35rem);
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+.product-tab-head p {
+  margin: 10px 0 0;
+  max-width: 780px;
+  color: var(--text-secondary, var(--muted));
+  font-size: .94rem;
+  line-height: 1.58;
+}
+
+.product-tab-head__rail {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, #ff9b00) 24%, var(--line-2, rgba(140,140,150,.22)));
+  background: color-mix(in srgb, var(--workspace-accent, #ff9b00) 8%, var(--field, rgba(140,140,150,.08)));
+}
+
+.product-tab-head__rail span {
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.product-tab-head__rail b {
+  color: var(--ink, #1c1916);
+  font-size: .98rem;
+  line-height: 1.35;
+}
+
+.product-proof-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.product-proof-strip > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-2, rgba(140,140,150,.22));
+  background: color-mix(in srgb, var(--workspace-accent, #ff9b00) 6%, var(--bg-2, #fff));
+}
+
+.product-proof-strip b {
+  display: block;
+  overflow: hidden;
+  color: var(--ink, #1c1916);
+  font-size: .9rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-proof-strip span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+:root[data-theme="dark"] .product-tab-head {
+  background:
+    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--workspace-accent, #ff9b00) 28%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--workspace-accent, #ff9b00) 14%, rgba(255,255,255,.045)), rgba(255,255,255,.035));
+}
+
+:root[data-theme="dark"] .product-tab-head h2,
+:root[data-theme="dark"] .product-tab-head__rail b,
+:root[data-theme="dark"] .product-proof-strip b {
+  color: var(--d-ink, #f4efe8);
+}
+
+:root[data-theme="dark"] .product-tab-head p {
+  color: rgba(255,255,255,.72);
+}
+
+:root[data-theme="dark"] .product-tab-head__rail,
+:root[data-theme="dark"] .product-proof-strip > div {
+  background: color-mix(in srgb, var(--workspace-accent, #ff9b00) 10%, rgba(255,255,255,.04));
+}
+
+@media (max-width: 860px) {
+  .product-tab-head,
+  .product-proof-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Endpoint cards — Try button is always visible, no horizontal scroll */
 .svc-ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(286px, 1fr)); gap: 12px; padding: 4px 16px 16px; }
 .svc-ep-card { display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--bg-2); }
