@@ -1744,11 +1744,19 @@ export function ArcMindLive() {
             </p>
             <div className="am-proof-mini">
               {sourceProofRows.slice(0, 4).map((row) => (
-                <a key={row.id} href={row.url ?? "#"} target={row.url ? "_blank" : undefined} rel="noreferrer">
-                  <span>{row.status}</span>
-                  <b>{row.label}</b>
-                  <small>{row.rfb}</small>
-                </a>
+                row.url ? (
+                  <a key={row.id} href={row.url} target="_blank" rel="noreferrer">
+                    <span>{row.status}</span>
+                    <b>{row.label}</b>
+                    <small>{row.rfb}</small>
+                  </a>
+                ) : (
+                  <div key={row.id} className="am-proof-static">
+                    <span>{row.status}</span>
+                    <b>{row.label}</b>
+                    <small>{row.rfb}</small>
+                  </div>
+                )
               ))}
               {!sourceProofRows.length && <p className="am-muted">No configured source proof rows yet.</p>}
             </div>
@@ -2298,14 +2306,25 @@ export function ArcMindLive() {
             </p>
             <div className="am-proof-drawer-list">
               {sourceProofRows.map((row) => (
-                <a key={row.id} href={row.url ?? "#"} target={row.url ? "_blank" : undefined} rel="noreferrer">
-                  <div>
-                    <span>{row.status}</span>
-                    <b>{row.label}</b>
+                row.url ? (
+                  <a key={row.id} href={row.url} target="_blank" rel="noreferrer">
+                    <div>
+                      <span>{row.status}</span>
+                      <b>{row.label}</b>
+                    </div>
+                    <p>{row.detail}</p>
+                    <small>{row.rfb}</small>
+                  </a>
+                ) : (
+                  <div key={row.id} className="am-proof-static">
+                    <div>
+                      <span>{row.status}</span>
+                      <b>{row.label}</b>
+                    </div>
+                    <p>{row.detail}</p>
+                    <small>{row.rfb}</small>
                   </div>
-                  <p>{row.detail}</p>
-                  <small>{row.rfb}</small>
-                </a>
+                )
               ))}
               {!sourceProofRows.length && <p className="am-muted">No proof rows are available yet. Check Signal Source Radar or wait for the next agent decision.</p>}
             </div>
@@ -2658,14 +2677,14 @@ export function ArcMindLive() {
         .am-free-stack span { display: block; color: #7890ad; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 900; margin-bottom: 5px; }
         .am-free-stack b { display: block; color: #dbeafe; line-height: 1.35; overflow-wrap: anywhere; }
         .am-backtest-list, .am-proof-mini, .am-proof-drawer-list { display: grid; gap: 9px; }
-        .am-backtest-list > div, .am-proof-mini a, .am-proof-drawer-list a { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 11px 12px; min-width: 0; color: inherit; text-decoration: none; }
+        .am-backtest-list > div, .am-proof-mini a, .am-proof-mini .am-proof-static, .am-proof-drawer-list a, .am-proof-drawer-list .am-proof-static { border: 1px solid #1b2a40; background: #08111e; border-radius: 12px; padding: 11px 12px; min-width: 0; color: inherit; text-decoration: none; }
         .am-backtest-list b, .am-proof-mini b, .am-proof-drawer-list b { display: block; color: #dbeafe; line-height: 1.3; overflow-wrap: anywhere; }
         .am-backtest-list span { display: block; color: #7890ad; margin-top: 4px; font-size: .7rem; line-height: 1.35; }
         .am-backtest-list small, .am-proof-mini small, .am-proof-drawer-list small { display: block; color: #9fb2cc; margin-top: 5px; font-size: .68rem; line-height: 1.4; overflow-wrap: anywhere; }
         .am-proof-mini { margin: 12px 0; }
         .am-proof-mini span, .am-proof-drawer-list span { display: inline-flex; color: #bfdbfe; border: 1px solid #60A5FA44; background: #60A5FA12; border-radius: 999px; padding: 4px 7px; font-size: .62rem; font-weight: 950; margin-bottom: 7px; text-transform: uppercase; }
-        .am-proof-drawer-list a { display: grid; gap: 3px; }
-        .am-proof-drawer-list a > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
+        .am-proof-drawer-list a, .am-proof-drawer-list .am-proof-static { display: grid; gap: 3px; }
+        .am-proof-drawer-list a > div, .am-proof-drawer-list .am-proof-static > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
         .am-proof-drawer-list p { color: #9fb2cc; margin: 4px 0 0; font-size: .76rem; line-height: 1.45; }
         .am-ask-prompts { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
         .am-ask-prompts button { border: 1px solid #26364d; background: #101827; color: #d8e4f6; border-radius: 999px; padding: 8px 10px; font-size: .72rem; font-weight: 900; cursor: pointer; }
