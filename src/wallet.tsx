@@ -3,12 +3,21 @@ import {
   Wallet, LogOut, Loader2, AlertTriangle, RefreshCw, Link2, Activity,
   Coins, ArrowDownLeft, ArrowUpRight, ExternalLink, ChevronDown, ChevronRight,
 } from "lucide-react";
+import { WORKSPACE_CHAINS, chainAddParams, type ChainConfig } from "./lib/chains";
 
 type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on?: (event: string, handler: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
 };
+
+const WALLET_REFRESH_EVENT = "tollgate:wallet-refresh";
+
+function emitWalletRefresh() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(WALLET_REFRESH_EVENT));
+  }
+}
 
 declare global {
   interface Window {
@@ -133,6 +142,16 @@ const EXPLORERS: Record<string, string> = {
   "0x44d": "https://zkevm.polygonscan.com",
   "0x985": "https://cardona-zkevm.polygonscan.com",
 };
+
+function chainConfigForHex(hex: string): ChainConfig | null {
+  const target = hex.toLowerCase();
+  for (const chains of Object.values(WORKSPACE_CHAINS)) {
+    for (const cfg of [chains.mainnet, chains.testnet]) {
+      if (!cfg.isNonEvm && cfg.hex.toLowerCase() === target) return cfg;
+    }
+  }
+  return null;
+}
 
 export function explorerTxUrl(chainId: string | null, hash: string): string | null {
   if (!chainId) return null;
@@ -356,6 +375,12 @@ export function useWallet(): WalletState {
   useEffect(() => { void hydrate(); }, [hydrate]);
 
   useEffect(() => {
+    const onRefresh = () => { void hydrate(); };
+    window.addEventListener(WALLET_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(WALLET_REFRESH_EVENT, onRefresh);
+  }, [hydrate]);
+
+  useEffect(() => {
     if (!provider?.on) return;
     const onAccounts = (...args: unknown[]) => {
       const accounts = args[0] as string[];
@@ -394,6 +419,7 @@ export function useWallet(): WalletState {
         const cid = (await provider.request({ method: "eth_chainId" })) as string;
         setChainId(cid);
         void refreshBalance(accounts[0]);
+        emitWalletRefresh();
       }
     } catch (err) {
       const e = err as { code?: number; message?: string };
@@ -408,6 +434,7 @@ export function useWallet(): WalletState {
     setChainId(null);
     setBalanceEth(null);
     setError(null);
+    emitWalletRefresh();
   }, []);
 
   const refresh = useCallback(async () => {
@@ -420,9 +447,29 @@ export function useWallet(): WalletState {
       await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
       setChainId(hex);
       if (address) void refreshBalance(address);
+      emitWalletRefresh();
     } catch (err) {
       const e = err as { code?: number; message?: string };
-      setError(e.code === 4902 ? "Chain not added to your wallet — add it manually" : e.message ?? "Failed to switch chain");
+      if (e.code === 4902) {
+        const cfg = chainConfigForHex(hex);
+        if (!cfg) {
+          setError("Chain not added to your wallet — add it manually");
+          return;
+        }
+        try {
+          await provider.request({ method: "wallet_addEthereumChain", params: [chainAddParams(cfg)] });
+          const cid = (await provider.request({ method: "eth_chainId" })) as string;
+          setChainId(cid);
+          if (address) void refreshBalance(address);
+          emitWalletRefresh();
+          return;
+        } catch (addErr) {
+          const add = addErr as { code?: number; message?: string };
+          setError(add.code === 4001 ? "Network add rejected" : add.message ?? "Failed to add chain");
+          return;
+        }
+      }
+      setError(e.message ?? "Failed to switch chain");
     }
   }, [provider, address, refreshBalance]);
 

@@ -7,6 +7,7 @@ import type { WorkspaceId } from "../types";
 import { AppSidebar } from "../components/ui/AppSidebar";
 import { PaymentModal } from "../components/PaymentModal";
 import { NetworkBanner } from "../components/ui/NetworkBanner";
+import { WorkspaceWalletGate } from "../components/ui/WorkspaceWalletGate";
 import { useAppState } from "../app-state";
 import { WorkspaceBackdrop } from "../components/visual/WorkspaceBackdrop";
 
@@ -103,7 +104,9 @@ export function AppLayout() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
             >
-              <Outlet context={{ workspaceId: workspace.id } satisfies WorkspaceOutletContext} />
+              <WorkspaceWalletGate workspace={workspace}>
+                <Outlet context={{ workspaceId: workspace.id } satisfies WorkspaceOutletContext} />
+              </WorkspaceWalletGate>
             </motion.div>
           </AnimatePresence>
         </div>
