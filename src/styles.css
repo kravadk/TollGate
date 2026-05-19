@@ -10150,6 +10150,135 @@ select.twk-field {
   min-width: 0;
 }
 
+.arc-workspace-shell .ap402 .lede-head {
+  max-width: 980px;
+}
+
+.arc-workspace-shell .ap402 .lede-head::before {
+  content: "";
+  position: absolute;
+  inset: -18px -28px -14px;
+  pointer-events: none;
+  z-index: -1;
+  border-radius: 24px;
+  background:
+    linear-gradient(115deg, rgba(22, 82, 240, .16), transparent 34%),
+    linear-gradient(72deg, transparent 44%, rgba(16, 185, 129, .13), transparent 72%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 72px);
+  mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.92) 66%, transparent 100%);
+}
+
+.arc-workspace-shell .ap402 .lede-head h1 {
+  text-wrap: balance;
+}
+
+.arc-workspace-shell .ap402 .action-grid {
+  gap: 14px;
+  perspective: 1200px;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act {
+  --arc-card-accent: var(--workspace-accent, #1652F0);
+  min-height: 150px !important;
+  padding: 18px 20px 20px !important;
+  border-color: color-mix(in srgb, var(--arc-card-accent) 32%, rgba(255,255,255,.1)) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--arc-card-accent) 22%, transparent), transparent 42%),
+    radial-gradient(110% 100% at 100% 0%, color-mix(in srgb, var(--arc-card-accent) 24%, transparent), transparent 58%),
+    linear-gradient(150deg, rgba(18, 28, 48, .96), rgba(7, 11, 19, .92) 58%, rgba(3, 7, 13, .98)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 24px 70px -46px color-mix(in srgb, var(--arc-card-accent) 75%, transparent) !important;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act::before {
+  display: block !important;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--arc-card-accent) 60%, transparent), transparent 42%) top left / 100% 2px no-repeat,
+    repeating-linear-gradient(135deg, rgba(255,255,255,.045) 0 1px, transparent 1px 16px);
+  opacity: .65;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  width: 78px;
+  height: 38px;
+  pointer-events: none;
+  border-right: 1px solid color-mix(in srgb, var(--arc-card-accent) 48%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--arc-card-accent) 48%, transparent);
+  opacity: .45;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act:hover {
+  transform: translateY(-3px) rotateX(.7deg) !important;
+  border-color: color-mix(in srgb, var(--arc-card-accent) 58%, rgba(255,255,255,.16)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.1),
+    0 28px 80px -42px color-mix(in srgb, var(--arc-card-accent) 90%, transparent) !important;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act .gico {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--arc-card-accent) 38%, transparent), rgba(255,255,255,.04)) !important;
+  color: color-mix(in srgb, var(--arc-card-accent) 82%, #fff) !important;
+  border: 1px solid color-mix(in srgb, var(--arc-card-accent) 38%, transparent);
+  box-shadow: 0 10px 30px -18px var(--arc-card-accent) !important;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act .act-title {
+  max-width: 24ch;
+  font-size: 1rem !important;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act .act-sub {
+  max-width: 42ch;
+  color: #a9bbd4 !important;
+}
+
+.arc-workspace-shell .ap402 .act.arc-act .act-link {
+  color: color-mix(in srgb, var(--arc-card-accent) 76%, #fff) !important;
+}
+
+.arc-workspace-shell .ap402 .act-metric {
+  position: absolute !important;
+  top: 16px;
+  right: 16px;
+  z-index: 2 !important;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--arc-card-accent) 34%, rgba(255,255,255,.12));
+  background: color-mix(in srgb, var(--arc-card-accent) 12%, rgba(4, 10, 19, .72));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.arc-workspace-shell .ap402 .act-metric b {
+  color: color-mix(in srgb, var(--arc-card-accent) 72%, #fff);
+  font-size: .68rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.arc-workspace-shell .ap402 .act-metric em {
+  color: #c8d6ea;
+  font-style: normal;
+  font-size: .62rem;
+  line-height: 1;
+  opacity: .78;
+}
+
 @media (max-width: 760px) {
   .arc-workspace-shell .max-w-6xl {
     padding-left: 20px;
@@ -10176,5 +10305,22 @@ select.twk-field {
 
   .arc-workspace-shell [style*="display: flex"][style*="align-items: center"][style*="justify-content: space-between"] {
     flex-wrap: wrap !important;
+  }
+
+  .arc-workspace-shell .ap402 .lede-head::before {
+    inset: -12px -12px -10px;
+  }
+
+  .arc-workspace-shell .ap402 .act.arc-act {
+    min-height: 142px !important;
+  }
+
+  .arc-workspace-shell .ap402 .act-metric {
+    position: static !important;
+    justify-self: start;
+    justify-items: start;
+    width: max-content;
+    max-width: 100%;
+    margin: -2px 0 4px;
   }
 }

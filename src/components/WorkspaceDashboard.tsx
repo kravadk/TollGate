@@ -425,7 +425,18 @@ export function OverviewPage({
   }, [wsReceipts]);
   const topServices = useMemo(() => [...services].sort((a, b) => (svcRevMap.get(b.id) ?? 0) - (svcRevMap.get(a.id) ?? 0)).slice(0, 4), [services, svcRevMap]);
 
-  type CardDef = { ico: React.ElementType<{ width?: number; height?: number }>; title: string; sub?: string; light?: boolean; link?: string; onLink?: () => void; onClick: () => void };
+  type CardDef = {
+    ico: React.ElementType<{ width?: number; height?: number }>;
+    title: string;
+    sub?: string;
+    light?: boolean;
+    link?: string;
+    onLink?: () => void;
+    onClick: () => void;
+    accent?: string;
+    metric?: string;
+    detail?: string;
+  };
   const WS_CARDS: Partial<Record<WorkspaceId, CardDef[]>> = {
     "0g": [
       { light: true, ico: Bolt, title: "Run an inference job", sub: "pay per token · Risk Scorer · Llama 3 · Anomaly", onClick: () => def && onOpenPayment(def) },
@@ -468,12 +479,12 @@ export function OverviewPage({
       { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} Sui payments`, onClick: () => onGoReceipts() },
     ],
     agora: [
-      { light: true, ico: TrendingUp, title: "Run cross-chain arb demo", sub: "ETH/USDC gap Arc vs Base · $0.05 · CCTP", onClick: () => onGoTab("arbitrage") || onGoTab("arb") },
-      { ico: CircleDollarSign, title: "Adaptive portfolio rebalancer", sub: "multi-asset · USDC settlement · Paymaster", onClick: () => onGoTab("portfolio") },
-      { ico: Zap, title: "Pay-per-inference on Arc", sub: "x402 → USDC → instant settlement", onClick: () => def && onOpenPayment(def) },
-      { ico: Robot, title: "ArcArb Agent settings", sub: "daily limit $20 · auto-pay on · CCTP", onClick: () => onGoTab("agent") },
-      { ico: Code, title: "Circle Tools — CCTP & Nanopayments", sub: "CCTP bridge · Gateway · Paymaster", onClick: () => onGoTab("circle") || onGoTab("gateway") },
-      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} Arc payments`, onClick: () => onGoReceipts() },
+      { light: true, ico: TrendingUp, title: "Run cross-chain arb demo", sub: "ETH/USDC gap Arc vs Base · $0.05 · CCTP", metric: "CCTP route", detail: "Arc vs Base", accent: "#22d3ee", onClick: () => onGoTab("arbitrage") || onGoTab("arb") },
+      { ico: CircleDollarSign, title: "Adaptive portfolio rebalancer", sub: "multi-asset · USDC settlement · Paymaster", metric: "Risk-off", detail: "USDC/USYC", accent: "#10b981", onClick: () => onGoTab("portfolio") },
+      { ico: Zap, title: "Pay-per-inference on Arc", sub: "x402 → USDC → instant settlement", metric: "$0.002", detail: "priced call", accent: "#f59e0b", onClick: () => def && onOpenPayment(def) },
+      { ico: Robot, title: "ArcArb Agent settings", sub: "daily limit $20 · auto-pay on · CCTP", metric: "Auto-pay", detail: "$20 cap", accent: "#8b5cf6", onClick: () => onGoTab("agent") },
+      { ico: Code, title: "Circle Tools — CCTP & Nanopayments", sub: "CCTP bridge · Gateway · Paymaster", metric: "Circle stack", detail: "4 tools", accent: "#3b82f6", onClick: () => onGoTab("circle") || onGoTab("gateway") },
+      { ico: RIco, title: "View all receipts", sub: `${wsReceipts.length} Arc payments`, metric: `${wsReceipts.length}`, detail: "receipts", accent: "#fb7185", onClick: () => onGoReceipts() },
     ],
     polygon: [
       { light: true, ico: Zap, title: "Publish a paid API in 30 sec", sub: "paste endpoint · get TollGate URL · earn USDC", onClick: () => onGoTab("merchant") },
@@ -493,6 +504,9 @@ export function OverviewPage({
     title: "▶ Try the demo agent",
     sub: def ? `pays for ${def.name} · 402 → pay → unlock + receipt` : "402 → pay → unlock + receipt",
     link: "x402 Gateway →",
+    metric: workspace.id === "agora" ? "Live demo" : undefined,
+    detail: workspace.id === "agora" ? "402 receipt" : undefined,
+    accent: workspace.id === "agora" ? "#1652F0" : undefined,
     onLink: () => onGoTab("gateway"),
     onClick: () => def && onOpenPayment(def),
   };
@@ -528,9 +542,21 @@ export function OverviewPage({
         {cards.map((c, i) => {
           const Ico = c.ico;
           return (
-            <button key={i} className={"act" + (c.light ? " light" : "")} onClick={c.onClick} type="button">
+            <button
+              key={i}
+              className={"act" + (c.light ? " light" : "") + (workspace.id === "agora" ? " arc-act" : "")}
+              onClick={c.onClick}
+              type="button"
+              style={c.accent ? ({ "--arc-card-accent": c.accent } as React.CSSProperties) : undefined}
+            >
               <span className="gico"><Ico width={20} height={20} /></span>
               <span className="act-info">i</span>
+              {c.metric ? (
+                <span className="act-metric">
+                  <b>{c.metric}</b>
+                  {c.detail ? <em>{c.detail}</em> : null}
+                </span>
+              ) : null}
               <span className="act-title">{c.title}</span>
               {c.sub ? <span className="act-sub">{c.sub}</span> : null}
               {c.link ? (
