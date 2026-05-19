@@ -34,7 +34,7 @@ const CHAIN_NAMES: Record<string, string> = {
   "0x66eee": "Arbitrum Sepolia",
   "0x1388": "Mantle",
   "0x138b": "Mantle Sepolia",
-  "0x4115": "0G Mainnet",
+  "0x4115": "0G Legacy",
   "0x40da": "0G Galileo",
   "0x40d9": "0G Testnet",
   "0x7bf": "QIE Mainnet",
@@ -117,7 +117,7 @@ export function nativeSymbolForChain(chainId: string | null): string {
 // Mode-aware switching is handled by AppSidebar via useNetworkMode + getChain.
 // This map provides a stable fallback for components that don't have mode context.
 export const WORKSPACE_CHAIN: Record<string, { hex: string; name: string; native: string }> = {
-  "0g":      { hex: "0x4115",   name: "0G Mainnet",       native: "0G"   },
+  "0g":      { hex: "0x40da",   name: "0G Galileo",       native: "0G"   },
   qie:       { hex: "0x7bf",    name: "QIE Mainnet",       native: "QIE"  },
   arbitrum:  { hex: "0x66eee",  name: "Arbitrum Sepolia",  native: "ETH"  },
   mantle:    { hex: "0x1388",   name: "Mantle",            native: "MNT"  },
@@ -135,7 +135,7 @@ const EXPLORERS: Record<string, string> = {
   "0x66eee": "https://sepolia.arbiscan.io",
   "0x1388": "https://explorer.mantle.xyz",
   "0x138b": "https://explorer.sepolia.mantle.xyz",
-  "0x4115": "https://chainscan.0g.ai",
+  "0x4115": "https://chainscan-galileo.0g.ai",
   "0x40da": "https://chainscan-galileo.0g.ai",
   "0x7bf": "https://testnet.qie.digital",
   "0x4cef52": "https://testnet.arcscan.app",

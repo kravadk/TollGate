@@ -1340,12 +1340,12 @@ function AgentCheckpointWidget({ workspace }: { workspace: Workspace }) {
     const size = (payload.length / 1024).toFixed(1) + " KB";
     const ckpt: AgentCheckpoint = { id, hash, size, agentId, label, ts: new Date().toISOString() };
     setCheckpoints((p) => [ckpt, ...p].slice(0, 10));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Save", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.checkpoint.save", payload: { hash, label, agentId, size } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Save", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.checkpoint.save", payload: { hash, label, agentId, size } });
     setSaving(false);
   };
   const restore = (ckpt: AgentCheckpoint) => {
     setRestored(ckpt.id);
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Restore", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.checkpoint.restore", payload: { hash: ckpt.hash, label: ckpt.label, agentId: ckpt.agentId } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Memory Checkpoint · Restore", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.checkpoint.restore", payload: { hash: ckpt.hash, label: ckpt.label, agentId: ckpt.agentId } });
   };
 
   return (
@@ -1961,7 +1961,7 @@ function SealedPayloadVault({ workspace }: { workspace: Workspace }) {
     const sealId = "seal_" + hashId("seal", hash, 8);
     const digest = hash.slice(0, 32);
     setSeals((prev) => [{ sealId, recipient: recipient.trim() || "(unset)", digest, createdAt: new Date().toISOString() }, ...prev].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Sealed Payload", amount: 0.008, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.seal", payload: { sealId, recipient: recipient.trim(), digest } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G Sealed Payload", amount: 0.008, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.seal", payload: { sealId, recipient: recipient.trim(), digest } });
     setUnsealId(sealId);
     setSealing(false);
   };
@@ -2645,14 +2645,14 @@ const W2 = "0xF4BFd93061B160Fa376c7F66De207a00225B4e70";
 const t = (m: number) => new Date(Date.now() - m * 60000).toISOString();
 const h = () => "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 const OG_DEMO_RECEIPTS: Receipt[] = [
-  { id: "rcpt_0g_d01", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "0G Inference Risk Report",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(3),   kind: "0g.inference",    payload: { model: "risk-scorer-v2", attestationId: "att_0g_3f9c2a", response: '{"riskScore":41,"label":"low"}' } },
-  { id: "rcpt_0g_d02", workspaceId: "0g", serviceId: "svc_0g_storage",   serviceName: "0G Storage Memory Write",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.020, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(11),  kind: "0g.storage.pin",  payload: { root: "0x9f2c8b4e1d3a7f60aa91bc54de2081cf44e3d0b", size: 3072, merkleComputed: true, onChain: true } },
-  { id: "rcpt_0g_d03", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "Trading Arena · ETH/USDC",   agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(24),  kind: "0g.trading.signal", payload: { pair: "ETH/USDC", signal: "BUY", confidence: 87, sealed: true } },
-  { id: "rcpt_0g_d04", workspaceId: "0g", serviceId: "svc_0g_dav",       serviceName: "0G DA Verify",               agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.015, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(38),  kind: "0g.da.verify",    payload: { segment: 7, ok: true, root: "0x77da11c2e4a3f90b" } },
-  { id: "rcpt_0g_d05", workspaceId: "0g", serviceId: "svc_0g_context",   serviceName: "0G Privacy · TEE Execution", agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.018, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(55),  kind: "0g.privacy.tee",  payload: { attestationId: "att_0g_e20f91", teeQuote: "SGX_QUOTE:v3·E20F91·verified" } },
-  { id: "rcpt_0g_d06", workspaceId: "0g", serviceId: "svc_0g_batch",     serviceName: "0G Compute Batch Job",       agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.090, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "paid",     createdAt: t(72),  kind: "0g.inference",    payload: { model: "risk-scorer-v2", prompts: 24, batchId: "batch_0g_31a", avgMs: 608 } },
-  { id: "rcpt_0g_d07", workspaceId: "0g", serviceId: "svc_0g_storage",   serviceName: "0G Storage Memory Write",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.020, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(94),  kind: "0g.storage.pin",  payload: { root: "0x2d9e4c1b8a7f3e06c55d1b09ea4720fc1a2b3c4d", size: 8192 } },
-  { id: "rcpt_0g_d08", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "0G Inference Risk Report",   agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-mainnet", txHash: h(), status: "verified", createdAt: t(130), kind: "0g.inference",    payload: { model: "wallet-labeler", attestationId: "att_0g_7d4c01", response: '{"label":"defi-power-user","score":91}' } },
+  { id: "rcpt_0g_d01", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "0G Inference Risk Report",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(3),   kind: "0g.inference",    payload: { model: "risk-scorer-v2", attestationId: "att_0g_3f9c2a", response: '{"riskScore":41,"label":"low"}' } },
+  { id: "rcpt_0g_d02", workspaceId: "0g", serviceId: "svc_0g_storage",   serviceName: "0G Storage Memory Write",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.020, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(11),  kind: "0g.storage.pin",  payload: { root: "0x9f2c8b4e1d3a7f60aa91bc54de2081cf44e3d0b", size: 3072, merkleComputed: true, onChain: true } },
+  { id: "rcpt_0g_d03", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "Trading Arena · ETH/USDC",   agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(24),  kind: "0g.trading.signal", payload: { pair: "ETH/USDC", signal: "BUY", confidence: 87, sealed: true } },
+  { id: "rcpt_0g_d04", workspaceId: "0g", serviceId: "svc_0g_dav",       serviceName: "0G DA Verify",               agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.015, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(38),  kind: "0g.da.verify",    payload: { segment: 7, ok: true, root: "0x77da11c2e4a3f90b" } },
+  { id: "rcpt_0g_d05", workspaceId: "0g", serviceId: "svc_0g_context",   serviceName: "0G Privacy · TEE Execution", agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.018, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(55),  kind: "0g.privacy.tee",  payload: { attestationId: "att_0g_e20f91", teeQuote: "SGX_QUOTE:v3·E20F91·verified" } },
+  { id: "rcpt_0g_d06", workspaceId: "0g", serviceId: "svc_0g_batch",     serviceName: "0G Compute Batch Job",       agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.090, currency: "USDC", network: "0g-galileo", txHash: h(), status: "paid",     createdAt: t(72),  kind: "0g.inference",    payload: { model: "risk-scorer-v2", prompts: 24, batchId: "batch_0g_31a", avgMs: 608 } },
+  { id: "rcpt_0g_d07", workspaceId: "0g", serviceId: "svc_0g_storage",   serviceName: "0G Storage Memory Write",    agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W1,  amount: 0.020, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(94),  kind: "0g.storage.pin",  payload: { root: "0x2d9e4c1b8a7f3e06c55d1b09ea4720fc1a2b3c4d", size: 8192 } },
+  { id: "rcpt_0g_d08", workspaceId: "0g", serviceId: "svc_0g_inference", serviceName: "0G Inference Risk Report",   agentName: "0G Compute Agent", payerWallet: W1, providerWallet: W2,  amount: 0.030, currency: "USDC", network: "0g-galileo", txHash: h(), status: "verified", createdAt: t(130), kind: "0g.inference",    payload: { model: "wallet-labeler", attestationId: "att_0g_7d4c01", response: '{"label":"defi-power-user","score":91}' } },
 ];
 
 export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Receipt[]; workspace: Workspace; tabLabel: string }) {
@@ -2722,7 +2722,7 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
                 const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
                 const realTx = typeof onchainTx === "string" && onchainTx.startsWith("0x") ? onchainTx : null;
                 return realTx ? (
-                  <div className="kv"><span className="k">Anchor tx</span><a className="v" href={`https://chainscan.0g.ai/tx/${realTx}`} target="_blank" rel="noreferrer" style={{ color: "#2f6bff", textDecoration: "underline" }}>{realTx.slice(0, 10)}…{realTx.slice(-4)} ↗</a></div>
+                  <div className="kv"><span className="k">Anchor tx</span><a className="v" href={`https://chainscan-galileo.0g.ai/tx/${realTx}`} target="_blank" rel="noreferrer" style={{ color: "#2f6bff", textDecoration: "underline" }}>{realTx.slice(0, 10)}…{realTx.slice(-4)} ↗</a></div>
                 ) : sel.txHash ? (
                   <div className="kv"><span className="k">Tx hash</span><span className="v" title={sel.txHash} style={{ color: "#9a9a9a", fontWeight: 600 }}>{sel.txHash.length > 20 ? sel.txHash.slice(0, 14) + "…" : sel.txHash} · demo</span></div>
                 ) : null;

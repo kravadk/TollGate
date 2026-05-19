@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { ArrowUpRight, Bot } from "lucide-react";
 import { workspaces } from "../data";
 import { ConnectWalletButton } from "../wallet";
@@ -10,6 +10,7 @@ import { DottedGlobe } from "../components/visual/DottedGlobe";
 import { HexGrid } from "../components/visual/HexGrid";
 import { fadeInUp, fadeInUpSmall, fadeInScale, staggerFast } from "../lib/motion";
 import { CHAIN_LOGOS } from "../lib/chain-logos";
+import { useSettings } from "../hooks/useSettings";
 
 type ProjectLauncherProps = {
   theme: Theme;
@@ -27,10 +28,16 @@ function prettyChain(net: string): string {
 }
 
 export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) {
+  const { settings } = useSettings();
   const isDark = theme === "dark";
   const markerCss = isDark ? "#b7fc72" : "#ef6b78";
   const markerColor: [number, number, number] = isDark ? [0.72, 0.99, 0.45] : [0.94, 0.42, 0.47];
   const haloCss = isDark ? "rgba(183, 252, 114, 0.10)" : "rgba(239, 107, 120, 0.10)";
+  const defaultWorkspace = workspaces.find((ws) => ws.id === settings.defaultWorkspace);
+
+  if (defaultWorkspace) {
+    return <Navigate to={`/app/${defaultWorkspace.id}/${slugifyTab(defaultWorkspace.tabs[0] ?? "Overview")}`} replace />;
+  }
 
   return (
     <div className="relative min-h-screen bg-bg-base text-text-primary overflow-x-hidden">
@@ -83,17 +90,17 @@ export function ProjectLauncher({ theme, onToggleTheme }: ProjectLauncherProps) 
             <span className="gradient-text">Agents pay per call. Receipts on-chain.</span>
           </motion.h1>
           <motion.p variants={fadeInUpSmall} className="text-base md:text-lg text-text-secondary leading-relaxed max-w-2xl">
-            Agents pay for <b className="text-text-primary">0G Compute</b> inference and <b className="text-text-primary">0G Storage</b> over HTTP&nbsp;402 — every payment a verifiable receipt anchored on <b className="text-text-primary">0G mainnet</b>. The same gateway runs on Mantle, Arbitrum, Sui &amp; more — it&apos;s infrastructure, not a one-off.
+            Agents pay for <b className="text-text-primary">0G Compute</b> inference and <b className="text-text-primary">0G Storage</b> over HTTP&nbsp;402 — every payment a verifiable receipt anchored on <b className="text-text-primary">0G Galileo testnet</b>. The same gateway runs on Mantle, Arbitrum, Sui &amp; more — it&apos;s infrastructure, not a one-off.
           </motion.p>
           <motion.div variants={fadeInUpSmall} className="mt-5 flex flex-wrap items-center gap-2">
             <a
-              href="https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f"
+              href="https://chainscan-galileo.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              AgentReceiptRegistry — live on 0G mainnet
+              AgentReceiptRegistry — live on 0G Galileo testnet
               <ArrowUpRight size={11} />
             </a>
             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border border-border-default bg-surface-1 text-text-muted">

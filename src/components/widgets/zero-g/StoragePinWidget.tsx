@@ -137,7 +137,7 @@ export function StoragePinWidget({ workspace }: { workspace: Workspace }) {
       serviceName: isMem ? `0G Storage · Agent Memory (${agent.name})` : "0G Storage · Pin",
       amount: Number(cost.toFixed(5)),
       currency: "USDC",
-      network: workspace.networks[0] ?? "0g-mainnet",
+      network: workspace.networks[0] ?? "0g-galileo",
       kind: isMem ? "0g.memory.snapshot" : "0g.pin",
       payload: {
         hash, name: blob.name, size, blobId: blob.id,

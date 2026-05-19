@@ -7,6 +7,7 @@ import { useParams } from "react-router-dom";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { getChain, chainAddParams, isSingleChain } from "../../lib/chains";
 import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { useSettings } from "../../hooks/useSettings";
 import { NetworkToggle } from "./NetworkToggle";
 
 type EthereumProvider = {
@@ -31,6 +32,7 @@ export function NetworkBanner() {
   const [chainHex, setChainHex] = useState<string | null>(null);
   const [accountChanged, setAccountChanged] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const { settings } = useSettings();
 
   const { mode, toggle } = useNetworkMode(wsId ?? "");
   const expected = wsId ? getChain(wsId, mode) : undefined;
@@ -83,6 +85,7 @@ export function NetworkBanner() {
   }
 
   if (dismissed) return null;
+  if (!settings.showTestnetWarning) return null;
   if (!chainHex) return null;
   if (!expected || expected.isNonEvm) return null;
   if (wsId === "agora") return null; // Arc has no mainnet — banner is irrelevant

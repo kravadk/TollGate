@@ -9,7 +9,7 @@ import { registerOnChainService } from "../../lib/og";
 
 const CONTRACTS = [
   { label: "Arbitrum Sepolia", addr: "0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9", url: "https://sepolia.arbiscan.io/address/0xA8FdDb9F6f54Fbf127cb8c71049cB1e19f5836F9" },
-  { label: "0G mainnet",       addr: "0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8", url: "https://chainscan.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8" },
+  { label: "0G Galileo testnet",       addr: "0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8", url: "https://chainscan-galileo.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8" },
 ];
 
 type RegistryService = {
@@ -23,7 +23,7 @@ type RegistryService = {
 };
 
 const SEED_SERVICES: RegistryService[] = [
-  { serviceId: "svc_0g_inference", name: "0G Compute · Inference", priceUsd: 0.03, network: "0g-mainnet", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_0g_inference", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
+  { serviceId: "svc_0g_inference", name: "0G Compute · Inference", priceUsd: 0.03, network: "0g-galileo", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_0g_inference", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
   { serviceId: "svc_arb_gas_oracle", name: "Arbitrum · Gas Oracle", priceUsd: 0.01, network: "arbitrum-sepolia", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_arb_gas_oracle", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
   { serviceId: "svc_mantle_yield", name: "Mantle · Yield Optimizer", priceUsd: 0.08, network: "mantle-mainnet", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_mantle_yield", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
   { serviceId: "svc_qie_sentiment", name: "QIE · Sentiment Analysis", priceUsd: 0.02, network: "qie-mainnet", endpoint: "https://tollgate-1.onrender.com/api/gateway/svc_qie_sentiment", provider: "0xTollGate", registeredAt: "2026-05-13T00:00:00Z" },
@@ -36,7 +36,7 @@ const col: CSSProperties = { display: "flex", flexDirection: "column" as const, 
 const NETWORK_COLORS: Record<string, string> = {
   "arbitrum-sepolia": "#12AAFF",
   "mantle-mainnet": "#1AC964",
-  "0g-mainnet": "#A78BFA",
+  "0g-galileo": "#A78BFA",
   "qie-mainnet": "#FB923C",
 };
 
@@ -51,7 +51,7 @@ export function DiscoveryWidget() {
   const [loading, setLoading] = useState(true);
   useEffect(() => { const t = setTimeout(() => setLoading(false), 420); return () => clearTimeout(t); }, []);
   const [showRegister, setShowRegister] = useState(false);
-  const [form, setForm] = useState({ serviceId: "", name: "", priceUsd: "", network: "0g-mainnet", endpoint: "", provider: "" });
+  const [form, setForm] = useState({ serviceId: "", name: "", priceUsd: "", network: "0g-galileo", endpoint: "", provider: "" });
   const [registered, setRegistered] = useState(false);
 
   const maxP = parseFloat(maxPrice) || Infinity;
@@ -105,7 +105,7 @@ export function DiscoveryWidget() {
         registeredAt: new Date().toISOString(),
       };
       setServices((prev) => [svc, ...prev.filter((s) => s.serviceId !== svc.serviceId)]);
-      setForm({ serviceId: "", name: "", priceUsd: "", network: "0g-mainnet", endpoint: "", provider: "" });
+      setForm({ serviceId: "", name: "", priceUsd: "", network: "0g-galileo", endpoint: "", provider: "" });
       setRegistered(true);
       toast.success(`Service '${name}' registered on-chain · tx ${result.txHash.slice(0, 10)}…`);
       setTimeout(() => { setRegistered(false); setShowRegister(false); }, 2200);
@@ -206,7 +206,7 @@ export function DiscoveryWidget() {
             <div style={col}>
               <span style={lbl}>Network</span>
               <select style={inp} value={form.network} onChange={(e) => setForm((f) => ({ ...f, network: e.target.value }))}>
-                <option value="0g-mainnet">0G mainnet</option>
+                <option value="0g-galileo">0G Galileo testnet</option>
                 <option value="arbitrum-sepolia">Arbitrum Sepolia</option>
                 <option value="mantle-mainnet">Mantle mainnet</option>
                 <option value="qie-mainnet">QIE mainnet</option>

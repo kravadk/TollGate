@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, PlugZap, RotateCcw, ShieldCheck, 
 import type { Workspace } from "../../types";
 import { getChain } from "../../lib/chains";
 import { useNetworkMode } from "../../hooks/useNetworkMode";
+import { useSettings } from "../../hooks/useSettings";
 import { chainLabel, shortAddr, useWallet } from "../../wallet";
 
 type GateStep = "idle" | "connecting" | "switching";
@@ -20,6 +21,7 @@ export function WorkspaceWalletGate({
   children: React.ReactNode;
 }) {
   const wallet = useWallet();
+  const { settings } = useSettings();
   const { mode } = useNetworkMode(workspace.id);
   const target = useMemo(() => getChain(workspace.id, mode), [workspace.id, mode]);
   const [step, setStep] = useState<GateStep>("idle");
@@ -54,7 +56,7 @@ export function WorkspaceWalletGate({
   }, [workspace.id, target.hex]);
 
   useEffect(() => {
-    if (!wallet.available || ready || autoStarted) return;
+    if (!settings.autoConnect || !wallet.available || ready || autoStarted) return;
     const id = window.setTimeout(() => {
       if (!ready) {
         setAutoStarted(true);
@@ -64,16 +66,16 @@ export function WorkspaceWalletGate({
     return () => window.clearTimeout(id);
   // connectAndSwitch intentionally stays outside deps to avoid repeated wallet prompts.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet.available, ready, autoStarted, workspace.id, target.hex]);
+  }, [settings.autoConnect, wallet.available, ready, autoStarted, workspace.id, target.hex]);
 
   useEffect(() => {
-    if (!wallet.available || !wallet.address || ready || isNonEvm) return;
+    if (!settings.autoConnect || !wallet.available || !wallet.address || ready || isNonEvm) return;
     const key = `${workspace.id}:${target.hex}`;
     if (switchedFor.current === key) return;
     switchedFor.current = key;
     setStep("switching");
     wallet.switchChain(target.hex).finally(() => setStep("idle"));
-  }, [wallet, ready, isNonEvm, workspace.id, target.hex]);
+  }, [settings.autoConnect, wallet, ready, isNonEvm, workspace.id, target.hex]);
 
   if (ready) {
     return <>{children}</>;

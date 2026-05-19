@@ -21,7 +21,7 @@ type SettledIntent = {
 };
 
 const CHAINS = [
-  { id: "0g-mainnet",     label: "0G Mainnet",    chainId: 16661 },
+  { id: "0g-galileo",     label: "0G Galileo",    chainId: 16602 },
   { id: "mantle-mainnet", label: "Mantle Mainnet", chainId: 5000 },
 ];
 

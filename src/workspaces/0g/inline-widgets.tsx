@@ -150,8 +150,8 @@ const OG_DEMO_STEPS: { title: string; body: string }[] = [
     body: "The paid request reaches the 0G Compute Network — a provider from compute-marketplace.0g.ai runs the model and the response is settled & verified on 0G.",
   },
   {
-    title: "Receipt anchored on 0G mainnet",
-    body: "The payment receipt's hash is written to AgentReceiptRegistry on 0G mainnet — a permanent, public proof the job was paid for and ran.",
+    title: "Receipt anchored on 0G Galileo testnet",
+    body: "The payment receipt's hash is written to AgentReceiptRegistry on 0G Galileo testnet — a permanent, public proof the job was paid for and ran.",
   },
 ];
 
@@ -203,7 +203,7 @@ export function OgDemoFlow({
       serviceName: "0G Compute · Risk Assessment",
       amount: 0.03,
       currency: "USDC",
-      network: workspace.networks[0] ?? "0g-mainnet",
+      network: workspace.networks[0] ?? "0g-galileo",
       kind: "0g.inference",
       payload: { prompt: OG_DEMO_PROMPT, response: content, ogCompute: live, provider, chatID, verified },
     });
@@ -251,7 +251,7 @@ export function OgDemoFlow({
           <span className="sq soft"><Bolt width={15} height={15} /></span>
           <div>
             <h3>Demo flow · an agent pays for a real 0G Compute job</h3>
-            <div className="sub">402 → pay $0.03 USDC → 0G Compute runs it → receipt anchored on 0G mainnet</div>
+            <div className="sub">402 → pay $0.03 USDC → 0G Compute runs it → receipt anchored on 0G Galileo testnet</div>
           </div>
         </div>
         {phase === "idle"
@@ -290,7 +290,7 @@ export function OgDemoFlow({
                     )}
                     {anchor ? (
                       <a href={ogExplorerTxUrl(anchor.txHash)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#1fb58a", fontWeight: 700, fontSize: ".78rem" }}>
-                        <LinkIco width={12} height={12} /> Anchored on 0G mainnet{anchor.index != null ? ` · #${anchor.index}` : ""} <ArrowUpRight width={12} height={12} />
+                        <LinkIco width={12} height={12} /> Anchored on 0G Galileo testnet{anchor.index != null ? ` · #${anchor.index}` : ""} <ArrowUpRight width={12} height={12} />
                       </a>
                     ) : phase === "done" ? (
                       <span className="muted" style={{ fontSize: ".74rem" }}>
@@ -300,7 +300,7 @@ export function OgDemoFlow({
                       <button className="btn btn-sm" type="button" onClick={anchorIt} disabled={phase === "anchoring"}>
                         {phase === "anchoring"
                           ? <><Loader2 width={12} height={12} className="wallet-spin" /> Anchoring on 0G…</>
-                          : <><LinkIco width={12} height={12} /> {registryReady ? "Anchor receipt on 0G mainnet" : "Finish"}</>}
+                          : <><LinkIco width={12} height={12} /> {registryReady ? "Anchor receipt on 0G Galileo testnet" : "Finish"}</>}
                       </button>
                     )}
                     {err && <em style={{ color: "var(--red)", fontStyle: "normal", fontWeight: 600, marginLeft: 8, fontSize: ".74rem" }}>{err}</em>}
@@ -314,7 +314,7 @@ export function OgDemoFlow({
 
       <div className="ogdf-foot">
         <span className="muted">
-          {registryReady ? <>Live on 0G mainnet · <a href={ogExplorerAddrUrl(liveRegistryAddr)} target="_blank" rel="noreferrer">AgentReceiptRegistry {liveRegistryAddr.slice(0, 6)}…{liveRegistryAddr.slice(-4)} ↗</a> · </> : null}
+          {registryReady ? <>Live on 0G Galileo testnet · <a href={ogExplorerAddrUrl(liveRegistryAddr)} target="_blank" rel="noreferrer">AgentReceiptRegistry {liveRegistryAddr.slice(0, 6)}…{liveRegistryAddr.slice(-4)} ↗</a> · </> : null}
           Same gateway, every chain — <a href="#" onClick={(e) => { e.preventDefault(); onGoTab("compute") || onGoTab("inference"); }}>open the full Compute tab →</a>
         </span>
       </div>
@@ -608,13 +608,13 @@ export function OgSocialFeedWidget({ workspace }: { workspace: Workspace }) {
     const id = "sp_" + hash.slice(0, 6);
     const post: SocialPost = { id, author: address ?? "agid_0g_local", content: draft.trim(), hash: hash.slice(0, 12), link: `0g://feed/${hash.slice(0, 12)}`, tips: 0, ts: new Date().toISOString() };
     setPosts((p) => [post, ...p].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Publish", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.social.publish", payload: { hash: post.hash, link: post.link, contentLength: draft.length } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Publish", amount: 0.001, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.social.publish", payload: { hash: post.hash, link: post.link, contentLength: draft.length } });
     setDraft("");
     setPublishing(false);
   };
   const tip = (id: string) => {
     setPosts((p) => p.map((post) => post.id === id ? { ...post, tips: post.tips + 1 } : post));
-    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Tip", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.social.tip", payload: { postId: id } });
+    emitReceipt({ workspaceId: workspace.id, serviceName: "0G SocialFi · Tip", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.social.tip", payload: { postId: id } });
   };
 
   return (
@@ -699,7 +699,7 @@ export function OgComputeKanban({ workspace }: { workspace: Workspace }) {
     const cost = og.ok ? parseFloat((latency / 1000 * 0.004 + 0.003).toFixed(4)) : 0.003;
     setEphemeral((prev) => prev.map((j) => j.id === jobId ? { ...j, status: "verified", latencyMs: latency, cost, attestationId: attestId } : j));
     setSubmitting(false);
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_compute", serviceName: og.ok ? `0G Compute · ${og.model || submitModel}` : "0G Compute · Inference (demo)", amount: cost, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.inference", payload: { model: submitModel, prompt: p, attestationId: attestId, latencyMs: latency, ogCompute: og.ok, response: og.ok ? og.content : undefined } });
+    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_compute", serviceName: og.ok ? `0G Compute · ${og.model || submitModel}` : "0G Compute · Inference (demo)", amount: cost, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.inference", payload: { model: submitModel, prompt: p, attestationId: attestId, latencyMs: latency, ogCompute: og.ok, response: og.ok ? og.content : undefined } });
   };
 
   const COLS: { key: KanbanJob["status"]; label: string; color: string; jobs: KanbanJob[] }[] = [
@@ -798,7 +798,7 @@ export function OgPrivacyStepper({ workspace }: { workspace: Workspace }) {
       setAttestId(aid);
       setTeeQuote(quote);
       setStage(3);
-      emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_privacy", serviceName: "0G Privacy · TEE Execution", amount: 0.018, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.privacy.tee", payload: { attestationId: aid, teeQuote: quote, encryptedInput: encryptedHex } });
+      emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_privacy", serviceName: "0G Privacy · TEE Execution", amount: 0.018, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.privacy.tee", payload: { attestationId: aid, teeQuote: quote, encryptedInput: encryptedHex } });
     }
     setBusy(false);
   };
@@ -920,7 +920,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     await sleep(viaGateway ? 250 : 650);
     const r1 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Strategist hires Executor",
-      amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.a2a.hire", agentName: "Strategist agent",
+      amount: 0.02, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.a2a.hire", agentName: "Strategist agent",
       payload: { from: STRATEGIST, to: EXECUTOR, via: viaGateway ? "x402-gateway" : "x402-simulated" },
     });
     setRows((p) => [...p, { id: r1.id, label: "Strategist → Executor · hire", amount: 0.02, currency: "USDC" }]);
@@ -944,7 +944,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     setSignal({ verdict, confidence, live, provider });
     const r2 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Agent-to-agent · 0G Compute signal · ${verdict}`,
-      amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.a2a.signal", agentName: "Executor agent",
+      amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.a2a.signal", agentName: "Executor agent",
       payload: { from: EXECUTOR, to: "0g-compute", verdict, confidence, ogCompute: live, provider, prompt },
     });
     setRows((p) => [...p, { id: r2.id, label: `Executor → 0G Compute · ${verdict} ${confidence}%`, amount: 0.03, currency: "USDC" }]);
@@ -962,7 +962,7 @@ export function OgAgentToAgentLoop({ workspace }: { workspace: Workspace }) {
     setDecision({ txHash, onChain });
     const r3 = emitReceipt({
       workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: "Agent-to-agent · Executor records decision",
-      amount: 0, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.a2a.execute",
+      amount: 0, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.a2a.execute",
       agentName: "Executor agent", status: onChain ? "verified" : undefined,
       payload: { from: EXECUTOR, verdict, confidence, decisionHash: decisionHashHex, contextHash: contextHashHex, txHash, onChain },
     });
@@ -1200,7 +1200,7 @@ export function OgTradingArenaWidget({ workspace }: { workspace: Workspace }) {
     const sealed = og.ok && og.verified ? true : sealedMode && og.ok;
     const s: TradingSignal = { id: "sig_" + hashId("0g", attestationId, 8), pair, strategy, signal, confidence, attestationId, sealed, ts: new Date().toLocaleTimeString() };
     setSignals((prev) => [s, ...prev].slice(0, 20));
-    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Trading Arena · ${pair}`, amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.trading.signal", payload: { pair, strategy, signal, confidence, attestationId, sealed: sealedMode } });
+    emitReceipt({ workspaceId: workspace.id, serviceId: "svc_0g_inference", serviceName: `Trading Arena · ${pair}`, amount: 0.03, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.trading.signal", payload: { pair, strategy, signal, confidence, attestationId, sealed: sealedMode } });
     setBusy(false);
   };
   const sigColor = (s: TradingSignal["signal"]) => s === "BUY" ? "#1fb58a" : s === "SELL" ? "#e63946" : "var(--muted)";
@@ -1312,7 +1312,7 @@ export function LiveWalletBalance() {
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, background: "var(--field)", border: "1px solid var(--line-2)", marginBottom: 12 }}>
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: balance !== null ? "#10b981" : loading ? "#60a5fa" : "#f87171", flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Deployer wallet · 0G Mainnet · live</div>
+        <div style={{ fontSize: ".6rem", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700 }}>Deployer wallet · 0G Galileo · live</div>
         <div style={{ fontFamily: "monospace", fontSize: ".72rem", color: "var(--muted)", marginBottom: 2 }}>{DEPLOYER}</div>
       </div>
       <div style={{ textAlign: "right" }}>
@@ -1360,10 +1360,10 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
         txHash: result.txHash === "already-registered" ? undefined : result.txHash,
       };
       setList((prev) => [reg, ...prev.filter((x) => x.wallet.toLowerCase() !== result.walletAddress.toLowerCase())].slice(0, 20));
-      emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.agentid.register", payload: { agentId: reg.agentId, wallet: result.walletAddress, role, dailyCapUsd, sealed, txHash: result.txHash } });
+      emitReceipt({ workspaceId: workspace.id, serviceName: "0G Agent ID Registry", amount: 0.01, currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.agentid.register", payload: { agentId: reg.agentId, wallet: result.walletAddress, role, dailyCapUsd, sealed, txHash: result.txHash } });
     } catch (e) {
       const raw = (e as Error).message ?? String(e);
-      setRegError(raw.startsWith("Set VITE") ? "On-chain registration is not available on this network. Connect MetaMask to 0G Mainnet and try again." : raw);
+      setRegError(raw.startsWith("Set VITE") ? "On-chain registration is not available on this network. Connect MetaMask to 0G Galileo and try again." : raw);
     }
     setBusy(false);
   };
@@ -1383,7 +1383,7 @@ export function AgentIdRegistry({ workspace }: { workspace: Workspace }) {
   return (
     <div className="panel block svc-flavor">
       <div className="block-head">
-        <div className="ttl"><span className="sq soft"><Robot width={15} height={15} /></span><div><h3>Agent ID registry</h3><div className="sub">on-chain agent identities via AgentIdentityRegistry · MetaMask required · 0G mainnet</div></div></div>
+        <div className="ttl"><span className="sq soft"><Robot width={15} height={15} /></span><div><h3>Agent ID registry</h3><div className="sub">on-chain agent identities via AgentIdentityRegistry · MetaMask required · 0G Galileo testnet</div></div></div>
         <button className="btn btn-acc btn-sm" type="button" onClick={register} disabled={busy}>{busy ? <><Loader2 size={13} className="wallet-spin" /> Registering…</> : <><Plus width={13} height={13} /> Register agent</>}</button>
       </div>
       {regError && <div style={{ margin: "0 16px 8px", padding: "8px 12px", borderRadius: 8, background: "color-mix(in srgb,var(--red) 12%,transparent)", color: "var(--red)", fontSize: ".75rem" }}>{regError}</div>}
@@ -1503,7 +1503,7 @@ export function RevenueSplitConsole({ workspace }: { workspace: Workspace }) {
     rows.forEach((row) => {
       const pct = parseFloat(row.pct) || 0;
       if (pct <= 0) return;
-      emitReceipt({ workspaceId: workspace.id, serviceId: svcId, serviceName: `${svc?.name ?? "Service"} · Revenue Share`, amount: Number((p * pct / 100).toFixed(4)), currency: "USDC", network: workspace.networks[0] ?? "0g-mainnet", kind: "0g.revenue.split", payload: { recipient: row.wallet.trim() || "(unset)", pct, batchId, serviceId: svcId } });
+      emitReceipt({ workspaceId: workspace.id, serviceId: svcId, serviceName: `${svc?.name ?? "Service"} · Revenue Share`, amount: Number((p * pct / 100).toFixed(4)), currency: "USDC", network: workspace.networks[0] ?? "0g-galileo", kind: "0g.revenue.split", payload: { recipient: row.wallet.trim() || "(unset)", pct, batchId, serviceId: svcId } });
     });
     setDone(batchId);
   };
@@ -1567,7 +1567,7 @@ function envAddr(key: string): string | null {
   return v && v.trim() ? v.trim() : null;
 }
 
-const EXPLORER = "https://chainscan.0g.ai";
+const EXPLORER = "https://chainscan-galileo.0g.ai";
 
 const OG_CONTRACTS = [
   { label: "AgentReceiptRegistry",  envKey: "VITE_0G_REGISTRY_ADDRESS",                  fallback: "0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f", badge: "live" },
@@ -1581,8 +1581,8 @@ export function OgLiveContractsPanel() {
   return (
     <div style={{ background: "var(--bg-2)", borderRadius: 14, border: "1px solid var(--line-2)", overflow: "hidden" }}>
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>0G Mainnet Contracts</span>
-        <span style={{ fontSize: ".63rem", color: "#4ade80", fontWeight: 700, background: "#4ade8018", padding: "2px 7px", borderRadius: 5 }}>chainId 16661</span>
+        <span style={{ fontSize: ".7rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)" }}>0G Galileo Contracts</span>
+        <span style={{ fontSize: ".63rem", color: "#4ade80", fontWeight: 700, background: "#4ade8018", padding: "2px 7px", borderRadius: 5 }}>chainId 16602</span>
       </div>
       {OG_CONTRACTS.map((c) => {
         const addr = envAddr(c.envKey) ?? c.fallback;
@@ -1742,7 +1742,7 @@ export function OgDaMonitor() {
           </thead>
           <tbody>
             {refreshing && rows.length === 0 && (
-              <tr><td colSpan={5} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>Loading DA events from 0G mainnet…</td></tr>
+              <tr><td colSpan={5} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>Loading DA events from 0G Galileo testnet…</td></tr>
             )}
             {!refreshing && rows.length === 0 && (
               <tr><td colSpan={5} style={{ padding: "28px 14px", textAlign: "center", color: "var(--muted)", fontSize: ".78rem" }}>{loadErr ?? "No recent Submit events on FixedPriceFlow."}</td></tr>
@@ -2007,7 +2007,7 @@ export function OgAllowlistManager() {
         </div>
       )}
       <div style={{ padding: "6px 16px", fontSize: ".6rem", color: "var(--muted)", borderTop: "1px solid var(--line-2)" }}>
-        Permit signatures are EIP-191 signed in-browser — stored locally · submit to AgentBudgetController on 0G Mainnet to enforce caps on-chain
+        Permit signatures are EIP-191 signed in-browser — stored locally · submit to AgentBudgetController on 0G Galileo to enforce caps on-chain
       </div>
     </div>
   );
@@ -2128,7 +2128,7 @@ export function OgJobScheduler({ workspace }: { workspace: Workspace }) {
           serviceName: `Scheduled · ${j.modelId}`,
           amount: 0.022,
           currency: "USDC",
-          network: workspace.networks[0] ?? "0g-mainnet",
+          network: workspace.networks[0] ?? "0g-galileo",
           kind: "0g.inference",
           payload: { model: j.modelId, prompt: j.prompt, scheduled: true, jobId: j.id },
         });
@@ -2517,7 +2517,7 @@ export function OgMultiSigApprove({ workspace }: { workspace: Workspace }) {
       serviceName: "Multi-Sig Release",
       amount: 0,
       currency: "USDC",
-      network: workspace.networks[0] ?? "0g-mainnet",
+      network: workspace.networks[0] ?? "0g-galileo",
       kind: "0g.multisig.release",
       payload: { receiptId, signers: signers.filter((s) => s.signed).map((s) => ({ id: s.id, sig: s.sig })), threshold: THRESHOLD },
     });
@@ -2592,7 +2592,7 @@ export function OgMultiSigApprove({ workspace }: { workspace: Workspace }) {
         )}
       </div>
       <div style={{ padding: "6px 16px", fontSize: ".6rem", color: "var(--muted)", borderTop: "1px solid var(--line-2)" }}>
-        EIP-191 signatures computed in-browser · {THRESHOLD}-of-{signers.length} threshold · submit all sigs to AgentBudgetController to release on 0G Mainnet
+        EIP-191 signatures computed in-browser · {THRESHOLD}-of-{signers.length} threshold · submit all sigs to AgentBudgetController to release on 0G Galileo
       </div>
     </div>
   );
@@ -2678,7 +2678,7 @@ export function OgBudgetControllerWidget({ workspace }: { workspace: Workspace }
   return (
     <div className="panel block svc-flavor">
       <div className="block-head">
-        <div className="ttl"><span className="sq soft"><ShieldCheck width={15} height={15} /></span><div><h3>Agent Budget Controller</h3><div className="sub">Set & query on-chain spend limits for any agent · {BUDGET_CTRL_ADDR.slice(0, 10)}… · 0G mainnet</div></div></div>
+        <div className="ttl"><span className="sq soft"><ShieldCheck width={15} height={15} /></span><div><h3>Agent Budget Controller</h3><div className="sub">Set & query on-chain spend limits for any agent · {BUDGET_CTRL_ADDR.slice(0, 10)}… · 0G Galileo testnet</div></div></div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 16px 14px" }}>

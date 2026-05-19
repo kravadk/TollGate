@@ -28,8 +28,8 @@
   --brand-stone: #8c8983;
   --brand-charcoal: #1d1b1c;
   --brand-black: #0a0a0a;
-  --accent: var(--workspace-accent, #ef6b78);
-  --accent-soft: var(--workspace-accent-soft, rgba(239, 107, 120, 0.16));
+  --accent: var(--workspace-accent, var(--user-accent, #ef6b78));
+  --accent-soft: var(--workspace-accent-soft, color-mix(in srgb, var(--accent) 16%, transparent));
   --success: #17b26a;
   --danger: #d92d20;
   --warning: #d99000;
@@ -58,7 +58,7 @@
   --danger: #ff6b62;
   --warning: #ffb02e;
   --info: #68a5ff;
-  --accent: var(--workspace-accent, #b7fc72);
+  --accent: var(--workspace-accent, var(--user-accent, #b7fc72));
   /* Global aliases — dark overrides */
   --bg-base: #0a0a0a;
   --bg-1: #141414;

@@ -43,7 +43,7 @@ type OgComponent = {
 };
 
 const INITIAL: OgComponent[] = [
-  { name: "0G Chain", subtitle: "chainId 16661 · mainnet", status: "checking", detail: "Resolving contracts…" },
+  { name: "0G Chain", subtitle: "chainId 16602 · mainnet", status: "checking", detail: "Resolving contracts…" },
   { name: "0G Storage", subtitle: "0g-ts-sdk · indexer gateway", status: "checking", detail: "Checking indexer…" },
   { name: "0G Compute", subtitle: "serving broker · LLM inference", status: "checking", detail: "Pinging compute endpoint…" },
   { name: "0G TEE", subtitle: "sealed inference · Intel TDX", status: "checking", detail: "Checking TEE mode…" },
@@ -103,7 +103,7 @@ export function OgIntegrationStatus() {
     } else if (chainContracts.length === 1) {
       update(0, {
         status: "configured",
-        detail: "1 contract found · deploy remaining to 0G mainnet",
+        detail: "1 contract found · deploy remaining to 0G Galileo testnet",
         link: cfg.explorerBase,
         badge: "partial",
       });
@@ -111,7 +111,7 @@ export function OgIntegrationStatus() {
       update(0, {
         status: "offline",
         detail: "Set VITE_0G_REGISTRY_ADDRESS · deploy AgentReceiptRegistry",
-        link: "https://chainscan.0g.ai",
+        link: "https://chainscan-galileo.0g.ai",
       });
     }
 
@@ -258,7 +258,7 @@ export function OgIntegrationStatus() {
             {
               label: "AgentReceiptRegistry",
               addr: import.meta.env.VITE_0G_REGISTRY_ADDRESS as string | undefined,
-              explorer: "https://chainscan.0g.ai/address/",
+              explorer: "https://chainscan-galileo.0g.ai/address/",
             },
             {
               label: "Receipt (Galileo)",

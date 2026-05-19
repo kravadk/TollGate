@@ -54,7 +54,7 @@ Honest demo boundary: read-only walkthrough never creates local fake receipts. P
 
 > **The payment rails the agent economy runs on.** HTTP 402 for autonomous payments + AgentScore credit reputation, bound to ERC-8004 identity. 18 contracts across 5 chains.
 
-**[Live demo](https://toll-gatee.vercel.app/)** · **[API server](https://tollgate-1.onrender.com)** · **[0G mainnet contract](https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f)** · **[GitHub](https://github.com/kravadk/TollGate)**
+**[Live demo](https://toll-gatee.vercel.app/)** · **[API server](https://tollgate-1.onrender.com)** · **[0G Galileo testnet contract](https://chainscan-galileo.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f)** · **[GitHub](https://github.com/kravadk/TollGate)**
 
 Turn any API, data feed, inference job, or storage write into a **paid AI-agent service** using HTTP `402 Payment Required`, stablecoin settlement, on-chain agent budgets, and verifiable receipts — no accounts, no API keys, no human approval loop.
 
@@ -109,7 +109,7 @@ Each workspace is a self-contained deployment with its own contracts, paid API s
 
 | Workspace | Route | Networks | What it does |
 |---|---|---|---|
-| **0G** | `/app/0g` | 0G Mainnet · Galileo Testnet | AI inference + decentralised storage economy; A2A agent loop; MCP server |
+| **0G** | `/app/0g` | 0G Galileo Testnet | AI inference + decentralised storage economy; A2A agent loop; MCP server |
 | **Mantle** | `/app/mantle` | Mantle Mainnet | Agent wallets with on-chain spend policies; mETH/USDY yield signals; agent credit scoring |
 | **Arbitrum** | `/app/arbitrum` | Arbitrum Sepolia · One | USDC per-call services with escrowed delivery; Orbit chain monitoring |
 | **QIE** | `/app/qie` | QIE Testnet | Merchant checkout rail; QIE Pass NFT gating; on-chain oracle feed |
@@ -119,15 +119,15 @@ Each workspace is a self-contained deployment with its own contracts, paid API s
 
 ## Deployed contracts
 
-### 0G Mainnet — chainId 16661
+### 0G Galileo Testnet — chainId 16602
 
 | Contract | Address |
 |---|---|
-| `AgentReceiptRegistry` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
-| `AgentIdentityRegistry` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://chainscan.0g.ai/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
-| `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
-| `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
-| `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
+| `AgentReceiptRegistry` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://chainscan-galileo.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
+| `AgentIdentityRegistry` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://chainscan-galileo.0g.ai/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
+| `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan-galileo.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
+| `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan-galileo.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
+| `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan-galileo.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
 
 ### Mantle Mainnet — chainId 5000
 

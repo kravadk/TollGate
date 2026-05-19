@@ -130,12 +130,12 @@ function OgEcosystemLinks() {
     { title: "Storage", items: [{ label: "Storage Indexer", url: "https://indexer-storage-turbo.0g.ai" }, { label: "StorageScan", url: "https://storagescan-galileo.0g.ai" }] },
     { title: "Compute", items: [{ label: "0G Compute Portal", url: "https://0g.ai" }, { label: "Docs", url: "https://docs.0g.ai" }] },
   ] : [
-    { title: "Explorer", items: [{ label: "Chainscan Mainnet", url: "https://chainscan.0g.ai" }] },
+    { title: "Explorer", items: [{ label: "Galileo Testnet Explorer", url: "https://chainscan-galileo.0g.ai" }] },
     { title: "Storage", items: [{ label: "Storage Indexer", url: "https://indexer-storage-turbo.0g.ai" }, { label: "StorageScan", url: "https://storagescan.0g.ai" }] },
     { title: "Compute", items: [{ label: "0G Compute Portal", url: "https://0g.ai" }, { label: "Docs", url: "https://docs.0g.ai" }] },
     { title: "Bridge & Ecosystem", items: [{ label: "0G Bridge", url: "https://bridge.0g.ai" }, { label: "0G DApp Hub", url: "https://hub.0g.ai" }] },
   ];
-  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "0G Testnet · Galileo" : "0G Mainnet · chainId 16661"} accent="#3b82f6" />;
+  return <EcosystemLinksPanel groups={groups} network={isTestnet ? "0G Testnet · Galileo" : "0G Galileo · chainId 16602"} accent="#3b82f6" />;
 }
 
 export function renderOverviewExtra(_workspace: Workspace, _onGoTab: (t: string) => boolean, _onGoReceipts: () => void): ReactNode | null {

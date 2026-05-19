@@ -11,7 +11,7 @@ Agents pay-per-call for AI inference and decentralised storage on the 0G network
 | Feature | Description |
 |---|---|
 | x402 payment gateway | 5 paid APIs, single-use challenges, replay-safe, USDC settlement |
-| `AgentReceiptRegistry.sol` | Immutable on-chain audit trail per payment on 0G mainnet |
+| `AgentReceiptRegistry.sol` | Immutable on-chain audit trail per payment on 0G Galileo testnet |
 | `AgentIdentityRegistry.sol` | ERC-8004 identity NFT binding + EIP-191 signed credential display |
 | `ServiceRegistry.sol` | On-chain service catalog with price enforcement |
 | `AgentBudgetController.sol` | Per-agent daily + per-request spend limits |
@@ -20,19 +20,19 @@ Agents pay-per-call for AI inference and decentralised storage on the 0G network
 | TEE & Privacy | TEE attestation badge, private sealed context API (Seal-encrypted) |
 | MCP server | 9 tools — Claude Desktop agents call TollGate APIs natively via tool-use |
 | Economy Dashboard | Live SSE payment feed, receipt NFT chips, total volume |
-| Network toggle | Mainnet (chainId 16661) — persisted in localStorage |
+| Network toggle | Mainnet (chainId 16602) — persisted in localStorage |
 
 ## Contracts deployed
 
-### 0G Mainnet (chainId 16661)
+### 0G Galileo (chainId 16602)
 
 | Contract | Address |
 |---|---|
-| `AgentReceiptRegistry` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://chainscan.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
-| `AgentIdentityRegistry` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://chainscan.0g.ai/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
-| `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
-| `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
-| `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
+| `AgentReceiptRegistry` | [`0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f`](https://chainscan-galileo.0g.ai/address/0x801ddc5a54E5a7F1d0D6900AA996A04E26D0307f) |
+| `AgentIdentityRegistry` | [`0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446`](https://chainscan-galileo.0g.ai/address/0x8769E9ad02728d49D08CE2F5D5cd4ce75EeC0446) |
+| `ServiceRegistry` | [`0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8`](https://chainscan-galileo.0g.ai/address/0x2b27425bd22Ae883dEc34F7a8Eacacf336C562b8) |
+| `AgentBudgetController` | [`0x305eF265BD964fBe34913E70Ef6AA8951e6b662e`](https://chainscan-galileo.0g.ai/address/0x305eF265BD964fBe34913E70Ef6AA8951e6b662e) |
+| `DeliveryVerifier` | [`0x5F4999829D57f714497343f5677e66e6A56238E3`](https://chainscan-galileo.0g.ai/address/0x5F4999829D57f714497343f5677e66e6A56238E3) |
 
 ## Paid APIs (x402 services)
 
@@ -58,7 +58,7 @@ Agents pay-per-call for AI inference and decentralised storage on the 0G network
 
 | Network | Tool | URL |
 |---|---|---|
-| Mainnet | Chainscan Explorer | https://chainscan.0g.ai |
+| Testnet | Chainscan Explorer | https://chainscan-galileo.0g.ai |
 | Mainnet | StorageScan | https://storagescan.0g.ai |
 | Mainnet | Bridge | https://bridge.0g.ai |
 | Mainnet | DApp Hub | https://hub.0g.ai |
@@ -74,7 +74,7 @@ The Overview tab renders these links automatically based on the active mainnet/t
 
 ```
 Agent → GET /api/gateway/svc_0g_inference
-      ← 402 { challengeId, payTo, amount: "0.03", asset: "USDC", network: "0g-mainnet" }
+      ← 402 { challengeId, payTo, amount: "0.03", asset: "USDC", network: "0g-galileo" }
       → pay USDC on-chain → retry with X-PAYMENT header
       ← { data, receiptId, receipt }
       → receipt anchored to 0G Storage + NFT minted on Mantle

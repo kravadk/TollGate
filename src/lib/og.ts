@@ -21,16 +21,16 @@ function env(key: string): string | undefined {
   return v && v.trim() ? v.trim() : undefined;
 }
 
-/** 0G mainnet chain id, as the hex MetaMask uses. Override with VITE_0G_CHAIN_ID. */
-export const OG_DEFAULT_CHAIN_HEX = "0x4115"; // 16661 — 0G mainnet
+/** 0G Galileo testnet chain id, as the hex MetaMask uses. Override with VITE_0G_CHAIN_ID. */
+export const OG_DEFAULT_CHAIN_HEX = "0x40da"; // 16602 — 0G Galileo testnet
 /** Params to pass MetaMask if it doesn't yet know the 0G chain (used as a fallback when switching fails). */
 const OG_ADD_CHAIN = {
-  "0x4115": {
-    chainId: "0x4115",
-    chainName: "0G Mainnet",
+  "0x40da": {
+    chainId: "0x40da",
+    chainName: "0G Galileo Testnet",
     nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
-    rpcUrls: ["https://evmrpc.0g.ai"],
-    blockExplorerUrls: ["https://chainscan.0g.ai"],
+    rpcUrls: ["https://evmrpc-testnet.0g.ai"],
+    blockExplorerUrls: ["https://chainscan-galileo.0g.ai"],
   },
 } as const;
 
@@ -42,7 +42,7 @@ export type OgConfig = {
 };
 
 export function getOgConfig(_mode?: NetworkMode): OgConfig {
-  const explorer = (env("VITE_0G_EXPLORER") ?? "https://chainscan.0g.ai").replace(/\/+$/, "");
+  const explorer = (env("VITE_0G_EXPLORER") ?? "https://chainscan-galileo.0g.ai").replace(/\/+$/, "");
   const chainRaw = env("VITE_0G_CHAIN_ID");
   let chainHex = OG_DEFAULT_CHAIN_HEX;
   if (chainRaw) chainHex = chainRaw.startsWith("0x") ? chainRaw.toLowerCase() : "0x" + Number(chainRaw).toString(16);

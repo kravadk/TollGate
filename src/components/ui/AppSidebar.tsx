@@ -372,7 +372,7 @@ export function AppSidebar({ workspace, onClose }: AppSidebarProps) {
         </div>
       </div>
 
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} workspace={workspace} />
     </aside>
   );
 }

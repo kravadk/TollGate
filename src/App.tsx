@@ -16,6 +16,7 @@ import { CommandPalette } from "./components/ui/CommandPalette";
 import { OnboardingFlow } from "./components/ui/OnboardingFlow";
 import { notifStore } from "./lib/notificationStore";
 import { agentFor, initialReceipts, makeReceiptId, makeTxHash } from "./data";
+import { useSettings, ACCENT_CSS } from "./hooks/useSettings";
 import type { Receipt, Service, Theme } from "./types";
 
 const THEME_STORAGE_KEY = "tollgate-theme";
@@ -38,12 +39,14 @@ export default function App() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [paidServiceIds, setPaidServiceIds] = useState<Record<string, string>>({});
   const [extraServices, setExtraServices] = useState<Service[]>([]);
+  const { settings } = useSettings();
   const isArcExperience = location.pathname === "/live" || location.pathname.startsWith("/app/agora");
 
   useEffect(() => {
     document.documentElement.dataset.theme = isArcExperience ? "dark" : theme;
+    document.documentElement.style.setProperty("--user-accent", ACCENT_CSS[settings.accent]);
     if (!isArcExperience) window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme, isArcExperience]);
+  }, [theme, isArcExperience, settings.accent]);
 
   // Follow OS theme changes when user hasn't set a manual preference
   useEffect(() => {
