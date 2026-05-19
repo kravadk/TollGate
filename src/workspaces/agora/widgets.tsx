@@ -231,7 +231,7 @@ function ArcContractsPanel({ workspace }: { workspace: Workspace }) {
         </div>
       ))}
       <div style={{ padding: "8px 16px", fontSize: ".62rem", color: "var(--muted)" }}>
-        Arc L1 mainnet not yet live · both modes use testnet chain
+        Arc Testnet only · no Arc mainnet is exposed in this hackathon build
       </div>
     </div>
   );

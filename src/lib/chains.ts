@@ -49,10 +49,10 @@ export const WORKSPACE_CHAINS: Record<string, WorkspaceChains> = {
     },
   },
   agora: {
-    // Arc L1 — testnet chainId 5042002. Mainnet not yet live; using same chain for both.
+    // Arc L1 testnet only — chainId 5042002. No mainnet exists.
     mainnet: {
-      hex: "0x4cef52", chainId: 5042002, name: "Arc Mainnet", native: "USDC",
-      explorer: "https://arcscan.app", rpcUrl: "https://rpc.arc-node.thecanteenapp.com/v1/public",
+      hex: "0x4cef52", chainId: 5042002, name: "Arc Testnet", native: "USDC",
+      explorer: "https://testnet.arcscan.app", rpcUrl: "https://rpc.testnet.arc-node.thecanteenapp.com/v1/public",
     },
     testnet: {
       hex: "0x4cef52", chainId: 5042002, name: "Arc Testnet", native: "USDC",

@@ -29,7 +29,7 @@ const CHAIN_NAMES: Record<string, string> = {
   "0x40da": "0G Galileo",
   "0x40d9": "0G Testnet",
   "0x7bf": "QIE Mainnet",
-  "0x4cef52": "Arc",
+  "0x4cef52": "Arc Testnet",
   "0x44d": "Polygon zkEVM",
   "0x985": "Polygon Cardona",
 };
@@ -113,7 +113,7 @@ export const WORKSPACE_CHAIN: Record<string, { hex: string; name: string; native
   arbitrum:  { hex: "0x66eee",  name: "Arbitrum Sepolia",  native: "ETH"  },
   mantle:    { hex: "0x1388",   name: "Mantle",            native: "MNT"  },
   sui:       { hex: "0x101",    name: "Sui Mainnet",       native: "SUI"  },
-  agora:     { hex: "0x4cef52", name: "Arc",               native: "USDC" },
+  agora:     { hex: "0x4cef52", name: "Arc Testnet",       native: "USDC" },
   polygon:   { hex: "0x985",    name: "Polygon Cardona",   native: "ETH"  },
 };
 

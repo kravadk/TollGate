@@ -100,8 +100,11 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
     const rank = (s: string) => (s === "USDC" ? 0 : s === "USDT" ? 1 : 2);
     return rank(a.symbol) - rank(b.symbol);
   });
+  const hasUsdcToken = all.some((t) => t.symbol === "USDC");
   const balOf = (sym: string) => erc20.balances.find((b) => b.symbol === sym)?.display ?? (erc20.loading ? "…" : "0");
   const onTarget = !target.isNonEvm && w.chainId?.toLowerCase() === target.hex.toLowerCase();
+  const isAgoraWrongNetwork = workspace.id === "agora" && !onTarget && !target.isNonEvm;
+  const currentChainLabel = w.chainId ? chainLabel(w.chainId) : "Unknown network";
 
   return (
     <div
@@ -111,7 +114,12 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--accent-primary)", boxShadow: "0 0 7px color-mix(in srgb, var(--accent-primary) 60%, transparent)" }} />
-          <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">{w.chainId ? chainLabel(w.chainId) : "—"}</span>
+          <span
+            className="text-[10px] text-text-muted uppercase tracking-wider truncate"
+            title={isAgoraWrongNetwork ? `Wallet currently on ${currentChainLabel}` : undefined}
+          >
+            {isAgoraWrongNetwork ? target.name : currentChainLabel}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <NetworkToggle mode={mode} onToggle={toggle} hidden={singleChain} />
@@ -127,13 +135,19 @@ function BalanceDisplay({ workspace }: { workspace: Workspace }) {
           </button>
         </div>
       </div>
-      <div className="space-y-px">
-        <BalanceRow symbol={nativeSym} value={w.balanceEth ?? (refreshing ? "…" : "—")} accent />
-        <BalanceRow symbol="USDC" value={balOf("USDC")} />
-        {stables.filter((t) => t.symbol !== "USDC" && balOf(t.symbol) !== "0").map((t) => (
-          <BalanceRow key={t.symbol} symbol={t.symbol} value={balOf(t.symbol)} />
-        ))}
-      </div>
+      {isAgoraWrongNetwork ? (
+        <div className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-2 py-1.5 text-[10px] leading-snug text-amber-200">
+          Wallet currently on {currentChainLabel}. Arc has no mainnet here; switch to Arc Testnet to use these testnet USDC funds.
+        </div>
+      ) : (
+        <div className="space-y-px">
+          <BalanceRow symbol={nativeSym} value={w.balanceEth ?? (refreshing ? "…" : "—")} accent />
+          {hasUsdcToken && nativeSym !== "USDC" && <BalanceRow symbol="USDC" value={balOf("USDC")} />}
+          {stables.filter((t) => t.symbol !== "USDC" && balOf(t.symbol) !== "0").map((t) => (
+            <BalanceRow key={t.symbol} symbol={t.symbol} value={balOf(t.symbol)} />
+          ))}
+        </div>
+      )}
       {!onTarget && !target.isNonEvm && (
         <button
           type="button"

@@ -5,16 +5,18 @@ export type { NetworkMode };
 
 export function useNetworkMode(workspaceId: string) {
   const key = `tollgate.network.${workspaceId}`;
+  const forcedMode: NetworkMode | null = workspaceId === "agora" ? "testnet" : null;
   const [mode, setModeState] = useState<NetworkMode>(
-    () => (localStorage.getItem(key) as NetworkMode | null) ?? "mainnet",
+    () => forcedMode ?? (localStorage.getItem(key) as NetworkMode | null) ?? "mainnet",
   );
 
   const setMode = useCallback(
     (m: NetworkMode) => {
-      localStorage.setItem(key, m);
-      setModeState(m);
+      const next = forcedMode ?? m;
+      localStorage.setItem(key, next);
+      setModeState(next);
     },
-    [key],
+    [forcedMode, key],
   );
 
   const toggle = useCallback(
@@ -22,5 +24,5 @@ export function useNetworkMode(workspaceId: string) {
     [mode, setMode],
   );
 
-  return { mode, setMode, toggle };
+  return { mode: forcedMode ?? mode, setMode, toggle };
 }
