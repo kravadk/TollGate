@@ -94,13 +94,14 @@ export function PaymentModal({ agent, service, workspace, onApproved, onClose }:
   const WsIcon = workspace?.Icon;
   const accentSoft = `color-mix(in srgb, ${accent} 16%, transparent)`;
   const inProgress = stage === "paying" || stage === "verifying";
+  const canAnchorOnOg = workspace?.id === "0g" || svc.network.toLowerCase().includes("0g");
 
   const pay = async () => {
     if (stage !== "required") return;
     timers.current.forEach(window.clearTimeout);
     setStage("paying");
     const eth = typeof window !== "undefined" ? (window as unknown as { ethereum?: unknown }).ethereum : undefined;
-    if (isOgRegistryConfigured() && eth) {
+    if (canAnchorOnOg && isOgRegistryConfigured() && eth) {
       // Real on-chain path: anchor the receipt via AgentReceiptRegistry.record() (MetaMask sign).
       try {
         const receiptHashHex = await sha256Hex(`${svc.id}|${Date.now()}|${agent.wallet}`);
@@ -214,7 +215,7 @@ export function PaymentModal({ agent, service, workspace, onApproved, onClose }:
                   Pay once → the gateway verifies → the API response unlocks. One paid request, then the agent continues.
                 </div>
                 {/* Gas estimate hint */}
-                {isOgRegistryConfigured() && (
+                {canAnchorOnOg && isOgRegistryConfigured() && (
                   <div className="flex items-center gap-2 mb-3 text-[11px] text-text-muted">
                     <Fuel size={11} style={{ flexShrink: 0 }} />
                     <span>Estimated gas: <strong>{GAS_EST[svc.network] ?? "~$0.01"}</strong> on {svc.network}</span>
@@ -236,9 +237,9 @@ export function PaymentModal({ agent, service, workspace, onApproved, onClose }:
                   <ArrowRight size={16} />
                 </motion.button>
                 <p className="mt-3 text-[10.5px] leading-relaxed text-text-muted text-center">
-                  {isOgRegistryConfigured()
+                  {canAnchorOnOg && isOgRegistryConfigured()
                     ? <>Connect MetaMask on 0G → this anchors the receipt on-chain via <b>AgentReceiptRegistry</b> (real tx, you'll get a chainscan link). No wallet → demo mode.</>
-                    : <>Demo facilitator mode — the x402 handshake is simulated. Set <b>VITE_0G_REGISTRY_ADDRESS</b> + connect a wallet for a real on-chain receipt; see the <b>x402 Gateway</b> tab.</>}
+                    : <>Demo facilitator mode — the x402 handshake is simulated for this workspace. On-chain receipt anchoring is only enabled inside the 0G workspace.</>}
                 </p>
               </>
             ) : null}

@@ -114,6 +114,7 @@ export function isSingleChain(workspaceId: string): boolean {
 export function explorerForNetworkName(networkName: string): string | null {
   if (!networkName) return null;
   const lower = networkName.toLowerCase();
+  const normalized = lower.replace(/[^a-z0-9]/g, "");
   for (const chains of Object.values(WORKSPACE_CHAINS)) {
     for (const cfg of [chains.mainnet, chains.testnet]) {
       if (cfg.name.toLowerCase() === lower) return cfg.explorer;
@@ -122,7 +123,9 @@ export function explorerForNetworkName(networkName: string): string | null {
   // Partial match fallback
   for (const chains of Object.values(WORKSPACE_CHAINS)) {
     for (const cfg of [chains.mainnet, chains.testnet]) {
-      if (lower.includes(cfg.name.toLowerCase()) || cfg.name.toLowerCase().includes(lower)) {
+      const cfgLower = cfg.name.toLowerCase();
+      const cfgNormalized = cfgLower.replace(/[^a-z0-9]/g, "");
+      if (lower.includes(cfgLower) || cfgLower.includes(lower) || normalized.includes(cfgNormalized) || cfgNormalized.includes(normalized)) {
         return cfg.explorer;
       }
     }

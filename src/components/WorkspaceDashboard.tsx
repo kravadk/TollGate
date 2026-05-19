@@ -105,6 +105,7 @@ import { ArcMindCopyTradingWidget, ArcMindReasoningWidget, ArcMindSignalHubWidge
 import * as api from "../lib/api";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { runOgInference, anchorReceiptOnChain, isOgRegistryConfigured, getOgConfig, ogExplorerTxUrl, ogExplorerAddrUrl, uploadToOgStorage } from "../lib/og";
+import { explorerTxForNetwork } from "../lib/chains";
 import { AgentScoreComparison } from "./widgets/AgentScoreBadge";
 import { vaultRecordDecision, isMantleVaultConfigured, mantleExplorerTxUrl } from "../lib/mantle";
 
@@ -2719,10 +2720,12 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
               <div className="kv"><span className="k">Provider</span><span className="v" title={sel.providerWallet} style={{ display: "flex", alignItems: "center", gap: 5 }}>{sel.providerWallet.length > 20 ? sel.providerWallet.slice(0, 10) + "…" + sel.providerWallet.slice(-6) : sel.providerWallet}<button type="button" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 0, color: "inherit", opacity: .5 }} title="Copy address" onClick={() => navigator.clipboard?.writeText(sel.providerWallet).catch(() => {})}><Copy width={11} height={11} /></button></span></div>
               <div className="kv"><span className="k">Network</span><span className="v">{sel.network}</span></div>
               {(() => {
-                const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
+                const payload = sel.payload as Record<string, unknown> | undefined;
+                const onchainTx = payload?.["onchainTxHash"] ?? payload?.["anchorTx"] ?? payload?.["txHash"];
                 const realTx = typeof onchainTx === "string" && onchainTx.startsWith("0x") ? onchainTx : null;
+                const txUrl = typeof payload?.["explorerUrl"] === "string" ? payload["explorerUrl"] : realTx ? explorerTxForNetwork(sel.network, realTx) : null;
                 return realTx ? (
-                  <div className="kv"><span className="k">Anchor tx</span><a className="v" href={`https://chainscan-galileo.0g.ai/tx/${realTx}`} target="_blank" rel="noreferrer" style={{ color: "#2f6bff", textDecoration: "underline" }}>{realTx.slice(0, 10)}…{realTx.slice(-4)} ↗</a></div>
+                  <div className="kv"><span className="k">Anchor tx</span>{txUrl ? <a className="v" href={txUrl} target="_blank" rel="noreferrer" style={{ color: "#2f6bff", textDecoration: "underline" }}>{realTx.slice(0, 10)}…{realTx.slice(-4)} ↗</a> : <span className="v">{realTx.slice(0, 10)}…{realTx.slice(-4)}</span>}</div>
                 ) : sel.txHash ? (
                   <div className="kv"><span className="k">Tx hash</span><span className="v" title={sel.txHash} style={{ color: "#9a9a9a", fontWeight: 600 }}>{sel.txHash.length > 20 ? sel.txHash.slice(0, 14) + "…" : sel.txHash} · demo</span></div>
                 ) : null;
@@ -2734,10 +2737,11 @@ export function ReceiptsPage({ receipts, workspace, tabLabel }: { receipts: Rece
               <hr className="line" />
               <div className="row sm" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".03em", color: "#7a7a7a", lineHeight: 1.5 }}>
                 {(() => {
-                  const onchainTx = (sel.payload as Record<string, unknown> | undefined)?.["onchainTxHash"] ?? (sel.payload as Record<string, unknown> | undefined)?.["anchorTx"];
+                  const payload = sel.payload as Record<string, unknown> | undefined;
+                  const onchainTx = payload?.["onchainTxHash"] ?? payload?.["anchorTx"] ?? payload?.["txHash"];
                   const realTx = typeof onchainTx === "string" && onchainTx.startsWith("0x");
                   return realTx
-                    ? <><Check width={12} height={12} style={{ color: "var(--green)" }} /> ANCHORED ON 0G · PROOF SINGLE-USE</>
+                    ? <><Check width={12} height={12} style={{ color: "var(--green)" }} /> ANCHORED ON {sel.network.toUpperCase()} · PROOF SINGLE-USE</>
                     : <><Check width={12} height={12} style={{ color: "#d98f1c" }} /> DEMO RECEIPT · SIMULATED x402 HANDSHAKE — anchor it on-chain with the “Anchor on 0G” button on the Storage / Compute widgets</>;
                 })()}
               </div>
