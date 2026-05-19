@@ -10437,6 +10437,348 @@ select.twk-field {
   opacity: .78;
 }
 
+.ap402 .overview-window {
+  --ov-a: var(--workspace-accent, #ff9b00);
+  --ov-b: var(--card-accent-2, #22d3ee);
+}
+
+.ap402 .overview-window .lede-head {
+  max-width: 1120px;
+  padding: 8px 0 10px;
+}
+
+.ap402 .overview-window .lede-head::after {
+  right: 0;
+  top: -42%;
+  width: 58%;
+  height: 190%;
+  background:
+    radial-gradient(closest-side at 84% 24%, color-mix(in srgb, var(--workspace-accent, #ff9b00) 24%, transparent), transparent 72%),
+    linear-gradient(110deg, transparent, color-mix(in srgb, var(--workspace-accent, #ff9b00) 10%, transparent), transparent);
+}
+
+.ap402 .workspace-action-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: dense;
+  grid-auto-rows: minmax(118px, auto);
+  gap: 14px;
+}
+
+.ap402 .workspace-action-grid > .ws-act {
+  --card-accent: var(--workspace-accent, #ff9b00);
+  --card-accent-2: color-mix(in srgb, var(--card-accent) 68%, #ffffff);
+  grid-column: span 4;
+  min-height: 144px !important;
+  padding: 18px 19px 19px !important;
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--card-accent) 36%, rgba(255,255,255,.12)) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--card-accent) 20%, transparent), transparent 46%),
+    radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--card-accent-2) 18%, transparent), transparent 58%),
+    linear-gradient(150deg, rgba(18, 20, 28, .96), rgba(7, 9, 14, .94)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 24px 74px -52px color-mix(in srgb, var(--card-accent) 80%, transparent) !important;
+}
+
+.ap402 .workspace-action-grid > .ws-act > * {
+  position: relative;
+  z-index: 2;
+}
+
+.ap402 .workspace-action-grid > .ws-act::before {
+  display: block !important;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--card-accent) 70%, transparent), transparent 46%) top left / 100% 2px no-repeat,
+    repeating-linear-gradient(135deg, rgba(255,255,255,.035) 0 1px, transparent 1px 17px);
+  opacity: .8;
+}
+
+.ap402 .workspace-action-grid > .ws-act::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  bottom: 13px;
+  z-index: 1;
+  width: 74px;
+  height: 34px;
+  border-right: 1px solid color-mix(in srgb, var(--card-accent) 48%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--card-accent) 48%, transparent);
+  opacity: .45;
+  pointer-events: none;
+}
+
+.ap402 .workspace-action-grid > .ws-act:hover {
+  transform: translateY(-3px) !important;
+  border-color: color-mix(in srgb, var(--card-accent) 62%, rgba(255,255,255,.18)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.1),
+    0 30px 86px -46px color-mix(in srgb, var(--card-accent) 92%, transparent) !important;
+}
+
+.ap402 .workspace-action-grid .gico {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: color-mix(in srgb, var(--card-accent) 82%, #fff) !important;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--card-accent) 36%, transparent), rgba(255,255,255,.04)) !important;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 40%, transparent);
+  box-shadow: 0 12px 32px -20px var(--card-accent) !important;
+}
+
+.ap402 .workspace-action-grid .act-title {
+  max-width: 28ch;
+  color: #f8fbff !important;
+  font-size: 1rem !important;
+  line-height: 1.22 !important;
+}
+
+.ap402 .workspace-action-grid .act-sub {
+  max-width: 46ch;
+  color: rgba(226, 234, 246, .74) !important;
+  line-height: 1.45 !important;
+}
+
+.ap402 .workspace-action-grid .act-link {
+  color: color-mix(in srgb, var(--card-accent) 76%, #fff) !important;
+}
+
+.ap402 .workspace-action-grid .act-metric {
+  position: absolute !important;
+  top: 14px;
+  right: 14px;
+  z-index: 3 !important;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 34%, rgba(255,255,255,.14));
+  background: color-mix(in srgb, var(--card-accent) 12%, rgba(4, 10, 19, .74));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ap402 .workspace-action-grid .act-metric b {
+  color: color-mix(in srgb, var(--card-accent) 72%, #fff);
+  font-size: .67rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.ap402 .workspace-action-grid .act-metric em {
+  color: rgba(242, 247, 255, .78);
+  font-style: normal;
+  font-size: .61rem;
+  line-height: 1;
+}
+
+.ap402 .workspace-action-grid > .ws-act--1 { grid-column: span 5; grid-row: span 2; }
+.ap402 .workspace-action-grid > .ws-act--2 { grid-column: span 7; }
+.ap402 .workspace-action-grid > .ws-act--3,
+.ap402 .workspace-action-grid > .ws-act--4 { grid-column: span 3; }
+.ap402 .workspace-action-grid > .ws-act--5 { grid-column: span 4; }
+.ap402 .workspace-action-grid > .ws-act--6,
+.ap402 .workspace-action-grid > .ws-act--7 { grid-column: span 6; }
+
+.ap402 .workspace-action-grid--zero-g {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+}
+.ap402 .workspace-action-grid--zero-g > .ws-act {
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--card-accent) 24%, transparent), transparent 28%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 34px),
+    linear-gradient(145deg, rgba(19, 13, 35, .98), rgba(4, 8, 19, .96)) !important;
+}
+.ap402 .workspace-action-grid--zero-g > .ws-act--1 { grid-column: span 4; grid-row: span 2; }
+.ap402 .workspace-action-grid--zero-g > .ws-act--2 { grid-column: span 6; }
+.ap402 .workspace-action-grid--zero-g > .ws-act--3,
+.ap402 .workspace-action-grid--zero-g > .ws-act--4,
+.ap402 .workspace-action-grid--zero-g > .ws-act--5 { grid-column: span 2; }
+.ap402 .workspace-action-grid--zero-g > .ws-act--6,
+.ap402 .workspace-action-grid--zero-g > .ws-act--7 { grid-column: span 5; }
+
+.ap402 .workspace-action-grid--qie > .ws-act {
+  border-radius: 20px 8px 20px 8px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--card-accent) 44%, transparent) 0 7px, transparent 7px),
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, #facc15 15%, transparent), transparent 56%),
+    linear-gradient(150deg, rgba(7, 34, 26, .96), rgba(4, 13, 14, .96)) !important;
+}
+.ap402 .workspace-action-grid--qie > .ws-act--1,
+.ap402 .workspace-action-grid--qie > .ws-act--4 { grid-column: span 6; }
+.ap402 .workspace-action-grid--qie > .ws-act--2,
+.ap402 .workspace-action-grid--qie > .ws-act--3 { grid-column: span 3; }
+
+.ap402 .workspace-action-grid--arbitrum > .ws-act {
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgba(96,165,250,.16), transparent 44%),
+    repeating-linear-gradient(0deg, rgba(96,165,250,.08) 0 1px, transparent 1px 28px),
+    linear-gradient(145deg, rgba(9, 21, 48, .98), rgba(5, 8, 19, .96)) !important;
+}
+.ap402 .workspace-action-grid--arbitrum > .ws-act--1 { grid-column: span 4; grid-row: span 2; }
+.ap402 .workspace-action-grid--arbitrum > .ws-act--2,
+.ap402 .workspace-action-grid--arbitrum > .ws-act--3 { grid-column: span 4; }
+.ap402 .workspace-action-grid--arbitrum > .ws-act--4,
+.ap402 .workspace-action-grid--arbitrum > .ws-act--5,
+.ap402 .workspace-action-grid--arbitrum > .ws-act--6,
+.ap402 .workspace-action-grid--arbitrum > .ws-act--7 { grid-column: span 3; }
+
+.ap402 .workspace-action-grid--mantle > .ws-act {
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-accent) 18%, transparent), transparent 42%),
+    linear-gradient(135deg, rgba(7, 32, 23, .96), rgba(8, 11, 8, .96)) !important;
+}
+.ap402 .workspace-action-grid--mantle > .ws-act::before {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--card-accent) 70%, transparent), transparent 48%) top left / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, rgba(244,197,66,.06) 0 1px, transparent 1px 54px);
+}
+.ap402 .workspace-action-grid--mantle > .ws-act--1,
+.ap402 .workspace-action-grid--mantle > .ws-act--2 { grid-column: span 6; }
+.ap402 .workspace-action-grid--mantle > .ws-act--3,
+.ap402 .workspace-action-grid--mantle > .ws-act--4,
+.ap402 .workspace-action-grid--mantle > .ws-act--5 { grid-column: span 4; }
+
+.ap402 .workspace-action-grid--sui > .ws-act {
+  border-radius: 24px;
+  background:
+    radial-gradient(80% 110% at 12% 12%, color-mix(in srgb, var(--card-accent-2) 20%, transparent), transparent 58%),
+    linear-gradient(145deg, rgba(10, 27, 48, .96), rgba(4, 11, 26, .96)) !important;
+}
+.ap402 .workspace-action-grid--sui > .ws-act::after {
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 34%, transparent);
+}
+.ap402 .workspace-action-grid--sui > .ws-act--1,
+.ap402 .workspace-action-grid--sui > .ws-act--2,
+.ap402 .workspace-action-grid--sui > .ws-act--3 { grid-column: span 4; }
+.ap402 .workspace-action-grid--sui > .ws-act--4 { grid-column: span 8; }
+.ap402 .workspace-action-grid--sui > .ws-act--5,
+.ap402 .workspace-action-grid--sui > .ws-act--6,
+.ap402 .workspace-action-grid--sui > .ws-act--7 { grid-column: span 4; }
+
+.ap402 .workspace-action-grid--agora > .ws-act {
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--card-accent) 22%, transparent), transparent 42%),
+    radial-gradient(110% 100% at 100% 0%, color-mix(in srgb, var(--card-accent) 24%, transparent), transparent 58%),
+    linear-gradient(150deg, rgba(18, 28, 48, .96), rgba(7, 11, 19, .92) 58%, rgba(3, 7, 13, .98)) !important;
+}
+.ap402 .workspace-action-grid--agora > .ws-act--1 { grid-column: span 7; grid-row: span 2; }
+.ap402 .workspace-action-grid--agora > .ws-act--2 { grid-column: span 5; }
+.ap402 .workspace-action-grid--agora > .ws-act--3,
+.ap402 .workspace-action-grid--agora > .ws-act--4 { grid-column: span 3; }
+.ap402 .workspace-action-grid--agora > .ws-act--5 { grid-column: span 6; }
+.ap402 .workspace-action-grid--agora > .ws-act--6,
+.ap402 .workspace-action-grid--agora > .ws-act--7 { grid-column: span 6; }
+
+.ap402 .workspace-action-grid--polygon > .ws-act {
+  border-radius: 8px 18px 8px 18px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-accent) 32%, transparent) 0 28px, transparent 28px),
+    radial-gradient(90% 120% at 95% 5%, color-mix(in srgb, #ec4899 16%, transparent), transparent 54%),
+    linear-gradient(145deg, rgba(28, 14, 51, .97), rgba(9, 7, 18, .96)) !important;
+}
+.ap402 .workspace-action-grid--polygon > .ws-act--1,
+.ap402 .workspace-action-grid--polygon > .ws-act--2 { grid-column: span 6; }
+.ap402 .workspace-action-grid--polygon > .ws-act--3 { grid-column: span 8; }
+.ap402 .workspace-action-grid--polygon > .ws-act--4,
+.ap402 .workspace-action-grid--polygon > .ws-act--5 { grid-column: span 4; }
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid > .ws-act {
+  background-color: rgba(7, 9, 14, .94) !important;
+  background-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--card-accent) 20%, transparent), transparent 46%),
+    radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--card-accent-2) 18%, transparent), transparent 58%),
+    linear-gradient(150deg, rgba(18, 20, 28, .96), rgba(7, 9, 14, .94)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--zero-g > .ws-act {
+  background-image:
+    linear-gradient(90deg, color-mix(in srgb, var(--card-accent) 24%, transparent), transparent 28%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 34px),
+    linear-gradient(145deg, rgba(19, 13, 35, .98), rgba(4, 8, 19, .96)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--qie > .ws-act {
+  background-image:
+    linear-gradient(90deg, color-mix(in srgb, var(--card-accent) 44%, transparent) 0 7px, transparent 7px),
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, #facc15 15%, transparent), transparent 56%),
+    linear-gradient(150deg, rgba(7, 34, 26, .96), rgba(4, 13, 14, .96)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--arbitrum > .ws-act {
+  background-image:
+    linear-gradient(90deg, rgba(96,165,250,.16), transparent 44%),
+    repeating-linear-gradient(0deg, rgba(96,165,250,.08) 0 1px, transparent 1px 28px),
+    linear-gradient(145deg, rgba(9, 21, 48, .98), rgba(5, 8, 19, .96)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--mantle > .ws-act {
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-accent) 18%, transparent), transparent 42%),
+    linear-gradient(135deg, rgba(7, 32, 23, .96), rgba(8, 11, 8, .96)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--sui > .ws-act {
+  background-image:
+    radial-gradient(80% 110% at 12% 12%, color-mix(in srgb, var(--card-accent-2) 20%, transparent), transparent 58%),
+    linear-gradient(145deg, rgba(10, 27, 48, .96), rgba(4, 11, 26, .96)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--agora > .ws-act {
+  background-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--card-accent) 22%, transparent), transparent 42%),
+    radial-gradient(110% 100% at 100% 0%, color-mix(in srgb, var(--card-accent) 24%, transparent), transparent 58%),
+    linear-gradient(150deg, rgba(18, 28, 48, .96), rgba(7, 11, 19, .92) 58%, rgba(3, 7, 13, .98)) !important;
+}
+
+:root[data-theme="dark"] .ap402 .workspace-action-grid--polygon > .ws-act {
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-accent) 32%, transparent) 0 28px, transparent 28px),
+    radial-gradient(90% 120% at 95% 5%, color-mix(in srgb, #ec4899 16%, transparent), transparent 54%),
+    linear-gradient(145deg, rgba(28, 14, 51, .97), rgba(9, 7, 18, .96)) !important;
+}
+
+@media (max-width: 920px) {
+  .ap402 .workspace-action-grid,
+  .ap402 .workspace-action-grid--zero-g {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ap402 .workspace-action-grid > .ws-act,
+  .ap402 .workspace-action-grid > .ws-act:nth-child(n),
+  .ap402 .workspace-action-grid--zero-g > .ws-act:nth-child(n) {
+    grid-column: span 1;
+    grid-row: span 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .ap402 .workspace-action-grid,
+  .ap402 .workspace-action-grid--zero-g {
+    grid-template-columns: 1fr;
+  }
+  .ap402 .workspace-action-grid > .ws-act {
+    min-height: 132px !important;
+  }
+}
+
 .workspace-wallet-gate {
   min-height: min(720px, calc(100vh - 180px));
   display: grid;

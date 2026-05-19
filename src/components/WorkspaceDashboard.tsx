@@ -384,6 +384,26 @@ export function CreateServiceModal({
 }
 
 
+const OVERVIEW_CLASS: Record<WorkspaceId, string> = {
+  "0g": "zero-g",
+  qie: "qie",
+  arbitrum: "arbitrum",
+  mantle: "mantle",
+  sui: "sui",
+  agora: "agora",
+  polygon: "polygon",
+};
+
+const OVERVIEW_ACCENTS: Record<WorkspaceId, string[]> = {
+  "0g": ["#8b5cf6", "#22d3ee", "#f59e0b", "#34d399", "#f472b6", "#a78bfa", "#38bdf8"],
+  qie: ["#00c389", "#facc15", "#38bdf8", "#fb7185", "#a3e635", "#2dd4bf", "#f97316"],
+  arbitrum: ["#1b4add", "#28a0f0", "#f97316", "#60a5fa", "#22c55e", "#818cf8", "#38bdf8"],
+  mantle: ["#0fbf7a", "#f4c542", "#22d3ee", "#a3e635", "#fb923c", "#34d399", "#84cc16"],
+  sui: ["#4da2ff", "#7dd3fc", "#a78bfa", "#22d3ee", "#f0abfc", "#60a5fa", "#38bdf8"],
+  agora: ["#1652f0", "#22d3ee", "#10b981", "#f59e0b", "#8b5cf6", "#fb7185", "#3b82f6"],
+  polygon: ["#7b3fe4", "#ec4899", "#f59e0b", "#22c55e", "#60a5fa", "#a855f7", "#14b8a6"],
+};
+
 export function OverviewPage({
   agent,
   receipts,
@@ -521,9 +541,11 @@ export function OverviewPage({
     { ico: Shield, title: "Verify a payment proof", sub: "Replay-safe · single-use", onClick: () => onGoTab("gateway") || onGoTab("data") },
   ]).map((c, i) => (i === 0 ? { ...c, light: false } : c));
   const cards: CardDef[] = [demoAgentCard, ...wsCards];
+  const overviewClass = OVERVIEW_CLASS[workspace.id];
+  const overviewAccents = OVERVIEW_ACCENTS[workspace.id];
 
   return (
-    <>
+    <div className={`overview-window overview-window--${overviewClass}`}>
       <LedeHead
         crumb={`${workspace.id} workspace · ${workspace.networks[0] ?? ""}`}
         title={workspace.name}
@@ -541,16 +563,22 @@ export function OverviewPage({
       {workspace.id === "0g" && <EconomyDashboard />}
       {workspace.id === "0g" && <OgDemoFlow workspace={workspace} onGoTab={onGoTab} onGoReceipts={onGoReceipts} />}
 
-      <div className="action-grid mb">
+      <div className={`action-grid workspace-action-grid workspace-action-grid--${overviewClass} mb`}>
         {cards.map((c, i) => {
           const Ico = c.ico;
+          const cardAccent = c.accent ?? overviewAccents[i % overviewAccents.length];
+          const cardAccent2 = overviewAccents[(i + 2) % overviewAccents.length];
           return (
             <button
               key={i}
-              className={"act" + (c.light ? " light" : "") + (workspace.id === "agora" ? " arc-act" : "")}
+              className={`act ws-act ws-act--${i + 1}`}
               onClick={c.onClick}
               type="button"
-              style={c.accent ? ({ "--arc-card-accent": c.accent } as React.CSSProperties) : undefined}
+              style={{
+                "--card-accent": cardAccent,
+                "--card-accent-2": cardAccent2,
+                "--card-index": i,
+              } as React.CSSProperties}
             >
               <span className="gico"><Ico width={20} height={20} /></span>
               <span className="act-info">i</span>
@@ -620,7 +648,7 @@ export function OverviewPage({
           <div className="log">{recent.slice(0, 4).map((r) => <ReceiptRow key={r.id} r={r} onClick={onGoReceipts} />)}</div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
