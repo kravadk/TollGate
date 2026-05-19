@@ -24,7 +24,7 @@ const ARC_ADD_CHAIN: Record<string, unknown> = {
   "0x4cef52": {
     chainId: "0x4cef52",
     chainName: "Arc L1 Testnet",
-    nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
+    nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
     rpcUrls: ["https://rpc.testnet.arc-node.thecanteenapp.com/v1/public"],
     blockExplorerUrls: ["https://testnet.arcscan.app"],
   },
